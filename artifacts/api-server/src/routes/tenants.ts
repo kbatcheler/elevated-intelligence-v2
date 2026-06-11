@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { Router } from "express";
 import { db, tenantLayersTable, tenantPipelineRunsTable, tenantProfileTable, tenantsTable } from "@workspace/db";
+import { requireTenantAccess } from "../middleware/auth";
 
 export const tenantsRouter: Router = Router();
 
@@ -9,9 +10,9 @@ export const tenantsRouter: Router = Router();
 // confirm the three-model engine actually ran: the confound and challenge
 // stages report the grounder seat and its search-call count. The bulky stage
 // output is omitted here; fetch a layer to see its content.
-tenantsRouter.get("/tenants/:id/runs", async (req, res, next) => {
+tenantsRouter.get("/tenants/:id/runs", requireTenantAccess, async (req, res, next) => {
   try {
-    const tenantId = req.params.id;
+    const tenantId = String(req.params.id);
     const runs = await db
       .select()
       .from(tenantPipelineRunsTable)
@@ -43,9 +44,10 @@ tenantsRouter.get("/tenants/:id/runs", async (req, res, next) => {
 // The full generated content for one tenant layer, including the genuine
 // Confounder output (ranked alternative explanations with verdicts) and the
 // verified/modelled claim split.
-tenantsRouter.get("/tenants/:id/layers/:key", async (req, res, next) => {
+tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, res, next) => {
   try {
-    const { id, key } = req.params;
+    const id = String(req.params.id);
+    const key = String(req.params.key);
     const rows = await db
       .select()
       .from(tenantLayersTable)
@@ -78,9 +80,9 @@ tenantsRouter.get("/tenants/:id/layers/:key", async (req, res, next) => {
 
 // A tenant summary plus its stored profile, handy for confirming the profile
 // stage populated the shell from real homepage ground truth.
-tenantsRouter.get("/tenants/:id", async (req, res, next) => {
+tenantsRouter.get("/tenants/:id", requireTenantAccess, async (req, res, next) => {
   try {
-    const tenantId = req.params.id;
+    const tenantId = String(req.params.id);
     const rows = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
     const tenant = rows[0];
     if (!tenant) {

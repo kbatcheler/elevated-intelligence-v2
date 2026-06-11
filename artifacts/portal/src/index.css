@@ -1,11 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
-/* Design language tokens. The palette, type and component primitives are the
-   single source of truth for the brand: navy authority, gold for elevated
-   accents, cream paper, and a small set of provenance colors. Surfaces are
-   defined by 1px borders and a 3px top accent, never by shadows, gradients or
-   glassmorphism. */
 @theme {
   --color-cream: #F4F1EA;
   --color-cream-light: #FAF8F2;
@@ -121,12 +116,13 @@ body {
 .btn-ghost {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 32px;
   padding: 0 12px;
   border-radius: 4px;
   border: 1px solid var(--navy);
-  background: #fff;
+  background: transparent;
   color: var(--navy);
   font-family: 'Inter', sans-serif;
   font-size: 12px;
@@ -134,11 +130,13 @@ body {
   cursor: pointer;
   transition: background 120ms ease;
 }
-.btn-ghost:hover { background: var(--cream-light); }
+.btn-ghost:hover:not(:disabled) { background: var(--cream-light); }
+.btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn-primary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   height: 32px;
   padding: 0 14px;
@@ -152,7 +150,8 @@ body {
   cursor: pointer;
   transition: background 120ms ease;
 }
-.btn-primary:hover { background: var(--navy-deep); }
+.btn-primary:hover:not(:disabled) { background: var(--navy-deep); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .pill {
   display: inline-flex;
@@ -172,11 +171,10 @@ body {
 .pill-blue  { background: var(--blue-faint);  color: var(--blue); }
 .pill-purple{ background: var(--purple-faint); color: var(--purple); }
 
-/* Provenance is a first-class concept: every figure is either verified from a
-   source signal or modelled by the cortex. These two semantic pills carry that
-   distinction wherever a value is shown. */
 .pill-verified { background: var(--teal-faint); color: var(--teal); }
 .pill-modelled { background: var(--amber-faint); color: var(--amber); }
+.pill-gray { background: var(--cream-dark); color: var(--slate); }
+.pill-red { background: var(--red-faint); color: var(--red); }
 
 .tag {
   display: inline-flex;
@@ -213,3 +211,78 @@ body {
 }
 .scroll-area::-webkit-scrollbar { width: 6px; }
 .scroll-area::-webkit-scrollbar-thumb { background: var(--cream-dark); border-radius: 3px; }
+
+/* Forms additions */
+.input-base {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  width: 100%;
+  transition: border-color 120ms ease;
+  outline: none;
+}
+.input-base:focus {
+  border-color: var(--navy-soft);
+}
+.input-base:disabled {
+  background: var(--cream-light);
+  color: var(--slate-light);
+  cursor: not-allowed;
+}
+
+select.input-base {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233F4858' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 32px;
+}
+
+.label-base {
+  display: block;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--navy);
+  margin-bottom: 6px;
+}
+
+/* Tables */
+.table-base {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table-base th, .table-base td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.table-base th {
+  font-weight: 600;
+  color: var(--slate);
+  background: var(--cream-light);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.table-base tr:last-child td {
+  border-bottom: none;
+}
+
+.alert-error {
+  background: var(--red-faint);
+  border: 1px solid var(--red);
+  color: var(--red);
+  padding: 12px 16px;
+  border-radius: 4px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

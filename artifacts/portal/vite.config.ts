@@ -53,7 +53,9 @@ export default defineConfig({
     allowedHosts: true,
     fs: { strict: true },
     proxy: {
-      "/api": { target: apiTarget, changeOrigin: true },
+      // xfwd forwards the client address as X-Forwarded-For so the api-server,
+      // which trusts one proxy hop, can resolve req.ip for rate limiting.
+      "/api": { target: apiTarget, changeOrigin: true, xfwd: true },
     },
   },
   preview: {
