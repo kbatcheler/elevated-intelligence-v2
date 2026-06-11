@@ -3,6 +3,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { logger } from "./lib/logger";
 import { requireAuth, requireOwner } from "./middleware/auth";
 import { adminRouter } from "./routes/admin";
+import { architectureRouter } from "./routes/architecture";
 import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
@@ -48,6 +49,7 @@ app.use("/api/admin", requireAuth, requireOwner, adminRouter);
 // the tenants router on the :id routes.
 app.use("/api", requireAuth);
 app.use("/api", layersRouter);
+app.use("/api", architectureRouter);
 app.use("/api", tenantsRouter);
 
 app.use((_req, res) => {

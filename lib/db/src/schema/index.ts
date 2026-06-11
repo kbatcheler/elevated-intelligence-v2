@@ -15,4 +15,5 @@ export * from "./tenantLayers";
 export * from "./tenantLayerConfig";
 export * from "./tenantArtifacts";
 export * from "./tenantPipelineRuns";
+export * from "./committedActions";
 export * from "./claimBrokenReports";

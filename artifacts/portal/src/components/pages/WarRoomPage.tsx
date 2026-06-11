@@ -1,0 +1,376 @@
+import React, { useEffect, useState } from "react";
+import { Check, Play, X, RotateCcw } from "lucide-react";
+import type { CommittedAction, SignalAction, SignalLayer } from "../../types";
+import { commitAction, fetchActions, fetchSignals, setActionStatus } from "../../lib/tenantApi";
+import { useAuth } from "../../lib/AuthContext";
+import { useTenant } from "../../lib/TenantContext";
+import { Link } from "../../lib/router";
+import {
+  ConfidencePill,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  PageWidth,
+  Pill,
+  SectionHeading,
+  SkeletonLines,
+  VerdictPill,
+  formatDate,
+} from "../primitives";
+
+type State =
+  | { kind: "loading" }
+  | { kind: "ready"; signals: SignalLayer[]; actions: CommittedAction[] }
+  | { kind: "empty" }
+  | { kind: "no-tenant" }
+  | { kind: "error" };
+
+const STATUS_META: Record<CommittedAction["status"], { color: "navy" | "amber" | "teal" | "gray"; label: string }> = {
+  committed: { color: "navy", label: "Committed" },
+  in_progress: { color: "amber", label: "In progress" },
+  done: { color: "teal", label: "Done" },
+  dismissed: { color: "gray", label: "Dismissed" },
+};
+
+interface RecommendedMove {
+  layerKey: string;
+  layerName: string;
+  action: SignalAction;
+}
+
+function committedKey(layerKey: string, title: string | null): string {
+  return `${layerKey}::${title ?? ""}`;
+}
+
+// The war room. A read-only synthesis of the decision picture across every
+// generated layer: the questions the analysis could not close (confounders), the
+// leading hypotheses, and the moves the cortex recommends. Recommended moves can
+// be committed (only when they carry a real basis and confidence, never a
+// fabricated one); committed moves can be advanced through their lifecycle.
+// Interactive what-if simulation is deferred on purpose: its numbers would be
+// invented, which this product does not do.
+export function WarRoomPage() {
+  const { logout } = useAuth();
+  const { currentId, current, status: tenantStatus } = useTenant();
+  const [state, setState] = useState<State>({ kind: "loading" });
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!currentId) {
+      if (tenantStatus === "error") setState({ kind: "error" });
+      else if (tenantStatus === "empty") setState({ kind: "no-tenant" });
+      else setState({ kind: "loading" });
+      return;
+    }
+    let alive = true;
+    setState({ kind: "loading" });
+    setActionError(null);
+    Promise.all([fetchSignals(currentId), fetchActions(currentId)]).then(([sigOut, actOut]) => {
+      if (!alive) return;
+      if ("unauthorized" in sigOut || "unauthorized" in actOut) return void logout();
+      if (sigOut.state === "error" || actOut.state === "error") return setState({ kind: "error" });
+      if (sigOut.state === "empty") return setState({ kind: "empty" });
+      const actions = actOut.state === "empty" ? [] : actOut.items;
+      setState({ kind: "ready", signals: sigOut.items, actions });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [currentId, tenantStatus, logout]);
+
+  function mark(id: string, on: boolean) {
+    setBusy((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  async function reloadActions() {
+    if (!currentId) return;
+    const out = await fetchActions(currentId);
+    if ("unauthorized" in out) return void logout();
+    if (out.state === "error") return;
+    setState((s) => (s.kind === "ready" ? { ...s, actions: out.state === "empty" ? [] : out.items } : s));
+  }
+
+  async function onCommit(move: RecommendedMove) {
+    if (!currentId || move.action.basis == null || move.action.confidence == null || !move.action.title) return;
+    const id = committedKey(move.layerKey, move.action.title);
+    mark(id, true);
+    setActionError(null);
+    const out = await commitAction(currentId, {
+      layerKey: move.layerKey,
+      title: move.action.title,
+      predictedImpact: move.action.impact ?? undefined,
+      timing: move.action.timing ?? undefined,
+      owner: move.action.owner ?? undefined,
+      basis: move.action.basis,
+      confidence: move.action.confidence,
+    });
+    if ("unauthorized" in out) return void logout();
+    if ("error" in out) setActionError("That move could not be committed. Please try again.");
+    else await reloadActions();
+    mark(id, false);
+  }
+
+  async function onStatus(action: CommittedAction, status: CommittedAction["status"]) {
+    if (!currentId) return;
+    mark(action.id, true);
+    setActionError(null);
+    const out = await setActionStatus(currentId, action.id, status);
+    if ("unauthorized" in out) return void logout();
+    if ("error" in out) setActionError("That status change could not be saved. Please try again.");
+    else await reloadActions();
+    mark(action.id, false);
+  }
+
+  const generated = state.kind === "ready" ? state.signals.filter((s) => s.generated) : [];
+  const committedSet =
+    state.kind === "ready" ? new Set(state.actions.map((a) => committedKey(a.layerKey, a.title))) : new Set<string>();
+
+  const openConfounders =
+    state.kind === "ready"
+      ? generated
+          .flatMap((s) => s.confounders.map((c) => ({ layer: s, c })))
+          .filter(({ c }) => c.verdict === "partial" || c.verdict === "unresolved")
+          .sort((a, b) => verdictRank(a.c.verdict) - verdictRank(b.c.verdict) || (a.c.rank ?? 99) - (b.c.rank ?? 99))
+      : [];
+
+  const hypotheses =
+    state.kind === "ready"
+      ? generated
+          .flatMap((s) => s.hypotheses.map((h) => ({ layer: s, h })))
+          .filter(({ h }) => h.statement)
+          .sort((a, b) => (b.h.confidence ?? 0) - (a.h.confidence ?? 0))
+          .slice(0, 6)
+      : [];
+
+  const moves: RecommendedMove[] =
+    state.kind === "ready"
+      ? generated
+          .flatMap((s) => s.actions.map((a) => ({ layerKey: s.key, layerName: s.name, action: a })))
+          .filter((m) => m.action.title && !committedSet.has(committedKey(m.layerKey, m.action.title)))
+      : [];
+
+  const committed = state.kind === "ready" ? state.actions : [];
+  const isEmpty = state.kind === "ready" && generated.length === 0 && committed.length === 0;
+
+  return (
+    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+      <PageHeader
+        eyebrow="War room"
+        title="The decision picture"
+        subtitle={current ? `Open questions, leading hypotheses and the moves on the table for ${current.name}.` : undefined}
+      />
+      <div style={{ marginTop: 28, display: "grid", gap: 36 }}>
+        {state.kind === "loading" && <SkeletonLines lines={6} />}
+        {state.kind === "error" && (
+          <ErrorState message="The war room could not be loaded." onRetry={() => location.reload()} />
+        )}
+        {state.kind === "no-tenant" && (
+          <EmptyState
+            title="No tenant selected"
+            message="No company is in your scope yet. Once one is bound to your organization, its decision picture will appear here."
+          />
+        )}
+        {state.kind === "empty" && (
+          <EmptyState title="No intelligence generated yet" message="Once the pipeline runs, the decision picture will assemble here." />
+        )}
+        {isEmpty && (
+          <EmptyState title="Nothing on the table yet" message="No layer has been generated and nothing has been committed." />
+        )}
+
+        {state.kind === "ready" && !isEmpty && (
+          <>
+            {actionError && <div className="alert-error">{actionError}</div>}
+
+            <section>
+              <SectionHeading eyebrow="Open questions" title="What the analysis could not close" />
+              {openConfounders.length === 0 ? (
+                <EmptyState title="Nothing open" message="Every confounder across the generated layers was ruled out." />
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {openConfounders.map(({ layer, c }, i) => (
+                    <div key={`${layer.key}-${i}`} className="card" style={{ display: "grid", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                        <span className="font-serif" style={{ fontSize: 15, color: "var(--navy)" }}>{c.name ?? "Alternative explanation"}</span>
+                        {c.verdict && <VerdictPill verdict={c.verdict} />}
+                      </div>
+                      {(c.reason || c.mechanism) && (
+                        <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5 }}>{c.reason || c.mechanism}</div>
+                      )}
+                      <LayerTag layer={layer} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {hypotheses.length > 0 && (
+              <section>
+                <SectionHeading eyebrow="Leading hypotheses" title="The best current explanations" />
+                <div style={{ display: "grid", gap: 10 }}>
+                  {hypotheses.map(({ layer, h }, i) => (
+                    <div key={`${layer.key}-${i}`} className="card" style={{ display: "grid", gap: 6 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 14.5, color: "var(--navy)", lineHeight: 1.5, flex: 1, minWidth: 0 }}>{h.statement}</span>
+                        {h.basis && h.confidence != null && <ConfidencePill basis={h.basis} confidence={h.confidence} />}
+                      </div>
+                      <LayerTag layer={layer} />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section>
+              <SectionHeading eyebrow="Moves on the table" title="Recommended actions, not yet committed" />
+              {moves.length === 0 ? (
+                <EmptyState title="No open moves" message="Every recommended action has already been committed." />
+              ) : (
+                <div style={{ display: "grid", gap: 10 }}>
+                  {moves.map((m, i) => (
+                    <MoveCard
+                      key={`${m.layerKey}-${i}`}
+                      move={m}
+                      busy={busy.has(committedKey(m.layerKey, m.action.title))}
+                      onCommit={() => onCommit(m)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {committed.length > 0 && (
+              <section>
+                <SectionHeading eyebrow="Committed" title="Moves made, and where they stand" />
+                <div style={{ display: "grid", gap: 10 }}>
+                  {committed.map((a) => (
+                    <CommittedCard key={a.id} action={a} busy={busy.has(a.id)} onStatus={(s) => onStatus(a, s)} />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </PageWidth>
+  );
+}
+
+function verdictRank(v: SignalLayer["confounders"][number]["verdict"]): number {
+  return v === "unresolved" ? 0 : v === "partial" ? 1 : 2;
+}
+
+function LayerTag({ layer }: { layer: SignalLayer }) {
+  return (
+    <Link to={`/layers/${layer.key}`} className="eyebrow" style={{ color: "var(--slate-light)", textDecoration: "none" }}>
+      {layer.name}
+    </Link>
+  );
+}
+
+function MoveCard({ move, busy, onCommit }: { move: RecommendedMove; busy: boolean; onCommit: () => void }) {
+  const a = move.action;
+  const committable = Boolean(a.title) && a.basis != null && a.confidence != null;
+  return (
+    <div className="card" style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>{a.title}</span>
+        {a.basis != null && a.confidence != null && <ConfidencePill basis={a.basis} confidence={a.confidence} />}
+      </div>
+      {a.impact && <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5 }}>{a.impact}</div>}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--slate-light)" }}>
+          <Link to={`/layers/${move.layerKey}`} style={{ color: "var(--slate-light)", textDecoration: "none" }}>{move.layerName}</Link>
+          {a.timing && <span>Timing: {a.timing}</span>}
+          {a.owner && <span>Owner: {a.owner}</span>}
+        </div>
+        {committable ? (
+          <button className="btn-primary" onClick={onCommit} disabled={busy}>
+            {busy ? "Committing" : "Commit move"}
+          </button>
+        ) : (
+          <span className="eyebrow" style={{ color: "var(--slate-light)" }}>No confidence recorded, cannot commit</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CommittedCard({
+  action,
+  busy,
+  onStatus,
+}: {
+  action: CommittedAction;
+  busy: boolean;
+  onStatus: (status: CommittedAction["status"]) => void;
+}) {
+  const meta = STATUS_META[action.status];
+  return (
+    <div className="card" style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>{action.title}</span>
+        <Pill color={meta.color}>{meta.label}</Pill>
+      </div>
+      {action.predictedImpact && (
+        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>Predicted: {action.predictedImpact}</div>
+      )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--slate-light)", alignItems: "center" }}>
+          <Link to={`/layers/${action.layerKey}`} style={{ color: "var(--slate-light)", textDecoration: "none" }}>{action.layerKey}</Link>
+          <span>Committed {formatDate(action.committedAt)}</span>
+          <ConfidencePill basis={action.basis} confidence={action.confidence} />
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <StatusControls status={action.status} busy={busy} onStatus={onStatus} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusControls({
+  status,
+  busy,
+  onStatus,
+}: {
+  status: CommittedAction["status"];
+  busy: boolean;
+  onStatus: (status: CommittedAction["status"]) => void;
+}) {
+  if (status === "committed") {
+    return (
+      <>
+        <button className="btn-primary" onClick={() => onStatus("in_progress")} disabled={busy}>
+          <Play size={13} /> Start
+        </button>
+        <button className="btn-ghost" onClick={() => onStatus("dismissed")} disabled={busy}>
+          <X size={13} /> Dismiss
+        </button>
+      </>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <>
+        <button className="btn-primary" onClick={() => onStatus("done")} disabled={busy}>
+          <Check size={13} /> Mark done
+        </button>
+        <button className="btn-ghost" onClick={() => onStatus("dismissed")} disabled={busy}>
+          <X size={13} /> Dismiss
+        </button>
+      </>
+    );
+  }
+  // done or dismissed: allow reopening to the committed state.
+  return (
+    <button className="btn-ghost" onClick={() => onStatus("committed")} disabled={busy}>
+      <RotateCcw size={13} /> Reopen
+    </button>
+  );
+}

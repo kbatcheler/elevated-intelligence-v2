@@ -26,3 +26,14 @@ runtime and fail. They must be compiled into the bundle.
 **How to apply:** when a new artifact consumes a new `lib/*` workspace package,
 keep that package out of the esbuild `external` list so its source is inlined;
 keep real node_modules deps external so they load from node_modules.
+
+## TS project references: rebuild libs before downstream typecheck
+After editing an export in any `lib/*` package (db, cortex, etc.), run
+`pnpm run typecheck:libs` (a `tsc --build`) before running api-server or portal
+typecheck/build. Otherwise the consumer reports the new export as missing.
+**Why:** the workspace wires packages through TS project references that resolve
+each lib from its built `dist`, not its source, so fresh exports are invisible
+until the lib is rebuilt. The failure looks like a code bug but is a stale-dist
+build-order issue.
+**How to apply:** when a downstream typecheck cannot find a symbol you just
+added to a lib, rebuild libs first instead of doubting the new code.

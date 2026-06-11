@@ -12,6 +12,7 @@ Milestones (hard stops for owner review): C, G, H and I, K, T, X, AI, AJ.
 | B | Foundations | Pass | no |
 | C | Cortex and Confounder | Pass | yes |
 | D | Auth, Orgs and Access | Pass | no |
+| E | Product Surfaces | Pass | no |
 
 ## Notes
 
@@ -19,6 +20,7 @@ Milestones (hard stops for owner review): C, G, H and I, K, T, X, AI, AJ.
 - Phase C gate met: one real tenant (Patagonia) seeded end to end, fourteen of fourteen layers built, live three-model cortex and grounded Confounder, per-seat telemetry readable via routes. See `phase-C.md`. Milestone pause before Phase D.
 - Model API keys (Anthropic, Gemini) are wired via the AI integrations env vars and were exercised live by the Phase C seed.
 - Phase D gate met: PIN-gated registration, owner-minted and scoped PINs, client and portfolio tenant fencing, owner Access console, scrypt passwords and HMAC PIN hashing with zero new dependencies. Owner bootstraps from secrets (one provider org, one active owner confirmed in the database). The four PIN failure modes return one byte-identical error. See `phase-D.md`. Not a milestone; continuing to Phase E.
+- Phase E gate met: the full per-tenant portal built to the V1 design language at or above parity from real persisted data only. Surfaces: Morning Brief, Board Pack, Layer pages with 8 archetype heroes, Intelligence Architecture, Data Heartbeat, Anomaly Inbox, Dependency Map, Ask Different Day, War Room, Track Record, Connections, perspective lens, boot splash. Diagnosis in two clicks; designed loading/ready/empty/error/no-tenant states; zero new npm deps; no em-dash or en-dash; AA via the audited token system; 375px. Pure derivations are unit-tested; api-server 73 and portal 105 tests pass; build green at 1728 modules. Logged drift: `GET /api/tenants` is a deliberate, access-fenced reversal of Phase D's no-list stance; real `committed_actions` with honest pending states and no fabricated outcomes; live cortex ask and interactive war-room simulation deferred to avoid fabrication; built against the one seeded tenant with cross-tenant breadth deferred to Phase F. See `phase-E.md`. Not a milestone; continuing to Phase F.
 - Owner secrets (OWNER_EMAIL, OWNER_PASSWORD, SESSION_SECRET) are injected into the workflow processes only, not the agent shell or sandbox, so live owner login is verified via the integration suite and the bootstrapped owner row rather than an interactive curl.
 - Git tagging: this is a Replit managed-VCS environment where commits are created as automatic checkpoints. This INDEX is the protocol's stated source of truth for progress in place of manual `phase-<id>` tags. Logged as acceptable drift.
 - Cross-phase drift rollup (A through D) lives in `rollup.md`; deploy-time operational caveats (in-memory limiter, SESSION_SECRET rotation, owner bootstrap secrets) live in `docs/deploy-readiness.md`.

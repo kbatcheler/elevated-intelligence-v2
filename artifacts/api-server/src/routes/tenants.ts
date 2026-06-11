@@ -1,9 +1,67 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { Router } from "express";
-import { db, tenantLayersTable, tenantPipelineRunsTable, tenantProfileTable, tenantsTable } from "@workspace/db";
+import {
+  committedActionsTable,
+  db,
+  layersTable,
+  orgTenantsTable,
+  tenantLayersTable,
+  tenantPipelineRunsTable,
+  tenantProfileTable,
+  tenantsTable,
+} from "@workspace/db";
+import { z } from "zod";
+import { isProvider } from "../lib/auth/access";
 import { requireTenantAccess } from "../middleware/auth";
 
 export const tenantsRouter: Router = Router();
+
+// The tenants the caller may see. Provider seats see every tenant; client and
+// portfolio seats see only the tenants their org is bound to through
+// org_tenants. This is the portal's entry point: it picks a default tenant and
+// renders the tenant switcher from this list.
+//
+// This is a deliberate reversal of the phase-D posture, which had no non-admin
+// tenant list so nothing was enumerable. It is recorded in the phase-E drift
+// report: the product cannot function without the caller knowing which tenants
+// are theirs, and the list is strictly access-filtered, so a caller can only
+// ever enumerate tenants already inside their own access scope.
+tenantsRouter.get("/tenants", async (req, res, next) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    const columns = {
+      id: tenantsTable.id,
+      name: tenantsTable.name,
+      url: tenantsTable.url,
+      sector: tenantsTable.sector,
+      tagline: tenantsTable.tagline,
+      status: tenantsTable.status,
+      lastSeededAt: tenantsTable.lastSeededAt,
+    };
+    if (isProvider(user.role)) {
+      const rows = await db.select(columns).from(tenantsTable).orderBy(asc(tenantsTable.name));
+      res.json({ tenants: rows });
+      return;
+    }
+    if (!user.orgId) {
+      res.json({ tenants: [] });
+      return;
+    }
+    const rows = await db
+      .select(columns)
+      .from(tenantsTable)
+      .innerJoin(orgTenantsTable, eq(orgTenantsTable.tenantId, tenantsTable.id))
+      .where(eq(orgTenantsTable.orgId, user.orgId))
+      .orderBy(asc(tenantsTable.name));
+    res.json({ tenants: rows });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // Pipeline runs for a tenant, one per layer, each carrying the nine sub-stage
 // states with their per-seat telemetry. This is the window the owner uses to
@@ -35,6 +93,174 @@ tenantsRouter.get("/tenants/:id/runs", requireTenantAccess, async (req, res, nex
           telemetry: s.telemetry,
         })),
       })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A compact per-layer overview for one tenant: every registry layer left-joined
+// with its generated content, projected to the few real fields the Morning Brief
+// and Board Pack assemble from. The only computation is honest selection (the
+// lead metric, the first action, the highest-lift gap); no figure is derived or
+// fabricated. Layers not generated for this tenant return generated:false so the
+// surfaces render their designed "not generated" state rather than inventing one.
+tenantsRouter.get("/tenants/:id/overview", requireTenantAccess, async (req, res, next) => {
+  try {
+    const tenantId = String(req.params.id);
+    const rows = await db
+      .select({
+        key: layersTable.key,
+        name: layersTable.name,
+        archetype: layersTable.archetype,
+        ownerPersona: layersTable.ownerPersona,
+        moduleGroup: layersTable.moduleGroup,
+        sortOrder: layersTable.sortOrder,
+        diagnosticQuestion: layersTable.diagnosticQuestion,
+        feeds: layersTable.feeds,
+        content: tenantLayersTable.content,
+        heroPanel: tenantLayersTable.heroPanel,
+        generatedAt: tenantLayersTable.generatedAt,
+        generatorModel: tenantLayersTable.generatorModel,
+      })
+      .from(layersTable)
+      .leftJoin(
+        tenantLayersTable,
+        and(
+          eq(tenantLayersTable.layerKey, layersTable.key),
+          eq(tenantLayersTable.tenantId, tenantId),
+        ),
+      )
+      .orderBy(asc(layersTable.sortOrder));
+
+    res.json({
+      overview: rows.map((r) => {
+        const c = r.content;
+        const metrics = c ? asObjectArray(c.metrics) : [];
+        const actions = c ? asObjectArray(c.actions) : [];
+        const gaps = c ? asObjectArray(c.gaps) : [];
+        const lead = metrics[0];
+        const action = actions[0];
+        const hp = r.heroPanel;
+        return {
+          key: r.key,
+          name: r.name,
+          archetype: r.archetype,
+          ownerPersona: r.ownerPersona,
+          moduleGroup: r.moduleGroup,
+          sortOrder: r.sortOrder,
+          diagnosticQuestion: r.diagnosticQuestion,
+          feeds: r.feeds,
+          generated: c != null,
+          headlineFinding: c ? asString(c.headline_finding) : null,
+          headlineImpact: c ? asString(c.headline_impact) : null,
+          headlineLever: c ? asString(c.headline_lever) : null,
+          narrative: c ? asString(c.narrative) : null,
+          confidence: c ? asNumber(c.confidence) : null,
+          confidenceGap: c ? asNumber(c.confidence_gap) : null,
+          leadMetric: lead
+            ? {
+                label: asString(lead.label),
+                value: asString(lead.value),
+                sub: asString(lead.sub),
+                tone: asTone(lead.tone),
+              }
+            : null,
+          hero: hp
+            ? {
+                metricLabel: asString(hp.metric_label),
+                metricValue: asString(hp.metric_value),
+                metricSub: asString(hp.metric_sub),
+                tone: asTone(hp.tone),
+                oneLineRead: asString(hp.one_line_read),
+              }
+            : null,
+          topAction: action
+            ? {
+                title: asString(action.title),
+                impact: asString(action.impact),
+                timing: asString(action.timing),
+                confidence: asNumber(action.confidence),
+                basis: asBasis(action.basis),
+              }
+            : null,
+          topGap: pickTopGap(gaps),
+          generatedAt: r.generatedAt,
+          generatorModel: r.generatorModel,
+        };
+      }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A per-layer SIGNAL projection for one tenant: the real fields the derived
+// surfaces (anomaly inbox, dependency map, Ask Different Day, war room) reason
+// over. Like /overview it left-joins the registry to generated content and
+// projects only persisted values, but it carries the FULL gaps, actions,
+// confounders, hypotheses and causes (not just the top of each) plus the
+// verified/modelled claim counts. The Morning Brief and Board Pack keep using
+// the lighter /overview; these two requests together cover every Phase E
+// surface without fanning out fourteen detail fetches. No figure is computed
+// here: the derivation lives in pure, unit-tested portal functions.
+tenantsRouter.get("/tenants/:id/signals", requireTenantAccess, async (req, res, next) => {
+  try {
+    const tenantId = String(req.params.id);
+    const rows = await db
+      .select({
+        key: layersTable.key,
+        name: layersTable.name,
+        moduleGroup: layersTable.moduleGroup,
+        feeds: layersTable.feeds,
+        sortOrder: layersTable.sortOrder,
+        ownerPersona: layersTable.ownerPersona,
+        content: tenantLayersTable.content,
+        confoundersCol: tenantLayersTable.confounders,
+        verifiedClaims: tenantLayersTable.verifiedClaims,
+        modelledClaims: tenantLayersTable.modelledClaims,
+        generatedAt: tenantLayersTable.generatedAt,
+        generatorModel: tenantLayersTable.generatorModel,
+      })
+      .from(layersTable)
+      .leftJoin(
+        tenantLayersTable,
+        and(
+          eq(tenantLayersTable.layerKey, layersTable.key),
+          eq(tenantLayersTable.tenantId, tenantId),
+        ),
+      )
+      .orderBy(asc(layersTable.sortOrder));
+
+    res.json({
+      signals: rows.map((r) => {
+        const c = r.content;
+        const verified = r.verifiedClaims as Record<string, unknown> | null;
+        const modelled = r.modelledClaims as Record<string, unknown> | null;
+        return {
+          key: r.key,
+          name: r.name,
+          moduleGroup: r.moduleGroup,
+          feeds: r.feeds,
+          sortOrder: r.sortOrder,
+          ownerPersona: r.ownerPersona,
+          generated: c != null,
+          headlineFinding: c ? asString(c.headline_finding) : null,
+          headlineImpact: c ? asString(c.headline_impact) : null,
+          headlineLever: c ? asString(c.headline_lever) : null,
+          confidence: c ? asNumber(c.confidence) : null,
+          confidenceGap: c ? asNumber(c.confidence_gap) : null,
+          causes: c ? asObjectArray(c.causes).map(projectCause) : [],
+          actions: c ? asObjectArray(c.actions).map(projectAction) : [],
+          gaps: c ? asObjectArray(c.gaps).map(projectGap) : [],
+          hypotheses: c ? asObjectArray(c.hypotheses).map(projectHypothesis) : [],
+          confounders: asObjectArray(r.confoundersCol).map(projectConfounder),
+          verifiedCount: asObjectArray(verified?.items).length,
+          modelledCount: asObjectArray(modelled?.items).length,
+          generatedAt: r.generatedAt,
+          generatorModel: r.generatorModel,
+        };
+      }),
     });
   } catch (err) {
     next(err);
@@ -78,6 +304,112 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
   }
 });
 
+// The body of a commit: the real action fields captured from the layer at the
+// moment a user commits to it. predictedImpact, basis and confidence come
+// straight from the generated action so the track record cannot drift from what
+// the intelligence said.
+const commitActionSchema = z.object({
+  layerKey: z.string().min(1).max(100),
+  title: z.string().min(1).max(500),
+  detail: z.string().max(4000).optional(),
+  predictedImpact: z.string().max(1000).optional(),
+  timing: z.string().max(200).optional(),
+  owner: z.string().max(200).optional(),
+  basis: z.enum(["verified", "modelled"]),
+  confidence: z.number().int().min(0).max(100),
+});
+
+const updateActionStatusSchema = z.object({
+  status: z.enum(["committed", "in_progress", "done", "dismissed"]),
+  note: z.string().max(2000).optional(),
+});
+
+// Commit an action from a layer to the tenant's track record. There is no
+// fabricated outcome here: the action starts in the "committed" state and a
+// human advances it. Outcome verification against actuals is a later phase.
+tenantsRouter.post("/tenants/:id/actions", requireTenantAccess, async (req, res, next) => {
+  const parsed = commitActionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input" });
+    return;
+  }
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  try {
+    const d = parsed.data;
+    const inserted = await db
+      .insert(committedActionsTable)
+      .values({
+        tenantId: String(req.params.id),
+        layerKey: d.layerKey,
+        title: d.title,
+        detail: d.detail ?? null,
+        predictedImpact: d.predictedImpact ?? null,
+        timing: d.timing ?? null,
+        actionOwner: d.owner ?? null,
+        basis: d.basis,
+        confidence: d.confidence,
+        committedBy: user.id,
+      })
+      .returning();
+    res.status(201).json({ action: inserted[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// The tenant's committed actions, newest first: the track record of every
+// action a user committed, each with its predicted recovery and its honest
+// current state.
+tenantsRouter.get("/tenants/:id/actions", requireTenantAccess, async (req, res, next) => {
+  try {
+    const rows = await db
+      .select()
+      .from(committedActionsTable)
+      .where(eq(committedActionsTable.tenantId, String(req.params.id)))
+      .orderBy(desc(committedActionsTable.committedAt));
+    res.json({ actions: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Advance a committed action through its honest lifecycle. This records the
+// human's progress, not a fabricated result.
+tenantsRouter.post(
+  "/tenants/:id/actions/:actionId/status",
+  requireTenantAccess,
+  async (req, res, next) => {
+    const parsed = updateActionStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_input" });
+      return;
+    }
+    try {
+      const updated = await db
+        .update(committedActionsTable)
+        .set({ status: parsed.data.status, note: parsed.data.note ?? null })
+        .where(
+          and(
+            eq(committedActionsTable.id, String(req.params.actionId)),
+            eq(committedActionsTable.tenantId, String(req.params.id)),
+          ),
+        )
+        .returning();
+      if (updated.length === 0) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      res.json({ action: updated[0] });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
 // A tenant summary plus its stored profile, handy for confirming the profile
 // stage populated the shell from real homepage ground truth.
 tenantsRouter.get("/tenants/:id", requireTenantAccess, async (req, res, next) => {
@@ -100,3 +432,102 @@ tenantsRouter.get("/tenants/:id", requireTenantAccess, async (req, res, next) =>
     next(err);
   }
 });
+
+// Defensive projectors for the overview endpoint. The stored content is jsonb,
+// so each field is validated before it is surfaced: a malformed value becomes
+// null rather than a fabricated stand-in.
+function asString(v: unknown): string | null {
+  return typeof v === "string" && v.length > 0 ? v : null;
+}
+function asNumber(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+function asObjectArray(v: unknown): Record<string, unknown>[] {
+  return Array.isArray(v)
+    ? (v.filter((x) => x != null && typeof x === "object") as Record<string, unknown>[])
+    : [];
+}
+function asTone(v: unknown): "good" | "warn" | "bad" | "neutral" | null {
+  return v === "good" || v === "warn" || v === "bad" || v === "neutral" ? v : null;
+}
+function asBasis(v: unknown): "verified" | "modelled" | null {
+  return v === "verified" || v === "modelled" ? v : null;
+}
+function asGapKind(v: unknown): "DATA" | "SIGNAL" | "INTEG" | "MODEL" | "FLOW" | null {
+  return v === "DATA" || v === "SIGNAL" || v === "INTEG" || v === "MODEL" || v === "FLOW" ? v : null;
+}
+function asVerdict(v: unknown): "ruled_out" | "partial" | "unresolved" | null {
+  return v === "ruled_out" || v === "partial" || v === "unresolved" ? v : null;
+}
+
+// Full-array projectors for the signals endpoint. Each maps one stored jsonb
+// item to its real fields, nulling anything malformed rather than inventing a
+// stand-in. snake_case stored keys become camelCase on the wire.
+function projectGap(g: Record<string, unknown>) {
+  return {
+    kind: asGapKind(g.kind),
+    description: asString(g.description),
+    closes: asString(g.closes),
+    confidenceLiftPp: asNumber(g.confidence_lift_pp),
+  };
+}
+function projectAction(a: Record<string, unknown>) {
+  return {
+    title: asString(a.title),
+    impact: asString(a.impact),
+    timing: asString(a.timing),
+    owner: asString(a.owner),
+    basis: asBasis(a.basis),
+    confidence: asNumber(a.confidence),
+  };
+}
+function projectCause(c: Record<string, unknown>) {
+  return {
+    title: asString(c.title),
+    impact: asString(c.impact),
+    confidence: asNumber(c.confidence),
+    basis: asBasis(c.basis),
+  };
+}
+function projectHypothesis(h: Record<string, unknown>) {
+  return {
+    statement: asString(h.statement),
+    confidence: asNumber(h.confidence),
+    basis: asBasis(h.basis),
+  };
+}
+function projectConfounder(c: Record<string, unknown>) {
+  return {
+    rank: asNumber(c.rank),
+    name: asString(c.name),
+    mechanism: asString(c.mechanism),
+    directionalImpact: asString(c.directional_impact),
+    verdict: asVerdict(c.verdict),
+    reason: asString(c.reason),
+  };
+}
+
+// The single highest-lift gap is the layer's biggest blind spot. Selection by a
+// real persisted field (confidence_lift_pp), never a computed score.
+function pickTopGap(gaps: Record<string, unknown>[]) {
+  let best: {
+    kind: unknown;
+    description: string | null;
+    closes: string | null;
+    confidenceLiftPp: number | null;
+  } | null = null;
+  let bestLift = -Infinity;
+  for (const g of gaps) {
+    const lift = asNumber(g.confidence_lift_pp) ?? 0;
+    if (lift > bestLift) {
+      bestLift = lift;
+      best = {
+        kind: g.kind,
+        description: asString(g.description),
+        closes: asString(g.closes),
+        confidenceLiftPp: asNumber(g.confidence_lift_pp),
+      };
+    }
+  }
+  return best;
+}

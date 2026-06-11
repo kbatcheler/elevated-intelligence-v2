@@ -1,5 +1,6 @@
 import React from "react";
 import { AuthProvider, useAuth } from "./lib/AuthContext";
+import { RouterProvider } from "./lib/router";
 import { Gate } from "./components/Gate";
 import { Shell } from "./components/Shell";
 
@@ -27,8 +28,10 @@ function Main() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Main />
-    </AuthProvider>
+    <RouterProvider>
+      <AuthProvider>
+        <Main />
+      </AuthProvider>
+    </RouterProvider>
   );
 }
