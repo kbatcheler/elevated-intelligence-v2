@@ -9,7 +9,7 @@ import {
   type User,
   type UserRole,
 } from "@workspace/db";
-import { hashPassword, verifyPassword } from "../lib/auth/password";
+import { dummyPasswordHash, hashPassword, verifyPassword } from "../lib/auth/password";
 import { canonicalizePinCode, hashPinCode } from "../lib/auth/pin";
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from "../lib/auth/session";
 import { logger } from "../lib/logger";
@@ -41,14 +41,14 @@ const loginLimiter = createRateLimiter({
 });
 
 const registerSchema = z.object({
-  email: z.string().email().max(320),
+  email: z.string().trim().email().max(320),
   displayName: z.string().min(1).max(200),
   password: z.string().min(8).max(200),
   pin: z.string().min(1).max(64),
 });
 
 const loginSchema = z.object({
-  email: z.string().email().max(320),
+  email: z.string().trim().email().max(320),
   password: z.string().min(1).max(200),
 });
 
@@ -177,8 +177,12 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
     const rows = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
     const user = rows[0];
     // Generic message for an unknown email or a wrong password so the endpoint
-    // does not reveal which accounts exist.
-    if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
+    // does not reveal which accounts exist. On an unknown email we still run a
+    // verify against a throwaway hash so the response time does not betray the
+    // miss; a fast no-scrypt path would be an account-enumeration oracle.
+    const storedHash = user ? user.passwordHash : await dummyPasswordHash();
+    const passwordMatches = await verifyPassword(parsed.data.password, storedHash);
+    if (!user || !passwordMatches) {
       res.status(401).json({ error: "invalid_credentials" });
       return;
     }

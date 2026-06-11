@@ -69,3 +69,13 @@ export async function verifyPassword(plain: string, stored: string): Promise<boo
   if (derived.length !== expected.length) return false;
   return timingSafeEqual(derived, expected);
 }
+
+// A login that misses on an unknown email must still spend the same scrypt time
+// as a wrong password, or the response time leaks which accounts exist. The
+// login handler verifies the submitted password against this throwaway hash on
+// the miss path. It is computed once and cached; the comparison never succeeds.
+let dummyHash: Promise<string> | null = null;
+export function dummyPasswordHash(): Promise<string> {
+  if (!dummyHash) dummyHash = hashPassword(randomBytes(32).toString("hex"));
+  return dummyHash;
+}

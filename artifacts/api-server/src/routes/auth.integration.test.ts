@@ -225,6 +225,15 @@ describe("auth status and login", () => {
     });
   });
 
+  it("normalizes a messy email (surrounding spaces and uppercase) on login", async () => {
+    const messy = `  ${email("owner").toUpperCase()}  `;
+    const r = await api("/api/auth/login", {
+      method: "POST",
+      body: { email: messy, password: PASSWORD },
+    });
+    expect(r.status).toBe(200);
+  });
+
   it("rejects a wrong password with a generic error", async () => {
     const r = await api("/api/auth/login", {
       method: "POST",
