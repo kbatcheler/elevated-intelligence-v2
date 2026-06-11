@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Org, Tenant } from "../../types";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { useAuth } from "../../lib/AuthContext";
+import * as adminApi from "../../lib/adminApi";
 
 export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () => void }) {
   const { logout } = useAuth();
@@ -20,17 +21,15 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
 
   useEffect(() => {
     let active = true;
-    fetch("/api/admin/tenants")
-      .then(r => {
-        if (r.status === 401) return logout();
-        if (!r.ok) throw new Error("bad status");
-        return r.json();
-      })
-      .then(data => {
+    adminApi.fetchTenants()
+      .then(result => {
         if (!active) return;
-        setTenants(data.tenants || []);
+        if ("unauthorized" in result) {
+          logout();
+          return;
+        }
+        if (result.state !== "error") setTenants(result.items);
       })
-      .catch(() => {})
       .finally(() => { if (active) setTenantsLoading(false); });
     return () => { active = false; };
   }, []);
@@ -39,46 +38,37 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
     e.preventDefault();
     setCreateError("");
     setCreating(true);
-    try {
-      const res = await fetch("/api/admin/orgs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, type }),
-      });
-      if (res.status === 401) return logout();
-      if (!res.ok) throw new Error("Failed to create org");
-      setName("");
-      refreshOrgs();
-    } catch (err: any) {
-      setCreateError(err.message);
-    } finally {
-      setCreating(false);
+    const result = await adminApi.createOrg({ name, type });
+    setCreating(false);
+    if ("unauthorized" in result) return logout();
+    if ("error" in result) {
+      setCreateError("Failed to create org");
+      return;
     }
+    setName("");
+    refreshOrgs();
   };
 
   const handleBind = async (e: React.FormEvent) => {
     e.preventDefault();
     setBindError("");
     setBinding(true);
-    try {
-      const res = await fetch(`/api/admin/orgs/${bindingOrgId}/tenants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: bindingTenantId }),
-      });
-      if (res.status === 401) return logout();
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to bind tenant");
-      }
-      setBindingOrgId("");
-      setBindingTenantId("");
-      refreshOrgs();
-    } catch (err: any) {
-      setBindError(err.message === "provider_org_needs_no_bindings" ? "Provider orgs do not need tenant bindings." : err.message);
-    } finally {
-      setBinding(false);
+    const result = await adminApi.bindTenant(bindingOrgId, bindingTenantId);
+    setBinding(false);
+    if ("unauthorized" in result) return logout();
+    if ("error" in result) {
+      setBindError(
+        result.error === "provider_org_needs_no_bindings"
+          ? "Provider orgs do not need tenant bindings."
+          : result.error === "failed"
+            ? "Failed to bind tenant."
+            : result.error,
+      );
+      return;
     }
+    setBindingOrgId("");
+    setBindingTenantId("");
+    refreshOrgs();
   };
 
   return (

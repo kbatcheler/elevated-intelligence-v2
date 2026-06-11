@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pin } from "../../types";
 import { Loader2, TriangleAlert, Copy, Check } from "lucide-react";
 import { useAuth } from "../../lib/AuthContext";
+import * as adminApi from "../../lib/adminApi";
 
 export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: string }[] }) {
   const { logout } = useAuth();
@@ -20,16 +21,14 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
   const [copied, setCopied] = useState(false);
 
   const fetchPins = async () => {
-    try {
-      const res = await fetch("/api/admin/pins");
-      if (res.status === 401) return logout();
-      if (!res.ok) throw new Error("status " + res.status);
-      const data = await res.json();
-      setPins(data.pins);
-      setState(data.pins.length > 0 ? "ready" : "empty");
-    } catch (err) {
+    const result = await adminApi.fetchPins();
+    if ("unauthorized" in result) return logout();
+    if (result.state === "error") {
       setState("error");
+      return;
     }
+    setPins(result.items);
+    setState(result.state);
   };
 
   useEffect(() => {
@@ -43,45 +42,36 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
     setMintedCode(null);
     setCopied(false);
 
-    try {
-      const payload: any = { label, maxUses, expiresInDays, scopeRole };
-      if (scopeRole !== "provider-member" && scopeOrgId) {
-        payload.scopeOrgId = scopeOrgId;
-      }
-
-      const res = await fetch("/api/admin/pins", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (res.status === 401) return logout();
-      if (!res.ok) {
-        const body = await res.json();
-        throw new Error(body.error || "failed");
-      }
-
-      const data = await res.json();
-      setMintedCode(data.pin.code);
-      setLabel("");
-      setMaxUses(1);
-      setExpiresInDays(14);
-      fetchPins();
-    } catch (err: any) {
-      setErrorMsg(err.message === "scope_org_required" ? "Scope org is required for client roles" : "Failed to mint PIN.");
-    } finally {
-      setMinting(false);
+    const payload: {
+      label: string;
+      maxUses: number;
+      expiresInDays: number;
+      scopeRole: string;
+      scopeOrgId?: string;
+    } = { label, maxUses, expiresInDays, scopeRole };
+    if (scopeRole !== "provider-member" && scopeOrgId) {
+      payload.scopeOrgId = scopeOrgId;
     }
+
+    const result = await adminApi.mintPin(payload);
+    setMinting(false);
+    if ("unauthorized" in result) return logout();
+    if ("error" in result) {
+      setErrorMsg(result.error === "scope_org_required" ? "Scope org is required for client roles" : "Failed to mint PIN.");
+      return;
+    }
+
+    setMintedCode(result.code);
+    setLabel("");
+    setMaxUses(1);
+    setExpiresInDays(14);
+    fetchPins();
   };
 
   const handleRevoke = async (id: string) => {
-    try {
-      const res = await fetch(`/api/admin/pins/${id}/revoke`, { method: "POST" });
-      if (res.status === 401) return logout();
-      if (res.ok) fetchPins();
-    } catch (err) {
-      // quiet fail
-    }
+    const result = await adminApi.revokePin(id);
+    if ("unauthorized" in result) return logout();
+    if ("ok" in result) fetchPins();
   };
 
   const copyCode = () => {

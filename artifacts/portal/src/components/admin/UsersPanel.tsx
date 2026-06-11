@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { AdminUser } from "../../types";
 import { TriangleAlert } from "lucide-react";
 import { useAuth } from "../../lib/AuthContext";
+import * as adminApi from "../../lib/adminApi";
 
 export function UsersPanel() {
   const { logout, user: currentUser } = useAuth();
@@ -10,16 +11,14 @@ export function UsersPanel() {
   const [actionError, setActionError] = useState("");
 
   const fetchUsers = async () => {
-    try {
-      const res = await fetch("/api/admin/users");
-      if (res.status === 401) return logout();
-      if (!res.ok) throw new Error("status " + res.status);
-      const data = await res.json();
-      setUsers(data.users);
-      setState(data.users.length > 0 ? "ready" : "empty");
-    } catch (err) {
+    const result = await adminApi.fetchUsers();
+    if ("unauthorized" in result) return logout();
+    if (result.state === "error") {
       setState("error");
+      return;
     }
+    setUsers(result.items);
+    setState(result.state);
   };
 
   useEffect(() => {
@@ -28,19 +27,15 @@ export function UsersPanel() {
 
   const handleAction = async (id: string, action: "enable" | "disable") => {
     setActionError("");
-    try {
-      const res = await fetch(`/api/admin/users/${id}/${action}`, { method: "POST" });
-      if (res.status === 401) return logout();
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "failed");
-      }
-      fetchUsers();
-    } catch (err: any) {
-      if (err.message === "cannot_disable_self") setActionError("You cannot disable your own account.");
-      else if (err.message === "cannot_disable_last_owner") setActionError("Cannot disable the last provider owner.");
+    const result = await adminApi.setUserStatus(id, action);
+    if ("unauthorized" in result) return logout();
+    if ("error" in result) {
+      if (result.error === "cannot_disable_self") setActionError("You cannot disable your own account.");
+      else if (result.error === "cannot_disable_last_owner") setActionError("Cannot disable the last provider owner.");
       else setActionError("Action failed.");
+      return;
     }
+    fetchUsers();
   };
 
   return (

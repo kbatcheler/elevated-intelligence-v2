@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User } from "../types";
+import * as authApi from "./authApi";
 
 interface AuthContextType {
   user: User | null;
@@ -17,19 +18,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
-    try {
-      const res = await fetch("/api/auth/status");
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.authenticated ? data.user : null);
-      } else {
-        setUser(null);
-      }
-    } catch (err) {
-      setUser(null);
-    } finally {
-      setLoading(false);
-    }
+    setUser(await authApi.fetchStatus());
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -37,51 +27,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        return {};
-      }
-      if (res.status === 401) return { error: "invalid_credentials" };
-      if (res.status === 403) return { error: "account_disabled" };
-      return { error: "invalid_input" };
-    } catch (err) {
-      return { error: "network_error" };
-    }
+    const result = await authApi.login(email, password);
+    if (result.user) setUser(result.user);
+    return result.error ? { error: result.error } : {};
   };
 
   const register = async (email: string, displayName: string, password: string, pin: string) => {
-    try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, displayName, password, pin }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        return {};
-      }
-      if (res.status === 403) return { error: "invalid_or_used_pin" };
-      if (res.status === 409) return { error: "email_taken" };
-      return { error: "invalid_input" };
-    } catch (err) {
-      return { error: "network_error" };
-    }
+    const result = await authApi.register(email, displayName, password, pin);
+    if (result.user) setUser(result.user);
+    return result.error ? { error: result.error } : {};
   };
 
   const logout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-    } finally {
-      setUser(null);
-    }
+    await authApi.logout();
+    setUser(null);
   };
 
   return (

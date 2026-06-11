@@ -4,6 +4,7 @@ import { UsersPanel } from "./admin/UsersPanel";
 import { OrgsPanel } from "./admin/OrgsPanel";
 import { Org } from "../types";
 import { useAuth } from "../lib/AuthContext";
+import * as adminApi from "../lib/adminApi";
 
 export function AccessConsole() {
   const { logout } = useAuth();
@@ -13,16 +14,14 @@ export function AccessConsole() {
   const [orgsState, setOrgsState] = useState<"loading" | "ready" | "empty" | "error">("loading");
 
   const fetchOrgs = async () => {
-    try {
-      const res = await fetch("/api/admin/orgs");
-      if (res.status === 401) return logout();
-      if (!res.ok) throw new Error("status " + res.status);
-      const data = await res.json();
-      setOrgs(data.orgs);
-      setOrgsState(data.orgs.length > 0 ? "ready" : "empty");
-    } catch (err) {
+    const result = await adminApi.fetchOrgs();
+    if ("unauthorized" in result) return logout();
+    if (result.state === "error") {
       setOrgsState("error");
+      return;
     }
+    setOrgs(result.items);
+    setOrgsState(result.state);
   };
 
   useEffect(() => {

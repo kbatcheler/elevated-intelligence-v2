@@ -4,3 +4,4 @@
 - [EI V2 foundations gotchas](ei-v2-foundations.md): non-obvious build-environment lessons (zod v4 uuid variant bits, esbuild workspace bundling).
 - [EI V2 cortex and seed gotchas](ei-v2-cortex.md): live three-model cortex + grounded seeding lessons (grounded JSON, prompt skeletons, schema tolerance, rate limits, resumability).
 - [Replit secret isolation](replit-secret-isolation.md): runtime secrets reach workflow processes only, not the agent shell or code sandbox; verify secret-dependent flows via tests, not curl.
+- [Portal testing without DOM deps](portal-testing-without-dom-deps.md): no jsdom/testing-library installed; test the portal by extracting fetch/mapping logic into framework-free lib/*Api.ts and mocking global fetch in node env.
