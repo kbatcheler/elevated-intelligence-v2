@@ -8,13 +8,18 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:tenant": "tsx src/scripts/seedTenant.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.8.0",
+    "@workspace/cortex": "workspace:*",
     "@workspace/db": "workspace:*",
     "cors": "^2.8.6",
     "drizzle-orm": "catalog:",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "p-limit": "^7.3.0",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

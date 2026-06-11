@@ -10,10 +10,11 @@ Milestones (hard stops for owner review): C, G, H and I, K, T, X, AI, AJ.
 | --- | --- | --- | --- |
 | A | Grounding | Pass | no |
 | B | Foundations | Pass | no |
-| C | Cortex and Confounder | not started | yes |
+| C | Cortex and Confounder | Pass | yes |
 
 ## Notes
 
 - V1 reference: cloned read-only into `reference/v1` (gitignored). Re-clone each session from the repo recorded in memory.
-- Model API keys (Anthropic, Gemini) are required by the Phase C gate and are not yet wired. Phase C is also a milestone pause.
+- Phase C gate met: one real tenant (Patagonia) seeded end to end, fourteen of fourteen layers built, live three-model cortex and grounded Confounder, per-seat telemetry readable via routes. See `phase-C.md`. Milestone pause before Phase D.
+- Model API keys (Anthropic, Gemini) are wired via the AI integrations env vars and were exercised live by the Phase C seed.
 - Git tagging: this is a Replit managed-VCS environment where commits are created as automatic checkpoints. This INDEX is the protocol's stated source of truth for progress in place of manual `phase-<id>` tags. Logged as acceptable drift.

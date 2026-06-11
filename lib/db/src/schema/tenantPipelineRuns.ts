@@ -37,6 +37,10 @@ export type PipelineSubStage = {
   durationMs?: number;
   error?: string;
   telemetry?: SeatTelemetry;
+  // The validated stage output, persisted so a run is fully inspectable and the
+  // next stage can read its predecessor across a resume. Untyped at the db edge
+  // (each stage validates its own shape via the cortex schemas).
+  output?: unknown;
 };
 
 export const pipelineRunStatusEnum = pgEnum("pipeline_run_status", [

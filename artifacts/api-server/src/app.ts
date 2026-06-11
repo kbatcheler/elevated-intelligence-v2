@@ -3,6 +3,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { logger } from "./lib/logger";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
+import { tenantsRouter } from "./routes/tenants";
 
 const app = express();
 
@@ -11,6 +12,7 @@ app.use(express.json());
 
 app.use("/", healthRouter);
 app.use("/api", layersRouter);
+app.use("/api", tenantsRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
