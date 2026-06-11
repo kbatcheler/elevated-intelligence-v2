@@ -1,0 +1,2 @@
+- [EI V2 greenfield build](ei-v2-build.md) - where V1 lives, how to resume, the non-negotiables that are not in the repo.
+- [EI V2 foundations gotchas](ei-v2-foundations.md) - zod v4 uuid strict variant validation, esbuild must bundle workspace TS packages.

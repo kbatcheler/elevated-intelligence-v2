@@ -1,0 +1,28 @@
+# Read-only V1 reference clone (never tracked)
+reference/
+
+# compiled output
+dist
+tmp
+out-tsc
+*.tsbuildinfo
+
+# dependencies
+node_modules
+
+# misc
+/coverage
+npm-debug.log
+yarn-error.log
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Env and secrets (never tracked)
+.env
+.env.*
+
+# Replit
+.cache/
+.local/

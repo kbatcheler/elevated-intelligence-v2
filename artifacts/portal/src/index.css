@@ -1,0 +1,215 @@
+@import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+/* Design language tokens. The palette, type and component primitives are the
+   single source of truth for the brand: navy authority, gold for elevated
+   accents, cream paper, and a small set of provenance colors. Surfaces are
+   defined by 1px borders and a 3px top accent, never by shadows, gradients or
+   glassmorphism. */
+@theme {
+  --color-cream: #F4F1EA;
+  --color-cream-light: #FAF8F2;
+  --color-cream-dark: #E8E2D2;
+  --color-paper: #FFFFFF;
+  --color-border-base: #E5E2D8;
+  --color-navy: #1B2A4E;
+  --color-navy-deep: #0F1A33;
+  --color-navy-soft: #4A5878;
+  --color-gold: #C8A24A;
+  --color-gold-light: #E5C97B;
+  --color-slate-base: #3F4858;
+  --color-slate-light: #6B7280;
+  --color-ink: #1F1F1F;
+  --color-coral: #D85A30;
+  --color-coral-faint: #FBE8DF;
+  --color-teal: #1D9E75;
+  --color-teal-faint: #E1F5EE;
+  --color-amber-base: #BA7517;
+  --color-amber-faint: #FAEEDA;
+  --color-red-base: #A32D2D;
+  --color-red-faint: #FCEBEB;
+  --color-blue-base: #185FA5;
+  --color-blue-faint: #E6F1FB;
+  --color-purple-base: #534AB7;
+  --color-purple-faint: #EEEDFE;
+  --font-serif: 'Crimson Pro', Georgia, serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+  --cream: #F4F1EA;
+  --cream-light: #FAF8F2;
+  --cream-dark: #E8E2D2;
+  --paper: #FFFFFF;
+  --border: #E5E2D8;
+  --navy: #1B2A4E;
+  --navy-deep: #0F1A33;
+  --navy-soft: #4A5878;
+  --gold: #C8A24A;
+  --gold-light: #E5C97B;
+  --slate: #3F4858;
+  --slate-light: #6B7280;
+  --ink: #1F1F1F;
+  --coral: #D85A30;
+  --coral-faint: #FBE8DF;
+  --teal: #1D9E75;
+  --teal-faint: #E1F5EE;
+  --amber: #BA7517;
+  --amber-faint: #FAEEDA;
+  --red: #A32D2D;
+  --red-faint: #FCEBEB;
+  --blue: #185FA5;
+  --blue-faint: #E6F1FB;
+  --purple: #534AB7;
+  --purple-faint: #EEEDFE;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.font-serif { font-family: 'Crimson Pro', Georgia, serif; }
+.font-sans  { font-family: 'Inter', system-ui, sans-serif; }
+.font-mono  { font-family: var(--font-mono); }
+
+.eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  line-height: 1.3;
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 24px;
+  position: relative;
+}
+
+.card-hero { padding: 32px; }
+
+.card-accent-coral::before,
+.card-accent-navy::before,
+.card-accent-teal::before,
+.card-accent-gold::before,
+.card-accent-amber::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  border-radius: 4px 4px 0 0;
+}
+.card-accent-coral::before { background: var(--coral); }
+.card-accent-navy::before  { background: var(--navy); }
+.card-accent-teal::before  { background: var(--teal); }
+.card-accent-gold::before  { background: var(--gold); }
+.card-accent-amber::before { background: var(--amber); }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 4px;
+  border: 1px solid var(--navy);
+  background: #fff;
+  color: var(--navy);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.btn-ghost:hover { background: var(--cream-light); }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 4px;
+  border: 1px solid var(--navy);
+  background: var(--navy);
+  color: var(--cream-light);
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.btn-primary:hover { background: var(--navy-deep); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 11px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.pill-coral { background: var(--coral-faint); color: var(--coral); }
+.pill-teal  { background: var(--teal-faint);  color: var(--teal); }
+.pill-amber { background: var(--amber-faint); color: var(--amber); }
+.pill-navy  { background: #E8ECF4; color: var(--navy); }
+.pill-blue  { background: var(--blue-faint);  color: var(--blue); }
+.pill-purple{ background: var(--purple-faint); color: var(--purple); }
+
+/* Provenance is a first-class concept: every figure is either verified from a
+   source signal or modelled by the cortex. These two semantic pills carry that
+   distinction wherever a value is shown. */
+.pill-verified { background: var(--teal-faint); color: var(--teal); }
+.pill-modelled { background: var(--amber-faint); color: var(--amber); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 2px;
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.tag-data     { background: var(--blue-faint);   color: var(--blue); }
+.tag-integ    { background: var(--purple-faint); color: var(--purple); }
+.tag-model    { background: var(--coral-faint);  color: var(--coral); }
+.tag-workflow { background: var(--teal-faint);   color: var(--teal); }
+.tag-signal   { background: var(--amber-faint);  color: var(--amber); }
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--cream-dark) 25%, var(--cream-light) 37%, var(--cream-dark) 63%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cream-dark) transparent;
+}
+.scroll-area::-webkit-scrollbar { width: 6px; }
+.scroll-area::-webkit-scrollbar-thumb { background: var(--cream-dark); border-radius: 3px; }
