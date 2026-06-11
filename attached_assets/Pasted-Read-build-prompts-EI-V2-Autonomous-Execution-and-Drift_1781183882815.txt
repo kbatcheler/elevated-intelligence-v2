@@ -1,0 +1,13 @@
+Read build-prompts/EI-V2-Autonomous-Execution-and-Drift-Control-Protocol.md first and follow it exactly. It governs this entire build.
+
+This is a greenfield build of Elevated Intelligence from a complete specification. Execute build-prompts/EI-Greenfield-Core-Master-Prompt.md (Phases A to G), then continue through the downstream prompts exactly as sequenced and adapted by build-prompts/EI-Greenfield-Build-Plan-and-Adaptation-Guide.md, which is binding wherever it conflicts with a downstream prompt, finishing with build-prompts/EI-Calibration-Efficacy-and-Decision-Intelligence-Addendum.md (Phases AJ to AN). Treat build-prompts/Elevated-Intelligence-V2-Master-Prompt.md as the specification library it is declared to be, and EI-Canonical-Layer-Content-Specification.md as the law for layer content.
+
+The V1 system is the read-only reference: clone it into reference/v1 (gitignored) at the start of every session, never modify it, and use it only as the core prompt allows: porting the pipeline prompts and brand tokens, and as the behavioural parity reference for Phase G.
+
+Set PAUSE_AT_MILESTONES = true.
+
+Run autonomously per the protocol. For every phase: build, run the full verification (typecheck, build, the phase acceptance checks, the test suite which exists from Phase B onward), write a drift report to docs/drift/, remediate until truly green, commit with the message format `Phase <id>: <name> [drift: <verdict>]` and tag it `phase-<id>`, one phase per commit, then advance.
+
+Hard rules, not preferences: never stub, script, mock, or fake output to pass a gate; the Confounder and the three-model cortex must be real and running on a real end-to-end seed before Phase C is complete; never weaken, skip, or delete a test or acceptance check to make a phase pass; write an honest drift report every phase naming anything skipped, assumed, or defaulted; stop only on a genuine blocker or at the milestones. Never use a long em-dash anywhere, in code, copy, seed data, or your own output.
+
+Begin with Phase A now: ground yourself in the specification set and the V1 reference, confirm your understanding per the core prompt, and propose the monorepo structure. Then proceed.
