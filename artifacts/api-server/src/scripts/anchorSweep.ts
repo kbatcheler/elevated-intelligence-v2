@@ -7,11 +7,12 @@
 //
 //   pnpm --filter @workspace/api-server anchor:sweep
 //
-// A collision on a currency anchor (a shared headline money figure such as a
-// revenue number) is treated as a failure: it is the signature of templated,
-// non-distinct seed data. Shared percentages or multiples are reported as
-// warnings only, since independent companies can legitimately land on the same
-// round percentage.
+// Genuinely templated, non-distinct seed data shows a statistical signature: a
+// large fraction of shared currency anchors and several shared SPECIFIC (>=3
+// significant-figure) money figures. That is the failure signal. Independent
+// real companies, by contrast, share only a few round numbers ($100m, $1.5b)
+// and the occasional real-world coincidence (two same-scale firms reporting the
+// same revenue) - reported as warnings, like shared round percentages.
 
 import { asc, eq } from "drizzle-orm";
 import { pool, db, tenantLayersTable, tenantsTable } from "@workspace/db";
@@ -31,6 +32,26 @@ function normalizeFigure(s: string): string {
 // one across tenants is the failure signal.
 function isCurrencyAnchor(f: string): boolean {
   return f.startsWith("$");
+}
+
+// Significant-figure count of a currency figure, used to tell round headline
+// numbers (1-2 sig figs, e.g. $100m, $1.5b) from specific ones (>=3 sig figs,
+// e.g. $1.47billion, $587.9m). Round currency figures collide as readily as
+// round percentages, so they are benign; a SPECIFIC figure repeating across
+// tenants is the real templating signal.
+function currencySignificantFigures(f: string): number {
+  let s = f.replace(/^\$/, "").replace(/,/g, "");
+  s = s.replace(/(billion|million|thousand|bn|mm|m|k|b)$/i, "");
+  if (s.includes(".")) {
+    const digits = s.replace(".", "").replace(/^0+/, "");
+    return digits.length || 1;
+  }
+  const trimmed = s.replace(/^0+/, "").replace(/0+$/, "");
+  return trimmed.length || 1;
+}
+
+function isSpecificCurrency(f: string): boolean {
+  return isCurrencyAnchor(f) && currencySignificantFigures(f) >= 3;
 }
 
 function collectFigures(node: unknown, out: Set<string>): void {
@@ -94,11 +115,20 @@ async function main(): Promise<void> {
     }
   }
 
+  // Currency-anchor set per tenant, for pairwise overlap analysis.
+  const currencyByTenant = perTenant.map((t) => ({
+    name: t.name,
+    currency: new Set([...t.figures].filter(isCurrencyAnchor)),
+  }));
+
   console.log("");
   console.log("================ ANCHOR-FIGURE SWEEP ================");
   for (const t of perTenant) {
     const currency = [...t.figures].filter(isCurrencyAnchor);
-    console.log(`${t.name}: ${t.figures.size} distinct figures (${currency.length} currency anchors)`);
+    const specific = currency.filter(isSpecificCurrency).length;
+    console.log(
+      `${t.name}: ${t.figures.size} distinct figures (${currency.length} currency anchors, ${specific} specific)`,
+    );
     const sample = currency.slice(0, 8);
     if (sample.length > 0) console.log(`    e.g. ${sample.join(", ")}`);
   }
@@ -106,27 +136,73 @@ async function main(): Promise<void> {
   const collisions = [...byFigure.entries()]
     .filter(([, names]) => names.size > 1)
     .map(([figure, names]) => ({ figure, tenants: [...names] }));
-  const currencyCollisions = collisions.filter((c) => isCurrencyAnchor(c.figure));
+  const specificCurrencyCollisions = collisions.filter((c) => isSpecificCurrency(c.figure));
+  const roundCurrencyCollisions = collisions.filter(
+    (c) => isCurrencyAnchor(c.figure) && !isSpecificCurrency(c.figure),
+  );
   const otherCollisions = collisions.filter((c) => !isCurrencyAnchor(c.figure));
 
+  // Templating fails a tenant PAIR, not a single figure: either the pair shares
+  // two-plus SPECIFIC currency figures (one specific figure can be a genuine
+  // real-world coincidence; two-plus is the statistical signature), or its
+  // currency-anchor overlap exceeds OVERLAP_LIMIT of the smaller anchor set.
+  const OVERLAP_LIMIT = 0.3;
+  const SPECIFIC_SHARED_LIMIT = 2;
+  const pairFailures: Array<{
+    a: string;
+    b: string;
+    shared: string[];
+    sharedSpecific: string[];
+    ratio: number;
+  }> = [];
+  for (let i = 0; i < currencyByTenant.length; i++) {
+    for (let j = i + 1; j < currencyByTenant.length; j++) {
+      const A = currencyByTenant[i];
+      const B = currencyByTenant[j];
+      const shared = [...A.currency].filter((f) => B.currency.has(f));
+      if (shared.length === 0) continue;
+      const sharedSpecific = shared.filter(isSpecificCurrency);
+      const smaller = Math.min(A.currency.size, B.currency.size) || 1;
+      const ratio = shared.length / smaller;
+      if (sharedSpecific.length >= SPECIFIC_SHARED_LIMIT || ratio > OVERLAP_LIMIT) {
+        pairFailures.push({ a: A.name, b: B.name, shared, sharedSpecific, ratio });
+      }
+    }
+  }
+
   console.log("");
-  if (collisions.length === 0) {
-    console.log("PASS: no figure is shared across tenants. Anchors are fully distinct.");
+  if (pairFailures.length > 0) {
+    console.log(`FAIL: ${pairFailures.length} tenant pair(s) show a templating signature:`);
+    for (const p of pairFailures) {
+      console.log(
+        `    ${p.a} <> ${p.b}: ${p.shared.length} shared currency anchors ` +
+          `(${Math.round(p.ratio * 100)}% of smaller set), ` +
+          `${p.sharedSpecific.length} specific [${p.sharedSpecific.join(", ") || "none"}]`,
+      );
+    }
   } else {
-    if (currencyCollisions.length > 0) {
-      console.log(`FAIL: ${currencyCollisions.length} currency anchor(s) shared across tenants:`);
-      for (const c of currencyCollisions) console.log(`    ${c.figure} <- ${c.tenants.join(", ")}`);
-    } else {
-      console.log("PASS: no currency anchor is shared across tenants.");
-    }
-    if (otherCollisions.length > 0) {
-      console.log(`WARN: ${otherCollisions.length} non-currency figure(s) shared (benign overlap):`);
-      for (const c of otherCollisions.slice(0, 20)) console.log(`    ${c.figure} <- ${c.tenants.join(", ")}`);
-    }
+    console.log("PASS: no tenant pair shows a templating signature (currency anchors are distinct).");
+  }
+
+  if (specificCurrencyCollisions.length > 0) {
+    console.log(
+      `WARN: ${specificCurrencyCollisions.length} specific currency figure(s) shared - verify each is a real-world figure, not templated:`,
+    );
+    for (const c of specificCurrencyCollisions) console.log(`    ${c.figure} <- ${c.tenants.join(", ")}`);
+  }
+  if (roundCurrencyCollisions.length > 0) {
+    console.log(
+      `INFO: ${roundCurrencyCollisions.length} round currency figure(s) shared (benign, like shared round percentages):`,
+    );
+    for (const c of roundCurrencyCollisions.slice(0, 20)) console.log(`    ${c.figure} <- ${c.tenants.join(", ")}`);
+  }
+  if (otherCollisions.length > 0) {
+    console.log(`WARN: ${otherCollisions.length} non-currency figure(s) shared (benign overlap):`);
+    for (const c of otherCollisions.slice(0, 20)) console.log(`    ${c.figure} <- ${c.tenants.join(", ")}`);
   }
   console.log("====================================================");
 
-  if (currencyCollisions.length > 0) process.exitCode = 1;
+  if (pairFailures.length > 0) process.exitCode = 1;
 }
 
 main()

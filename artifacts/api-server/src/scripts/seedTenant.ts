@@ -16,18 +16,26 @@ function fmt(n: number | undefined): string {
 
 async function main(): Promise<void> {
   const url = process.argv[2];
+  const modeArg = process.argv[3];
   if (!url) {
-    console.error("usage: seed:tenant <url>");
+    console.error("usage: seed:tenant <url> [full|express]");
     process.exitCode = 1;
     return;
   }
+  if (modeArg && modeArg !== "full" && modeArg !== "express") {
+    console.error(`unknown mode "${modeArg}" (use full or express)`);
+    process.exitCode = 1;
+    return;
+  }
+  const mode: "full" | "express" = modeArg === "express" ? "express" : "full";
 
   const started = Date.now();
-  const result = await seedTenant(url, { log: logger });
+  const result = await seedTenant(url, { log: logger, mode });
   const totalMs = Date.now() - started;
 
   const built = result.layers.filter((l) => l.status === "built").length;
   const skipped = result.layers.filter((l) => l.status === "skipped").length;
+  const reduced = result.layers.filter((l) => l.reduced).length;
   const errored = result.layers.filter((l) => l.status === "error");
 
   console.log("");
@@ -35,7 +43,9 @@ async function main(): Promise<void> {
   console.log(`tenant:   ${result.name}`);
   console.log(`tenantId: ${result.tenantId}`);
   console.log(`url:      ${result.url}`);
+  console.log(`mode:     ${mode}`);
   console.log(`layers:   ${built} built, ${skipped} skipped, ${errored.length} error (of ${result.layers.length})`);
+  console.log(`reduced:  ${reduced} layer(s) in reduced (express) form`);
   console.log(`elapsed:  ${(totalMs / 1000).toFixed(1)}s`);
   console.log(
     `profile:  seat=${result.profileTelemetry.seat} model=${result.profileTelemetry.model} latencyMs=${fmt(
