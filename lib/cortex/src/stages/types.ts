@@ -9,8 +9,16 @@ export interface StageTelemetry {
   model: string;
   inputTokens?: number;
   outputTokens?: number;
+  // Prompt-cache accounting (Anthropic seats): tokens read from a cached prefix
+  // and tokens written to the cache. The observable proof of prefix caching.
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   latencyMs: number;
   searchCalls?: number;
+  // True for a sub-stage whose cost was folded into a sibling's single batched
+  // model call (the Evaluator's hero+peers+supplements are one Haiku call). The
+  // Intelligence Architecture summation must not double-count these.
+  batched?: boolean;
 }
 
 export type StageResult<T> =

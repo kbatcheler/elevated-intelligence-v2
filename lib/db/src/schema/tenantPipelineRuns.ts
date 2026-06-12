@@ -27,13 +27,26 @@ export type SeatTelemetry = {
   model?: string;
   inputTokens?: number;
   outputTokens?: number;
+  // Prompt-cache accounting (Anthropic seats): input tokens served from a
+  // cached prefix, and tokens written to the cache. The observable proof that
+  // the per-tenant profile and schema are reused across layers.
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
   latencyMs?: number;
   searchCalls?: number;
+  // True for a sub-stage whose model cost was folded into a sibling's single
+  // batched call (hero+peers+supplements run as one Haiku call). The
+  // Intelligence Architecture summation skips these so cost is not tripled.
+  batched?: boolean;
 };
 
 export type PipelineSubStage = {
   name: PipelineSubStageName;
-  status: "pending" | "running" | "done" | "error";
+  // "skipped" is an honest terminal state for a sub-stage the reduced express
+  // chain deliberately did not run (confound and challenge on a non-priority
+  // layer). It is distinct from "done": no model call was made and no output
+  // exists. The status lives on jsonb, so adding it needs no migration.
+  status: "pending" | "running" | "done" | "error" | "skipped";
   durationMs?: number;
   error?: string;
   telemetry?: SeatTelemetry;

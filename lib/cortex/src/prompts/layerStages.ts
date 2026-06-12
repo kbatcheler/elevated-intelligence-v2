@@ -5,6 +5,7 @@
 // stages drift on field names when given prose alone, which forces validation
 // retries or hard failures the self-correcting retry cannot recover.
 
+import type { SystemBlock } from "../clients/anthropic";
 import type { ProfileOutput } from "../schemas/profile";
 import type {
   ChallengeOutput,
@@ -22,13 +23,48 @@ import {
   type LayerDescriptor,
 } from "./shared";
 
+// Gemini seats take a plain string system prompt.
 export interface PromptPair {
   system: string;
   user: string;
 }
 
+// Anthropic seats take a structured system: a single stable, cacheable block.
+// The block holds everything that does NOT vary by layer (role, output rules,
+// the serialized company profile, the JSON schema), so layers 2..14 of a tenant
+// read it from Anthropic's prompt cache instead of re-sending the large profile
+// and schema on every call. The per-layer delta (the layer header and upstream
+// stage outputs) stays in the uncached user message.
+export interface CachedPromptPair {
+  system: SystemBlock[];
+  user: string;
+}
+
 function sys(role: string, body: string[]): string {
   return [`You are the ${role} of an executive intelligence engine.`, "", ...body, "", STAGE_RULES].join("\n");
+}
+
+// The stable cached prefix shared by every layer of a tenant for one Anthropic
+// stage. Identical across all layers (same role, rules, profile, schema), so
+// cache:true turns the second-through-fourteenth layer into cache reads.
+function cachedSystem(
+  role: string,
+  body: string[],
+  profile: ProfileOutput,
+  shape: string,
+): SystemBlock[] {
+  const text = [
+    `You are the ${role} of an executive intelligence engine.`,
+    "",
+    ...body,
+    "",
+    STAGE_RULES,
+    "",
+    companyContext(profile),
+    "",
+    jsonShape(shape),
+  ].join("\n");
+  return [{ text, cache: true }];
 }
 
 // ── perceive ──────────────────────────────────────────────────────────────
@@ -46,25 +82,22 @@ const PERCEIVE_SHAPE = `
   "sector_context": "short paragraph on the company's market context"
 }`;
 
-export function buildPerceive(profile: ProfileOutput, layer: LayerDescriptor): PromptPair {
+export function buildPerceive(profile: ProfileOutput, layer: LayerDescriptor): CachedPromptPair {
   return {
-    system: sys("Lens", [
-      "Use web search to gather REAL, recent, company-specific signals relevant to the",
-      "layer's diagnostic question. Each signal must be a concrete observation about",
-      "this exact company or its named market, not a generic industry truism.",
-      "Mark a signal grounded only when you cite the source URL you read it from;",
-      "otherwise mark it inferred. named_entities is a flat list of real entity name",
-      "strings (competitors, channels, products), never objects.",
-    ]),
-    user: [
-      companyContext(profile),
-      "",
-      layerHeader(layer),
-      "",
-      "Search the web first, then answer.",
-      "",
-      jsonShape(PERCEIVE_SHAPE),
-    ].join("\n"),
+    system: cachedSystem(
+      "Lens",
+      [
+        "Use web search to gather REAL, recent, company-specific signals relevant to the",
+        "layer's diagnostic question. Each signal must be a concrete observation about",
+        "this exact company or its named market, not a generic industry truism.",
+        "Mark a signal grounded only when you cite the source URL you read it from;",
+        "otherwise mark it inferred. named_entities is a flat list of real entity name",
+        "strings (competitors, channels, products), never objects.",
+      ],
+      profile,
+      PERCEIVE_SHAPE,
+    ),
+    user: [layerHeader(layer), "", "Search the web first, then answer."].join("\n"),
   };
 }
 
@@ -105,25 +138,22 @@ export function buildHypothesise(
   profile: ProfileOutput,
   layer: LayerDescriptor,
   perceive: PerceiveOutput,
-): PromptPair {
+): CachedPromptPair {
   return {
-    system: sys("Lens", [
-      "Form a candidate diagnosis for this layer from the signals. Produce a headline",
-      "finding and its business impact, the candidate root causes, the candidate",
-      "actions, and explicit hypotheses. For EVERY hypothesis give both the supporting",
-      "signals and a plausible alternative explanation: you are setting up the work the",
-      "Confounder and Challenger will stress-test next, so surface the weak points",
-      "honestly. Mark each claim grounded or inferred.",
-    ]),
-    user: [
-      companyContext(profile),
-      "",
-      layerHeader(layer),
-      "",
-      priorStage("SIGNALS FROM PERCEIVE", perceive),
-      "",
-      jsonShape(HYPOTHESISE_SHAPE),
-    ].join("\n"),
+    system: cachedSystem(
+      "Lens",
+      [
+        "Form a candidate diagnosis for this layer from the signals. Produce a headline",
+        "finding and its business impact, the candidate root causes, the candidate",
+        "actions, and explicit hypotheses. For EVERY hypothesis give both the supporting",
+        "signals and a plausible alternative explanation: you are setting up the work the",
+        "Confounder and Challenger will stress-test next, so surface the weak points",
+        "honestly. Mark each claim grounded or inferred.",
+      ],
+      profile,
+      HYPOTHESISE_SHAPE,
+    ),
+    user: [layerHeader(layer), "", priorStage("SIGNALS FROM PERCEIVE", perceive)].join("\n"),
   };
 }
 
@@ -293,26 +323,29 @@ export function buildNarrate(
   hypothesised: HypothesisedLayer,
   confounders: ConfounderOutput,
   challenge: ChallengeOutput,
-): PromptPair {
+): CachedPromptPair {
   return {
-    system: sys("Synthesist", [
-      "Write the final executive read for this layer. Fold in the Confounder and",
-      "Challenger work honestly: drop or downgrade refuted claims, hedge anything an",
-      "unresolved confounder could explain, and let the surviving diagnosis carry the",
-      "narrative. Produce a narrative paragraph, a headline finding, its impact, the",
-      "single highest-leverage action, the causes, the actions, the hypotheses, proof",
-      "receipts, and the metrics that frame the layer.",
-      "",
-      "Then split your claims into two lists. verified_claims are statements a web",
-      "source supports: give the claim path, the source URLs, and set verified_by to",
-      "the channel that established it (grounded-challenge for a fact-checked claim,",
-      "web-search for one you read directly). modelled_claims are reasoned estimates",
-      "with no direct source: give the claim path and a short rationale. Do NOT assign",
-      "numeric confidence here; the Evaluator does that next.",
-    ]),
+    system: cachedSystem(
+      "Synthesist",
+      [
+        "Write the final executive read for this layer. Fold in the Confounder and",
+        "Challenger work honestly: drop or downgrade refuted claims, hedge anything an",
+        "unresolved confounder could explain, and let the surviving diagnosis carry the",
+        "narrative. Produce a narrative paragraph, a headline finding, its impact, the",
+        "single highest-leverage action, the causes, the actions, the hypotheses, proof",
+        "receipts, and the metrics that frame the layer.",
+        "",
+        "Then split your claims into two lists. verified_claims are statements a web",
+        "source supports: give the claim path, the source URLs, and set verified_by to",
+        "the channel that established it (grounded-challenge for a fact-checked claim,",
+        "web-search for one you read directly). modelled_claims are reasoned estimates",
+        "with no direct source: give the claim path and a short rationale. Do NOT assign",
+        "numeric confidence here; the Evaluator does that next.",
+      ],
+      profile,
+      NARRATE_SHAPE,
+    ),
     user: [
-      companyContext(profile),
-      "",
       layerHeader(layer),
       "",
       priorStage("CANDIDATE DIAGNOSIS", hypothesised),
@@ -320,8 +353,6 @@ export function buildNarrate(
       priorStage("CONFOUNDER FINDINGS", confounders),
       "",
       priorStage("CHALLENGER FINDINGS", challenge),
-      "",
-      jsonShape(NARRATE_SHAPE),
     ].join("\n"),
   };
 }
@@ -345,26 +376,32 @@ const SCORE_SHAPE = `
 }`;
 
 export function buildScore(
+  profile: ProfileOutput,
   layer: LayerDescriptor,
   narrate: NarrateOutput,
   confounders: ConfounderOutput,
   challenge: ChallengeOutput,
-): PromptPair {
+): CachedPromptPair {
   return {
-    system: sys("Evaluator", [
-      "You are the SINGLE writer of confidence and basis for this layer. For each",
-      "content claim, address it by path and assign a numeric confidence (0 to 100)",
-      "and a basis: verified if a source supports it (it appears in verified_claims or",
-      "a Challenger supported finding), modelled if it is a reasoned estimate. Paths",
-      "look like causes[0], actions[1], hypotheses[0], metrics[2]; index into the",
-      "content arrays in order.",
-      "",
-      "Set an overall confidence (an integer from 0 to 95: the engine never claims",
-      "certainty, so never exceed 95). Lower it where unresolved confounders or refuted",
-      "claims weaken the diagnosis. Set confidence_gap to the additional confidence",
-      "available if the open gaps were closed, and list those gaps with a kind and the",
-      "points of lift each would add.",
-    ]),
+    system: cachedSystem(
+      "Evaluator",
+      [
+        "You are the SINGLE writer of confidence and basis for this layer. For each",
+        "content claim, address it by path and assign a numeric confidence (0 to 100)",
+        "and a basis: verified if a source supports it (it appears in verified_claims or",
+        "a Challenger supported finding), modelled if it is a reasoned estimate. Paths",
+        "look like causes[0], actions[1], hypotheses[0], metrics[2]; index into the",
+        "content arrays in order.",
+        "",
+        "Set an overall confidence (an integer from 0 to 95: the engine never claims",
+        "certainty, so never exceed 95). Lower it where unresolved confounders or refuted",
+        "claims weaken the diagnosis. Set confidence_gap to the additional confidence",
+        "available if the open gaps were closed, and list those gaps with a kind and the",
+        "points of lift each would add.",
+      ],
+      profile,
+      SCORE_SHAPE,
+    ),
     user: [
       layerHeader(layer),
       "",
@@ -373,100 +410,79 @@ export function buildScore(
       priorStage("CONFOUNDER FINDINGS", confounders),
       "",
       priorStage("CHALLENGER FINDINGS", challenge),
-      "",
-      jsonShape(SCORE_SHAPE),
     ].join("\n"),
   };
 }
 
-// ── hero ────────────────────────────────────────────────────────────────────
-const HERO_SHAPE = `
+// ── enrichment (hero + peers + supplements, batched) ────────────────────────
+// The three Enrichment artefacts share the Evaluator seat and take the same
+// inputs (the layer and the final narrative; the company profile lives in the
+// cached prefix), so they are produced in ONE Haiku call returning this
+// composite. The orchestrator splits the result into three persisted sub-stage
+// records. Building all three together is strictly faster than three separate
+// round-trips and keeps the per-tenant cached prefix shared across them.
+const ENRICHMENT_SHAPE = `
 {
-  "metric_label": "the metric name",
-  "metric_value": "qualitative or modelled value, never a fabricated precise figure",
-  "metric_sub": "optional sub-line",
-  "tone": "good|warn|bad|neutral",
-  "one_line_read": "the one-line executive read",
-  "trend": [ { "label": "period", "value": 0 } ]
+  "hero": {
+    "metric_label": "the metric name",
+    "metric_value": "qualitative or modelled value, never a fabricated precise figure",
+    "metric_sub": "optional sub-line",
+    "tone": "good|warn|bad|neutral",
+    "one_line_read": "the one-line executive read",
+    "trend": [ { "label": "period", "value": 0 } ]
+  },
+  "peers": {
+    "dimension": "the benchmark dimension",
+    "unit": "optional unit",
+    "peers": [
+      { "name": "Peer Name", "value": "value", "note": "optional note", "is_self": false }
+    ],
+    "read": "the one-line read",
+    "source_urls": ["https://..."]
+  },
+  "supplements": {
+    "blocks": [
+      {
+        "kind": "context|risk|watchlist|quote|stat",
+        "title": "the block title",
+        "body": "the block body",
+        "source_urls": ["https://..."]
+      }
+    ]
+  }
 }`;
 
-export function buildHero(layer: LayerDescriptor, narrate: NarrateOutput): PromptPair {
+export function buildEnrichment(
+  profile: ProfileOutput,
+  layer: LayerDescriptor,
+  narrate: NarrateOutput,
+): CachedPromptPair {
   return {
-    system: sys("Enrichment", [
-      "Distil the single most important metric for this layer into a hero panel: a",
-      "label, a value (qualitative or a modelled estimate, never a fabricated precise",
-      "figure), an optional sub-line, a tone (good, warn, bad, neutral), and a one",
-      "line executive read. Add a short trend series only if it is meaningful.",
-    ]),
-    user: [
-      layerHeader(layer),
-      "",
-      priorStage("FINAL CONTENT", narrate.content),
-      "",
-      jsonShape(HERO_SHAPE),
-    ].join("\n"),
-  };
-}
-
-// ── peers ───────────────────────────────────────────────────────────────────
-const PEERS_SHAPE = `
-{
-  "dimension": "the benchmark dimension",
-  "unit": "optional unit",
-  "peers": [
-    { "name": "Peer Name", "value": "value", "note": "optional note", "is_self": false }
-  ],
-  "read": "the one-line read",
-  "source_urls": ["https://..."]
-}`;
-
-export function buildPeers(profile: ProfileOutput, layer: LayerDescriptor, narrate: NarrateOutput): PromptPair {
-  return {
-    system: sys("Enrichment", [
-      "Build a peer benchmark on the dimension most relevant to this layer. Use REAL,",
-      "named peers of this company (draw on the known entities). Include the company",
-      "itself with is_self true. Values may be qualitative or modelled estimates; do",
-      "not fabricate precise figures. Add a one line read and cite sources where used.",
-    ]),
-    user: [
-      companyContext(profile),
-      "",
-      layerHeader(layer),
-      "",
-      priorStage("FINAL CONTENT", narrate.content),
-      "",
-      jsonShape(PEERS_SHAPE),
-    ].join("\n"),
-  };
-}
-
-// ── supplements ─────────────────────────────────────────────────────────────
-const SUPPLEMENTS_SHAPE = `
-{
-  "blocks": [
-    {
-      "kind": "context|risk|watchlist|quote|stat",
-      "title": "the block title",
-      "body": "the block body",
-      "source_urls": ["https://..."]
-    }
-  ]
-}`;
-
-export function buildSupplements(layer: LayerDescriptor, narrate: NarrateOutput): PromptPair {
-  return {
-    system: sys("Enrichment", [
-      "Produce supplementary blocks that enrich this layer: added context, a risk, a",
-      "watchlist item, a notable quote, or a standout stat. Each block has a kind, a",
-      "title, and a body. Keep them specific to this company and cite sources where a",
-      "block rests on one.",
-    ]),
-    user: [
-      layerHeader(layer),
-      "",
-      priorStage("FINAL CONTENT", narrate.content),
-      "",
-      jsonShape(SUPPLEMENTS_SHAPE),
-    ].join("\n"),
+    system: cachedSystem(
+      "Enrichment",
+      [
+        "Produce all three enrichment artefacts for this layer in one pass: a hero",
+        "panel, a peer benchmark, and supplementary blocks.",
+        "",
+        "hero: distil the single most important metric for this layer into a label, a",
+        "value (qualitative or a modelled estimate, never a fabricated precise figure),",
+        "an optional sub-line, a tone (good, warn, bad, neutral), and a one-line",
+        "executive read. Add a short trend series only if it is meaningful.",
+        "",
+        "peers: build a benchmark on the dimension most relevant to this layer using",
+        "REAL, named peers of this company (draw on the known entities). Include the",
+        "company itself with is_self true. Values may be qualitative or modelled",
+        "estimates; do not fabricate precise figures. Add a one-line read and cite",
+        "sources where used.",
+        "",
+        "supplements: produce blocks that enrich this layer: added context, a risk, a",
+        "watchlist item, a notable quote, or a standout stat. Each block has a kind, a",
+        "title, and a body. Keep them specific to this company and cite sources where a",
+        "block rests on one.",
+      ],
+      profile,
+      ENRICHMENT_SHAPE,
+    ),
+    user: [layerHeader(layer), "", priorStage("FINAL CONTENT", narrate.content)].join("\n"),
   };
 }

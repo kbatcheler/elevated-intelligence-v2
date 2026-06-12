@@ -218,12 +218,19 @@ export interface TenantLayerDetail {
   confounders: Confounder[] | null;
   verifiedClaims: { items: VerifiedClaim[] } | null;
   modelledClaims: { items: ModelledClaim[] } | null;
+  // True when this layer was built with the reduced express chain (the confound
+  // and challenge sub-stages skipped). The layer surfaces an "express build"
+  // pill; a full refresh rebuilds it with the complete chain.
+  reducedMode: boolean;
   generatorModel: string;
   generatedAt: string;
 }
 
 // ── Pipeline runs (the boot splash + Intelligence Architecture read these) ──
-export type SubStageStatus = "pending" | "running" | "done" | "error";
+// "skipped" is a terminal sub-stage state the reduced express chain produces for
+// the confound and challenge stages it deliberately did not run; honest, and
+// distinct from "done".
+export type SubStageStatus = "pending" | "running" | "done" | "error" | "skipped";
 export interface SeatTelemetry {
   seat?: string;
   model?: string;
@@ -231,6 +238,10 @@ export interface SeatTelemetry {
   outputTokens?: number;
   latencyMs?: number;
   searchCalls?: number;
+  // True on the peers and supplements sub-stages, whose cost was folded into a
+  // single batched Evaluator call recorded on hero. The Intelligence
+  // Architecture summation reads this to avoid triple-counting that one call.
+  batched?: boolean;
 }
 export interface SubStage {
   name: string;

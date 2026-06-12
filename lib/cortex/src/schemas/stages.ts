@@ -208,3 +208,15 @@ export const supplementBlocksSchema = z.object({
   blocks: cappedArray(supplementBlockSchema, 1, 8),
 });
 export type SupplementBlocks = z.infer<typeof supplementBlocksSchema>;
+
+// ── enrichment (Enrichment, batched) ─────────────────────────────────────
+// hero, peers and supplements all take the same inputs and share the Evaluator
+// seat, so they run as ONE Haiku call returning this composite. The
+// orchestrator validates against this schema, then splits the result into three
+// distinct persisted sub-stage records.
+export const enrichmentOutputSchema = z.object({
+  hero: heroPanelSchema,
+  peers: peerBenchmarkSchema,
+  supplements: supplementBlocksSchema,
+});
+export type EnrichmentOutput = z.infer<typeof enrichmentOutputSchema>;

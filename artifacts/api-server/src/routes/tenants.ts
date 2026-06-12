@@ -12,6 +12,8 @@ import {
 } from "@workspace/db";
 import { z } from "zod";
 import { isProvider } from "../lib/auth/access";
+import { logger } from "../lib/logger";
+import { seedTenant } from "../lib/pipeline/orchestrator";
 import { requireTenantAccess } from "../middleware/auth";
 
 export const tenantsRouter: Router = Router();
@@ -58,6 +60,129 @@ tenantsRouter.get("/tenants", async (req, res, next) => {
       .where(eq(orgTenantsTable.orgId, user.orgId))
       .orderBy(asc(tenantsTable.name));
     res.json({ tenants: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Seed mode selects the full nine-stage adversarial chain on every layer
+// (default) or the express reduced chain, which runs the full chain only on the
+// priority layers and skips the confound and challenge sub-stages elsewhere.
+const seedTenantSchema = z.object({
+  url: z.string().url().max(2000),
+  mode: z.enum(["full", "express"]).default("full"),
+});
+const refreshTenantSchema = z.object({
+  mode: z.enum(["full", "express"]).default("full"),
+});
+
+// Create a tenant from a URL and seed it through the cortex. Provider-only:
+// seeding spends real model budget and produces a tenant the bound orgs can see.
+// The long fan-out (profile then the registry layers) runs in the background, so
+// the request returns 202 with the seeding shell immediately and the portal
+// polls the run surface for progress. A failed seed is recorded honestly on the
+// tenant status and the per-layer runs, never swallowed.
+tenantsRouter.post("/tenants", async (req, res, next) => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  if (!isProvider(user.role)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  const parsed = seedTenantSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input" });
+    return;
+  }
+  try {
+    const { url, mode } = parsed.data;
+    // Pre-create (or reclaim) the shell so the caller gets an id at once and the
+    // tenant shows as seeding in the switcher. seedTenant upserts this same row
+    // by URL once the profile stage resolves the real name and scalars.
+    const host = new URL(url).hostname;
+    const existing = await db
+      .select({ id: tenantsTable.id, status: tenantsTable.status })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.url, url))
+      .limit(1);
+    let tenantId: string;
+    if (existing[0]) {
+      // A seed is already in flight for this URL. Re-triggering would delete the
+      // claimed jobs and drain the same layers twice (double model spend plus
+      // racing writes to one run). Refuse rather than stack seeds.
+      if (existing[0].status === "seeding") {
+        res.status(409).json({ error: "seed_in_progress", tenantId: existing[0].id });
+        return;
+      }
+      tenantId = existing[0].id;
+      await db.update(tenantsTable).set({ status: "seeding" }).where(eq(tenantsTable.id, tenantId));
+    } else {
+      const inserted = await db
+        .insert(tenantsTable)
+        .values({ url, name: host, status: "seeding" })
+        .returning({ id: tenantsTable.id });
+      tenantId = inserted[0]!.id;
+    }
+    void seedTenant(url, { log: logger, mode }).catch((err) => {
+      logger.error(
+        { url, err: err instanceof Error ? err.message : String(err) },
+        "background tenant seed failed",
+      );
+    });
+    res.status(202).json({ tenantId, status: "seeding", mode });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Re-seed an existing tenant. Provider-only for the same budget reason. In full
+// mode this is also the express->full upgrade path: runLayer rebuilds any layer
+// previously built on the reduced chain while leaving full layers untouched.
+tenantsRouter.post("/tenants/:id/refresh", async (req, res, next) => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  if (!isProvider(user.role)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  const parsed = refreshTenantSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input" });
+    return;
+  }
+  try {
+    const tenantId = String(req.params.id);
+    const rows = await db
+      .select({ url: tenantsTable.url, status: tenantsTable.status })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, tenantId))
+      .limit(1);
+    const tenant = rows[0];
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+    // A seed already running for this tenant: refuse rather than delete its
+    // claimed jobs and double-spend (same reason as create above).
+    if (tenant.status === "seeding") {
+      res.status(409).json({ error: "seed_in_progress", tenantId });
+      return;
+    }
+    const { mode } = parsed.data;
+    await db.update(tenantsTable).set({ status: "seeding" }).where(eq(tenantsTable.id, tenantId));
+    void seedTenant(tenant.url, { log: logger, mode }).catch((err) => {
+      logger.error(
+        { tenantId, err: err instanceof Error ? err.message : String(err) },
+        "background tenant refresh failed",
+      );
+    });
+    res.status(202).json({ tenantId, status: "seeding", mode });
   } catch (err) {
     next(err);
   }
@@ -296,6 +421,7 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
       confounders: layer.confounders,
       verifiedClaims: layer.verifiedClaims,
       modelledClaims: layer.modelledClaims,
+      reducedMode: layer.reducedMode,
       generatorModel: layer.generatorModel,
       generatedAt: layer.generatedAt,
     });

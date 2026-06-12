@@ -12,42 +12,43 @@ import { buildProfileUser, PROFILE_SYSTEM_PROMPT } from "../prompts/profile";
 import {
   buildChallenge,
   buildConfound,
-  buildHero,
+  buildEnrichment,
   buildHypothesise,
   buildNarrate,
-  buildPeers,
   buildPerceive,
   buildScore,
-  buildSupplements,
 } from "../prompts/layerStages";
 import type { LayerDescriptor } from "../prompts/shared";
 import { profileSchema, type ProfileOutput } from "../schemas/profile";
 import {
   challengeOutputSchema,
   confounderOutputSchema,
-  heroPanelSchema,
+  enrichmentOutputSchema,
   hypothesisedLayerSchema,
   narrateOutputSchema,
-  peerBenchmarkSchema,
   perceiveOutputSchema,
   scoreOutputSchema,
-  supplementBlocksSchema,
   type ChallengeOutput,
   type ConfounderOutput,
-  type HeroPanel,
+  type EnrichmentOutput,
   type HypothesisedLayer,
   type NarrateOutput,
-  type PeerBenchmark,
   type PerceiveOutput,
   type ScoreOutput,
-  type SupplementBlocks,
 } from "../schemas/stages";
 import type { StageResult, StageTelemetry } from "./types";
 import type { ZodType } from "zod/v4";
 
 function buildTelemetry(
   stage: StageName,
-  p: { durationMs: number; inputTokens?: number | null; outputTokens?: number | null; searchCallCount?: number },
+  p: {
+    durationMs: number;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
+    cacheReadTokens?: number | null;
+    cacheCreationTokens?: number | null;
+    searchCallCount?: number;
+  },
 ): StageTelemetry {
   return {
     seat: STAGE_CONFIG[stage].role,
@@ -55,6 +56,8 @@ function buildTelemetry(
     latencyMs: p.durationMs,
     ...(p.inputTokens != null ? { inputTokens: p.inputTokens } : {}),
     ...(p.outputTokens != null ? { outputTokens: p.outputTokens } : {}),
+    ...(p.cacheReadTokens != null ? { cacheReadTokens: p.cacheReadTokens } : {}),
+    ...(p.cacheCreationTokens != null ? { cacheCreationTokens: p.cacheCreationTokens } : {}),
     ...(p.searchCallCount != null ? { searchCalls: p.searchCallCount } : {}),
   };
 }
@@ -168,40 +171,28 @@ export function runNarrate(
 }
 
 export function runScore(
+  profile: ProfileOutput,
   layer: LayerDescriptor,
   narrate: NarrateOutput,
   confounders: ConfounderOutput,
   challenge: ChallengeOutput,
   log: Logger = silentLogger,
 ): Promise<StageResult<ScoreOutput>> {
-  const { system, user } = buildScore(layer, narrate, confounders, challenge);
+  const { system, user } = buildScore(profile, layer, narrate, confounders, challenge);
   return runAnthropicStage("score", { system, user, schema: scoreOutputSchema, log });
 }
 
-export function runHero(
-  layer: LayerDescriptor,
-  narrate: NarrateOutput,
-  log: Logger = silentLogger,
-): Promise<StageResult<HeroPanel>> {
-  const { system, user } = buildHero(layer, narrate);
-  return runAnthropicStage("hero", { system, user, schema: heroPanelSchema, log });
-}
-
-export function runPeers(
+// The three Enrichment artefacts (hero, peers, supplements) share the Evaluator
+// seat and the same inputs, so they run as ONE Haiku call. The representative
+// stage is "hero": modelForStage and the cached prefix are identical for all
+// three. The orchestrator splits the composite output into three persisted
+// sub-stage records and records cost once (see executeEnrichment).
+export function runEnrichment(
   profile: ProfileOutput,
   layer: LayerDescriptor,
   narrate: NarrateOutput,
   log: Logger = silentLogger,
-): Promise<StageResult<PeerBenchmark>> {
-  const { system, user } = buildPeers(profile, layer, narrate);
-  return runAnthropicStage("peers", { system, user, schema: peerBenchmarkSchema, log });
-}
-
-export function runSupplements(
-  layer: LayerDescriptor,
-  narrate: NarrateOutput,
-  log: Logger = silentLogger,
-): Promise<StageResult<SupplementBlocks>> {
-  const { system, user } = buildSupplements(layer, narrate);
-  return runAnthropicStage("supplements", { system, user, schema: supplementBlocksSchema, log });
+): Promise<StageResult<EnrichmentOutput>> {
+  const { system, user } = buildEnrichment(profile, layer, narrate);
+  return runAnthropicStage("hero", { system, user, schema: enrichmentOutputSchema, log });
 }

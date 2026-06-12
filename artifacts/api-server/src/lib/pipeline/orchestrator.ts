@@ -9,8 +9,8 @@
 // There are no stubs and no silent fallbacks. A stage that fails to produce
 // valid output records the error and aborts that layer loudly.
 
+import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
-import pLimit from "p-limit";
 import {
   assembleLayerContent,
   fetchHomepageContext,
@@ -18,27 +18,24 @@ import {
   modelForStage,
   runChallenge,
   runConfound,
-  runHero,
+  runEnrichment,
   runHypothesise,
   runNarrate,
-  runPeers,
   runPerceive,
   runProfile,
   runScore,
-  runSupplements,
+  STAGE_CONFIG,
   type ChallengeOutput,
   type ConfounderOutput,
-  type HeroPanel,
+  type EnrichmentOutput,
   type HypothesisedLayer,
   type LayerDescriptor,
   type NarrateOutput,
-  type PeerBenchmark,
   type PerceiveOutput,
   type Logger,
   type ProfileOutput,
   type ScoreOutput,
   type StageResult,
-  type SupplementBlocks,
 } from "@workspace/cortex";
 import {
   db,
@@ -51,20 +48,50 @@ import {
   type PipelineSubStage,
   type PipelineSubStageName,
 } from "@workspace/db";
+import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } from "./queue";
 
-const LAYER_CONCURRENCY = 4;
+// In express mode, only these high-signal layers run the full nine-stage
+// adversarial chain (perceive through supplements). Every other layer runs a
+// reduced chain with the confound and challenge sub-stages skipped. Full mode
+// runs the complete chain on every layer regardless of this set. The keys match
+// the registry's stable layer keys; they are a fixed product policy, not data.
+const PRIORITY_LAYER_KEYS = new Set<string>([
+  "business-performance",
+  "finance",
+  "pricing-margin",
+  "demand-intelligence",
+  "competitive-intelligence",
+]);
+
+// Whether a layer runs the reduced chain for a seed mode: only in express mode,
+// and only for layers outside the priority set.
+function isReducedLayer(mode: "full" | "express", layerKey: string): boolean {
+  return mode === "express" && !PRIORITY_LAYER_KEYS.has(layerKey);
+}
 
 export interface SeedOptions {
   log: Logger;
   // When false, an already-built layer is rebuilt instead of skipped. Defaults
   // to true (resume).
   resume?: boolean;
+  // full (default) drives the full nine-stage adversarial chain on every layer;
+  // express runs that full chain only on the priority layers and a reduced
+  // chain elsewhere. The queue carries the mode on each job; runLayer applies
+  // the reduced behaviour.
+  mode?: "full" | "express";
 }
 
 export interface LayerOutcome {
   layerKey: string;
   status: "built" | "skipped" | "error";
+  // True when this layer ran (or, for a skipped layer, was previously built on)
+  // the reduced express chain. Lets the seed script and callers report which
+  // layers carry the lighter, adversary-free build.
+  reduced?: boolean;
   reason?: string;
+  // The per-layer run row this outcome produced, when one was created. Carried
+  // back so the queue can point its job at the run.
+  runId?: string;
   telemetry: Array<{ stage: PipelineSubStageName; seat?: string; model?: string; latencyMs?: number; searchCalls?: number }>;
 }
 
@@ -208,6 +235,81 @@ async function executeStage<T>(
   return result.output;
 }
 
+// Mark a sub-stage as deliberately skipped by the reduced express chain. No
+// model call is made, so the node carries no telemetry and no output: an honest
+// record that the stage did not run, distinct from a completed stage. The
+// caller persists once after marking the skipped pair.
+function markSkipped(ctx: RunCtx, stage: PipelineSubStageName): void {
+  const node = ctx.subStages.find((s) => s.name === stage);
+  if (!node) throw new Error(`unknown sub-stage ${stage}`);
+  node.status = "skipped";
+  node.error = undefined;
+  node.telemetry = undefined;
+  node.durationMs = undefined;
+  node.output = undefined;
+}
+
+// Run (or resume) the batched Enrichment call. hero, peers and supplements come
+// from ONE Haiku call (see runEnrichment), but the rest of the pipeline and the
+// reasoning strip expect three distinct persisted sub-stage records, so we split
+// the composite back out. Real cost (tokens + latency) is recorded once, on
+// hero; peers and supplements carry seat/model only with batched:true so the
+// Intelligence Architecture summation never triple-counts the Evaluator.
+async function executeEnrichment(
+  ctx: RunCtx,
+  run: () => Promise<StageResult<EnrichmentOutput>>,
+): Promise<EnrichmentOutput> {
+  const nodes = (["hero", "peers", "supplements"] as const).map((name) => {
+    const node = ctx.subStages.find((s) => s.name === name);
+    if (!node) throw new Error(`unknown sub-stage ${name}`);
+    return [name, node] as const;
+  });
+
+  // Resume: every artefact already persisted from a prior run.
+  if (nodes.every(([, n]) => n.status === "done" && n.output !== undefined)) {
+    const byName = new Map(nodes);
+    return {
+      hero: byName.get("hero")!.output as EnrichmentOutput["hero"],
+      peers: byName.get("peers")!.output as EnrichmentOutput["peers"],
+      supplements: byName.get("supplements")!.output as EnrichmentOutput["supplements"],
+    };
+  }
+
+  for (const [, node] of nodes) {
+    node.status = "running";
+    node.error = undefined;
+  }
+  await persistSubStages(ctx);
+
+  const result = await run();
+  if (!result.ok) {
+    // One call failed, so all three artefacts failed: mark them together and
+    // carry the real telemetry of the failing call on each.
+    for (const [, node] of nodes) {
+      node.status = "error";
+      node.error = result.reason;
+      node.telemetry = result.telemetry;
+    }
+    await persistSubStages(ctx);
+    throw new StageError("hero", result.reason);
+  }
+
+  const output = result.output;
+  for (const [name, node] of nodes) {
+    node.status = "done";
+    node.output = output[name];
+    if (name === "hero") {
+      node.telemetry = result.telemetry;
+      node.durationMs = result.telemetry.latencyMs;
+    } else {
+      node.telemetry = { seat: STAGE_CONFIG[name].role, model: modelForStage(name), latencyMs: 0, batched: true };
+      node.durationMs = 0;
+    }
+  }
+  await persistSubStages(ctx);
+  return output;
+}
+
 // ── one layer: nine sub-stages, then persist tenant_layers ───────────────────
 async function runLayer(
   tenantId: string,
@@ -216,19 +318,32 @@ async function runLayer(
   opts: SeedOptions,
 ): Promise<LayerOutcome> {
   const resume = opts.resume !== false;
+  const mode = opts.mode ?? "full";
+  const reduced = isReducedLayer(mode, layer.key);
 
+  // Resume and the express->full upgrade share one skip decision. A built layer
+  // satisfies this run unless it must be upgraded: an existing full build (the
+  // most complete form) is always honoured, and an existing reduced build is
+  // honoured only while this run is itself reduced. The single case that falls
+  // through is a reduced build a full run must upgrade; it is rebuilt from
+  // scratch (effectiveResume false) so narrate and score re-run with the
+  // now-present confounders rather than reusing their adversary-free output.
+  let effectiveResume = resume;
   if (resume) {
     const built = await db
-      .select({ id: tenantLayersTable.id })
+      .select({ reducedMode: tenantLayersTable.reducedMode })
       .from(tenantLayersTable)
       .where(and(eq(tenantLayersTable.tenantId, tenantId), eq(tenantLayersTable.layerKey, layer.key)))
       .limit(1);
     if (built[0]) {
-      return { layerKey: layer.key, status: "skipped", telemetry: [] };
+      if (built[0].reducedMode === false || reduced) {
+        return { layerKey: layer.key, status: "skipped", reduced: built[0].reducedMode, telemetry: [] };
+      }
+      effectiveResume = false;
     }
   }
 
-  const ctx = await ensureRun(tenantId, layer.key, resume);
+  const ctx = await ensureRun(tenantId, layer.key, effectiveResume);
   const log = opts.log;
 
   try {
@@ -236,22 +351,34 @@ async function runLayer(
     const hypothesise = await executeStage<HypothesisedLayer>(ctx, "hypothesise", () =>
       runHypothesise(profile, layer, perceive, log),
     );
-    const confound = await executeStage<ConfounderOutput>(ctx, "confound", () =>
-      runConfound(profile, layer, hypothesise, log),
-    );
-    const challenge = await executeStage<ChallengeOutput>(ctx, "challenge", () =>
-      runChallenge(profile, layer, hypothesise, confound, log),
-    );
+    // The reduced express chain skips the two adversarial sub-stages on a
+    // non-priority layer. narrate and score still run, but with empty confounder
+    // and challenge inputs: the persisted layer therefore carries no confounders
+    // and the two nodes are honestly marked skipped, never faked as done.
+    let confound: ConfounderOutput;
+    let challenge: ChallengeOutput;
+    if (reduced) {
+      confound = { confounders: [] };
+      challenge = { findings: [], alternative_hypotheses: [] };
+      markSkipped(ctx, "confound");
+      markSkipped(ctx, "challenge");
+      await persistSubStages(ctx);
+    } else {
+      confound = await executeStage<ConfounderOutput>(ctx, "confound", () =>
+        runConfound(profile, layer, hypothesise, log),
+      );
+      challenge = await executeStage<ChallengeOutput>(ctx, "challenge", () =>
+        runChallenge(profile, layer, hypothesise, confound, log),
+      );
+    }
     const narrate = await executeStage<NarrateOutput>(ctx, "narrate", () =>
       runNarrate(profile, layer, hypothesise, confound, challenge, log),
     );
     const score = await executeStage<ScoreOutput>(ctx, "score", () =>
-      runScore(layer, narrate, confound, challenge, log),
+      runScore(profile, layer, narrate, confound, challenge, log),
     );
-    const hero = await executeStage<HeroPanel>(ctx, "hero", () => runHero(layer, narrate, log));
-    const peers = await executeStage<PeerBenchmark>(ctx, "peers", () => runPeers(profile, layer, narrate, log));
-    const supplements = await executeStage<SupplementBlocks>(ctx, "supplements", () =>
-      runSupplements(layer, narrate, log),
+    const { hero, peers, supplements } = await executeEnrichment(ctx, () =>
+      runEnrichment(profile, layer, narrate, log),
     );
 
     // The Evaluator (score) is the single writer of confidence and basis; the
@@ -269,6 +396,7 @@ async function runLayer(
       confounders: confound.confounders as unknown as unknown[],
       verifiedClaims: { items: narrate.verified_claims } as Record<string, unknown>,
       modelledClaims: { items: narrate.modelled_claims } as Record<string, unknown>,
+      reducedMode: reduced,
       generatorModel: modelForStage("narrate"),
     };
 
@@ -288,6 +416,8 @@ async function runLayer(
     return {
       layerKey: layer.key,
       status: "built",
+      reduced,
+      runId: ctx.runId,
       telemetry: ctx.subStages.map((s) => ({
         stage: s.name,
         seat: s.telemetry?.seat,
@@ -306,7 +436,9 @@ async function runLayer(
     return {
       layerKey: layer.key,
       status: "error",
+      reduced,
       reason,
+      runId: ctx.runId,
       telemetry: ctx.subStages.map((s) => ({
         stage: s.name,
         seat: s.telemetry?.seat,
@@ -354,10 +486,56 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   }
   log.info({ tenantId, layers: registry.length }, "seed: fanning out across layers");
 
-  const limit = pLimit(LAYER_CONCURRENCY);
-  const outcomes = await Promise.all(registry.map((layer) => limit(() => runLayer(tenantId, profile, layer, opts))));
+  // The seed limiter runs on the Postgres-backed queue, not module memory: one
+  // job per layer is enqueued, then this instance drains the queue with up to
+  // LAYER_CONCURRENCY claim loops. Each claim is atomic (FOR UPDATE SKIP
+  // LOCKED), so concurrent workers and instances share the work without ever
+  // double-processing a layer, and a crashed worker's job is reclaimed and
+  // resumed once its lease expires.
+  const mode = opts.mode ?? "full";
+  const layerByKey = new Map(registry.map((l) => [l.key, l] as const));
+  await enqueueSeedLayers(
+    tenantId,
+    registry.map((l) => l.key),
+    mode,
+  );
 
-  const anyError = outcomes.some((o) => o.status === "error");
+  const workerId = `${process.pid}-${randomUUID()}`;
+  const outcomes = new Map<string, LayerOutcome>();
+  const drain = async (): Promise<void> => {
+    for (;;) {
+      const job = await claimNextSeedJob(tenantId, workerId);
+      if (!job) return;
+      const layer = layerByKey.get(job.payload.layerKey);
+      if (!layer) {
+        await markSeedJob(job.id, "error", { lastError: `unknown layer ${job.payload.layerKey}` });
+        continue;
+      }
+      const outcome = await runLayer(tenantId, profile, layer, { ...opts, mode: job.payload.mode });
+      outcomes.set(layer.key, outcome);
+      await markSeedJob(job.id, outcome.status === "error" ? "error" : "done", {
+        runId: outcome.runId,
+        lastError: outcome.status === "error" ? outcome.reason : undefined,
+      });
+    }
+  };
+  const workerCount = Math.min(layerConcurrency(), registry.length);
+  await Promise.all(Array.from({ length: workerCount }, () => drain()));
+
+  // Reassemble outcomes in registry order. A missing entry can only mean a
+  // worker never reached the layer (it would otherwise be built/skipped/error),
+  // which is itself a failure of the run.
+  const layers = registry.map(
+    (l) =>
+      outcomes.get(l.key) ?? {
+        layerKey: l.key,
+        status: "error" as const,
+        reason: "layer was not processed by any worker",
+        telemetry: [],
+      },
+  );
+
+  const anyError = layers.some((o) => o.status === "error");
   await db
     .update(tenantsTable)
     .set({
@@ -376,6 +554,6 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
       latencyMs: profileResult.telemetry.latencyMs,
       searchCalls: profileResult.telemetry.searchCalls,
     },
-    layers: outcomes,
+    layers,
   };
 }

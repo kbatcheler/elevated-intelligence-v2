@@ -37,6 +37,13 @@ export type AnthropicResult<T> =
       model: string;
       inputTokens: number | null;
       outputTokens: number | null;
+      // Prompt-cache accounting. cacheReadTokens are input tokens served from a
+      // previously cached prefix (the per-tenant profile and schema reused
+      // across layers); cacheCreationTokens are tokens written into the cache on
+      // the first call. These are the observable proof that prefix caching is
+      // working.
+      cacheReadTokens: number | null;
+      cacheCreationTokens: number | null;
       consultedUrls: string[];
       searchCallCount: number;
     }
@@ -149,6 +156,8 @@ async function callOnce<T>(
     usage?: {
       input_tokens?: number;
       output_tokens?: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
       server_tool_use?: { web_search_requests?: number };
     };
     model?: string;
@@ -172,6 +181,8 @@ async function callOnce<T>(
     model: payload.model ?? model,
     inputTokens: payload.usage?.input_tokens ?? null,
     outputTokens: payload.usage?.output_tokens ?? null,
+    cacheReadTokens: payload.usage?.cache_read_input_tokens ?? null,
+    cacheCreationTokens: payload.usage?.cache_creation_input_tokens ?? null,
     consultedUrls,
     searchCallCount,
   };

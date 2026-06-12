@@ -15,5 +15,8 @@ export * from "./tenantLayers";
 export * from "./tenantLayerConfig";
 export * from "./tenantArtifacts";
 export * from "./tenantPipelineRuns";
+// The Postgres-backed work queue the seed limiter runs on (brought forward from
+// the Platform phase so concurrency is database-correct, never module memory).
+export * from "./pipelineJobs";
 export * from "./committedActions";
 export * from "./claimBrokenReports";

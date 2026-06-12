@@ -9,7 +9,9 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "seed:tenant": "tsx src/scripts/seedTenant.ts"
+    "seed:tenant": "tsx src/scripts/seedTenant.ts",
+    "seed:demo": "tsx src/scripts/seedDemo.ts",
+    "anchor:sweep": "tsx src/scripts/anchorSweep.ts"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",

@@ -1,4 +1,4 @@
-import { jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { layersTable } from "./layers";
 import { tenantsTable } from "./tenants";
 
@@ -24,6 +24,10 @@ export const tenantLayersTable = pgTable(
     confounders: jsonb("confounders").$type<unknown[] | null>(),
     verifiedClaims: jsonb("verified_claims").$type<Record<string, unknown> | null>(),
     modelledClaims: jsonb("modelled_claims").$type<Record<string, unknown> | null>(),
+    // True when this layer was built with the reduced express chain (the
+    // confound and challenge sub-stages skipped). A full-mode refresh rebuilds a
+    // reduced layer; an express refresh never downgrades an existing full build.
+    reducedMode: boolean("reduced_mode").notNull().default(false),
     generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
     generatorModel: text("generator_model").notNull(),
   },

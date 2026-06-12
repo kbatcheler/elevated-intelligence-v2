@@ -117,6 +117,25 @@ function LayerBody({
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
+      {detail.reducedMode && (
+        <span
+          title="Built with the express chain: the confound and challenge adversarial sub-stages were skipped for this layer. A full refresh rebuilds it with the complete chain."
+          style={{
+            justifySelf: "start",
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "4px 10px",
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--navy)",
+            background: "rgba(193, 122, 0, 0.10)",
+            border: "1px solid rgba(193, 122, 0, 0.35)",
+          }}
+        >
+          Express build (reduced)
+        </span>
+      )}
       <Hero entry={entry} detail={detail} />
       <LayerSections detail={detail} feeds={entry?.feeds ?? []} />
       <ReasoningStrip

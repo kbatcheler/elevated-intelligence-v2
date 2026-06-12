@@ -66,6 +66,7 @@ export {
   heroPanelSchema,
   peerBenchmarkSchema,
   supplementBlocksSchema,
+  enrichmentOutputSchema,
   type PerceiveOutput,
   type HypothesisedLayer,
   type ConfounderOutput,
@@ -79,6 +80,7 @@ export {
   type HeroPanel,
   type PeerBenchmark,
   type SupplementBlocks,
+  type EnrichmentOutput,
 } from "./schemas/stages";
 
 // Stage runners, telemetry, and the score assembler.
@@ -90,9 +92,7 @@ export {
   runChallenge,
   runNarrate,
   runScore,
-  runHero,
-  runPeers,
-  runSupplements,
+  runEnrichment,
 } from "./stages/runners";
 export { assembleLayerContent, type AssembleResult } from "./stages/assemble";
 export { type StageResult, type StageTelemetry } from "./stages/types";

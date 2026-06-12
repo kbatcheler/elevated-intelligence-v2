@@ -13,6 +13,7 @@ const STAGE_STATUS_COLOR: Record<SubStage["status"], string> = {
   running: "var(--blue)",
   pending: "var(--slate-light)",
   error: "var(--coral)",
+  skipped: "var(--slate-light)",
 };
 
 function StageRow({ stage }: { stage: SubStage }) {
@@ -33,18 +34,24 @@ function StageRow({ stage }: { stage: SubStage }) {
         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)" }}>{stage.name}</span>
       </div>
       <div style={{ fontSize: 12, color: "var(--slate)", display: "flex", flexWrap: "wrap", gap: "2px 14px" }}>
-        <span className="font-mono">{formatDuration(stage.durationMs)}</span>
-        {t?.seat && <span>seat: {t.seat}</span>}
-        {t?.model && <span>model: {t.model}</span>}
-        {(t?.inputTokens != null || t?.outputTokens != null) && (
-          <span className="font-mono">
-            tok: {formatInt(t?.inputTokens)} in / {formatInt(t?.outputTokens)} out
-          </span>
+        {stage.status === "skipped" ? (
+          <span style={{ color: "var(--slate-light)" }}>skipped (express)</span>
+        ) : (
+          <>
+            <span className="font-mono">{formatDuration(stage.durationMs)}</span>
+            {t?.seat && <span>seat: {t.seat}</span>}
+            {t?.model && <span>model: {t.model}</span>}
+            {(t?.inputTokens != null || t?.outputTokens != null) && (
+              <span className="font-mono">
+                tok: {formatInt(t?.inputTokens)} in / {formatInt(t?.outputTokens)} out
+              </span>
+            )}
+            {t?.searchCalls != null && t.searchCalls > 0 && (
+              <span className="font-mono">search: {formatInt(t.searchCalls)}</span>
+            )}
+            {stage.error && <span style={{ color: "var(--coral)" }}>{stage.error}</span>}
+          </>
         )}
-        {t?.searchCalls != null && t.searchCalls > 0 && (
-          <span className="font-mono">search: {formatInt(t.searchCalls)}</span>
-        )}
-        {stage.error && <span style={{ color: "var(--coral)" }}>{stage.error}</span>}
       </div>
     </div>
   );
