@@ -1,10 +1,10 @@
-# Drift rollup: Phases A through F
+# Drift rollup: Phases A through G
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase F (including the Phase F remediation hardenings).
+Last updated after Phase G (the parity gate and core build report milestone).
 
 ## Phase verdicts
 
@@ -15,7 +15,8 @@ Last updated after Phase F (including the Phase F remediation hardenings).
 | C | Cortex and Confounder | Pass | yes (passed) |
 | D | Auth, Orgs and Access | Pass | no |
 | E | Product Surfaces | Pass | no |
-| F | Fast Seeding and World-Class Seed Data | Pass | no (Phase G next is a milestone) |
+| F | Fast Seeding and World-Class Seed Data | Pass | no |
+| G | Parity Gate and Core Build Report | Pass | yes (paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -83,6 +84,15 @@ Last updated after Phase F (including the Phase F remediation hardenings).
   sharing two-plus specific figures or over 30 percent of its anchors, or a
   specific figure broadcast to three-plus tenants), and the pass/fail logic is
   extracted into a unit-tested pure module.
+- Long dashes in persisted generated data, especially the run table (G). A source-
+  only em-dash guard cannot see model-generated text that lands in the database. The
+  Phase G gate sweep found long dashes in 39 `tenant_pipeline_runs` rows (the raw
+  per-stage outputs persisted by the orchestrator) while every other table was
+  clean. Resolved in G: the deterministic sanitizer now runs at every jsonb persist
+  boundary (the tenant profile, the `tenant_layers` row, and the run sub-stage and
+  error writes), the cleanup script and the database-wide sweep cover the run table
+  and `pipeline_jobs`, the 39 rows were cleaned to zero, and the source guard was
+  strengthened to catch the en-dash as well as the em-dash.
 - Empty V2 import and V1 reference URL from the owner (A). The V2 target repo
   imported empty and the V1 reference URL was supplied by the owner in chat.
   Recorded in memory for re-clone; resolved.
@@ -111,13 +121,29 @@ Last updated after Phase F (including the Phase F remediation hardenings).
   pair sharing two-plus specific figures or over 30 percent of its currency
   anchors, or a specific figure broadcast to three-plus tenants; round figures and
   percentages stay benign.
+- Long-dash sanitization at the persist boundary (G). The prompts ask the models to
+  avoid the long dash, but the guarantee is a deterministic pass (`deepStripDashes`)
+  on every jsonb sink the orchestrator writes: em-dash to spaced ASCII hyphen,
+  en-dash to plain ASCII hyphen, numbers and identifiers untouched. Deliberate
+  typography canonicalization, not semantic change.
+- Parity verified at the code and component level (G). The Core Master Prompt's words
+  are to run V1 and the new system side by side; the verification done is a
+  component-by-component inventory against the frozen `reference/v1` source plus the
+  full automated suite and the Phase E side-by-side acceptance, not a live two-
+  instance dual-deploy. Stated honestly in `docs/build-report-core.md`.
+- Three V1 extras not carried (G). The company picker and library mode, the coachmark
+  tour, and the signal ticker are outside the named reference-surface set and the
+  Phase B through F acceptance items, so they are a scope decision, available later.
 
 ## No faked output, any phase
 
-Across A through F nothing is stubbed, mocked, or faked: the cortex and Confounder
+Across A through G nothing is stubbed, mocked, or faked: the cortex and Confounder
 run live (C) and were exercised again by four end-to-end Phase F live seeds (three
 fresh tenants plus a live express-to-full upgrade), each recording real per-seat
 tokens, latency, and cache figures; express mode marks reduced layers honestly
 (skipped sub-stages with no model call, not invented content); the portal renders
 real registry, session, and persisted layer data with explicit loading, empty, and
 error states (E); and the auth suite drives the real app against live Postgres (D).
+The Phase G parity gate added no generation; it inventoried the real surfaces,
+completed the long-dash enforcement over persisted data, and stated the parity
+method honestly rather than claiming a live dual-deploy that did not happen.

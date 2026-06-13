@@ -1,11 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
-// The long em-dash (U+2014) is forbidden everywhere in authored source. This
-// guard scans the directories we author and reports every occurrence so CI
-// fails loudly. The character is written as an escape here so this file never
-// contains the literal byte it hunts for.
-const EM_DASH = "\u2014";
+// The long dashes are forbidden everywhere in authored source: the em-dash
+// (U+2014) and the en-dash (U+2013). ASCII hyphen only. This guard scans the
+// directories we author and reports every occurrence so CI fails loudly. The
+// characters are written as escapes here so this file never contains the literal
+// bytes it hunts for.
+const LONG_DASHES: ReadonlyArray<{ ch: string; kind: "em" | "en" }> = [
+  { ch: "\u2014", kind: "em" },
+  { ch: "\u2013", kind: "en" },
+];
 
 // Directories we author and therefore enforce.
 const SCAN_DIRS = ["lib", "artifacts", "docs", "scripts"];
@@ -41,21 +45,22 @@ const TEXT_EXT = new Set([
   ".sql",
 ]);
 
-export interface EmDashViolation {
+export interface LongDashViolation {
   file: string;
   line: number;
   column: number;
+  dash: "em" | "en";
 }
 
-export function findEmDashViolations(rootDir: string): EmDashViolation[] {
-  const violations: EmDashViolation[] = [];
+export function findLongDashViolations(rootDir: string): LongDashViolation[] {
+  const violations: LongDashViolation[] = [];
   for (const dir of SCAN_DIRS) {
     walk(join(rootDir, dir), rootDir, violations);
   }
   return violations;
 }
 
-function walk(dir: string, rootDir: string, out: EmDashViolation[]): void {
+function walk(dir: string, rootDir: string, out: LongDashViolation[]): void {
   let entries;
   try {
     entries = readdirSync(dir, { withFileTypes: true });
@@ -75,19 +80,26 @@ function walk(dir: string, rootDir: string, out: EmDashViolation[]): void {
   }
 }
 
-function scanFile(file: string, rootDir: string, out: EmDashViolation[]): void {
+function scanFile(file: string, rootDir: string, out: LongDashViolation[]): void {
   const content = readFileSync(file, "utf8");
   const lines = content.split("\n");
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
-    let col = line.indexOf(EM_DASH);
-    while (col !== -1) {
-      out.push({ file: relative(rootDir, file).split(sep).join("/"), line: i + 1, column: col + 1 });
-      col = line.indexOf(EM_DASH, col + 1);
+    for (const { ch, kind } of LONG_DASHES) {
+      let col = line.indexOf(ch);
+      while (col !== -1) {
+        out.push({
+          file: relative(rootDir, file).split(sep).join("/"),
+          line: i + 1,
+          column: col + 1,
+          dash: kind,
+        });
+        col = line.indexOf(ch, col + 1);
+      }
     }
   }
 }
 
-export function formatViolations(violations: EmDashViolation[]): string {
-  return violations.map((v) => v.file + ":" + v.line + ":" + v.column).join("\n");
+export function formatViolations(violations: LongDashViolation[]): string {
+  return violations.map((v) => v.file + ":" + v.line + ":" + v.column + " (" + v.dash + "-dash)").join("\n");
 }

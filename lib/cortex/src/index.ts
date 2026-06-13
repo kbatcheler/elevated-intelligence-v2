@@ -26,6 +26,9 @@ export { silentLogger, consoleLogger, type Logger, type LogFields } from "./logg
 // JSON extraction utilities.
 export { stripJsonFence, extractJsonObject, parseJsonLoose, parseAndValidate } from "./json";
 
+// Typography enforcement (the long-dash ban applied to generated content).
+export { stripDashes, deepStripDashes } from "./sanitize";
+
 // Grounding.
 export {
   fetchHomepageContext,

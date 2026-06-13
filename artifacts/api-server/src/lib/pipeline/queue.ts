@@ -7,6 +7,7 @@
 
 import { eq, sql } from "drizzle-orm";
 import { db, pipelineJobsTable, type SeedLayerPayload } from "@workspace/db";
+import { stripDashes } from "@workspace/cortex";
 
 // A claimed job's lease. A layer run drives nine sub-stages across three model
 // providers and can take minutes, so the lease is generous: it only expires if
@@ -96,7 +97,10 @@ export async function markSeedJob(
       claimedBy: null,
       leaseExpiresAt: null,
       runId: opts.runId ?? null,
-      lastError: opts.lastError ?? null,
+      // Enforce the long-dash ban at this jsonb/text sink: a stage error reason
+      // can carry model-generated text, so it is normalized at write time like
+      // every other persisted output. Covers all callers of markSeedJob.
+      lastError: opts.lastError === undefined ? null : stripDashes(opts.lastError),
     })
     .where(eq(pipelineJobsTable.id, jobId));
 }

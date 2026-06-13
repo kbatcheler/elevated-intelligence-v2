@@ -13,6 +13,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import {
   assembleLayerContent,
+  deepStripDashes,
   fetchHomepageContext,
   LAYER_STAGES,
   modelForStage,
@@ -24,6 +25,7 @@ import {
   runPerceive,
   runProfile,
   runScore,
+  stripDashes,
   STAGE_CONFIG,
   type ChallengeOutput,
   type ConfounderOutput,
@@ -121,15 +123,19 @@ async function ensureTenant(rawUrl: string, profile: ProfileOutput): Promise<str
     .where(eq(tenantsTable.url, rawUrl))
     .limit(1);
 
+  // Enforce the long-dash ban on the persisted profile (the models occasionally
+  // emit one despite the prompt instruction). The cleaned profile feeds both the
+  // tenant scalars and the stored profile jsonb.
+  const clean = deepStripDashes(profile);
   const scalars = {
-    name: profile.name,
-    sector: profile.sector ?? null,
-    hqCity: profile.hqCity ?? null,
-    hqState: profile.hqState ?? null,
-    revenueBand: profile.revenueBand ?? null,
-    ownership: profile.ownership ?? null,
-    founded: profile.founded ?? null,
-    tagline: profile.tagline ?? null,
+    name: clean.name,
+    sector: clean.sector ?? null,
+    hqCity: clean.hqCity ?? null,
+    hqState: clean.hqState ?? null,
+    revenueBand: clean.revenueBand ?? null,
+    ownership: clean.ownership ?? null,
+    founded: clean.founded ?? null,
+    tagline: clean.tagline ?? null,
     status: "seeding" as const,
   };
 
@@ -147,8 +153,8 @@ async function ensureTenant(rawUrl: string, profile: ProfileOutput): Promise<str
 
   await db
     .insert(tenantProfileTable)
-    .values({ tenantId, profile })
-    .onConflictDoUpdate({ target: tenantProfileTable.tenantId, set: { profile } });
+    .values({ tenantId, profile: clean })
+    .onConflictDoUpdate({ target: tenantProfileTable.tenantId, set: { profile: clean } });
 
   return tenantId;
 }
@@ -183,7 +189,7 @@ async function ensureRun(tenantId: string, layerKey: string, resume: boolean): P
     const subStages = resume ? normalizeSubStages(existing[0].subStages) : freshSubStages();
     await db
       .update(tenantPipelineRunsTable)
-      .set({ status: "running", error: null, finishedAt: null, subStages })
+      .set({ status: "running", error: null, finishedAt: null, subStages: deepStripDashes(subStages) })
       .where(eq(tenantPipelineRunsTable.id, existing[0].id));
     return { runId: existing[0].id, tenantId, layerKey, subStages };
   }
@@ -197,9 +203,12 @@ async function ensureRun(tenantId: string, layerKey: string, resume: boolean): P
 }
 
 async function persistSubStages(ctx: RunCtx): Promise<void> {
+  // Enforce the long-dash ban on the per-stage outputs persisted in the run row.
+  // These are raw model outputs (the reasoning strip reads them back), so they
+  // get the same deterministic sanitization as the assembled tenant_layers row.
   await db
     .update(tenantPipelineRunsTable)
-    .set({ subStages: ctx.subStages })
+    .set({ subStages: deepStripDashes(ctx.subStages) })
     .where(eq(tenantPipelineRunsTable.id, ctx.runId));
 }
 
@@ -388,7 +397,11 @@ async function runLayer(
       throw new StageError("score", assembled.reason);
     }
 
-    const row = {
+    // Enforce the long-dash ban on every generated string before it is
+    // persisted. deepStripDashes recurses through the content, hero, benchmark,
+    // supplement, confounder and claim payloads; numbers, booleans and the model
+    // identifier (ASCII hyphens) pass through unchanged.
+    const row = deepStripDashes({
       content: assembled.content as unknown as Record<string, unknown>,
       heroPanel: hero as unknown as Record<string, unknown>,
       peerBenchmark: peers as unknown as Record<string, unknown>,
@@ -398,7 +411,7 @@ async function runLayer(
       modelledClaims: { items: narrate.modelled_claims } as Record<string, unknown>,
       reducedMode: reduced,
       generatorModel: modelForStage("narrate"),
-    };
+    });
 
     await db
       .insert(tenantLayersTable)
@@ -430,7 +443,7 @@ async function runLayer(
     const reason = e instanceof Error ? e.message : String(e);
     await db
       .update(tenantPipelineRunsTable)
-      .set({ status: "error", finishedAt: new Date(), error: reason })
+      .set({ status: "error", finishedAt: new Date(), error: stripDashes(reason) })
       .where(eq(tenantPipelineRunsTable.id, ctx.runId));
     log.error({ tenantId, layerKey: layer.key, reason }, "layer run failed");
     return {
