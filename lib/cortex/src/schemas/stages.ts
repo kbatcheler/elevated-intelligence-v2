@@ -132,12 +132,25 @@ export type NarrateOutput = z.infer<typeof narrateOutputSchema>;
 
 // ── score (Evaluator) ────────────────────────────────────────────────────
 // The single writer of per-claim confidence + basis and overall confidence.
+//
+// The basis is tolerant at this input boundary: the Evaluator occasionally
+// returns a basis outside the enum (for example "estimated" or "inferred") or
+// omits it. Rather than failing the whole stage and spending a retry, coerce any
+// unrecognised value to the conservative "modelled": an unknown provenance is
+// never promoted to "verified". This mirrors how assemble.ts already treats an
+// unannotated claim. The STORED content schema (content.ts) keeps basisEnum
+// strict, so persisted data is still exactly verified|modelled.
+const scoreClaimBasis = z.preprocess(
+  (v) => (v === "verified" || v === "modelled" ? v : "modelled"),
+  basisEnum,
+);
+
 export const scoreClaimSchema = z.object({
   // Item path into the content, e.g. "causes[0]", "actions[1]", "metrics[2]",
   // "hypotheses[0]".
   path: clampedStr(160, 1),
   confidence: z.number().min(0).max(100),
-  basis: basisEnum,
+  basis: scoreClaimBasis,
 });
 export const scoreOutputSchema = z.object({
   // Capped below 100: the engine never asserts certainty.

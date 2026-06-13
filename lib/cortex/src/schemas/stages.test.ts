@@ -3,6 +3,7 @@
 // drift, the persistence contract silently breaks.
 
 import { describe, expect, it } from "vitest";
+import { basisEnum } from "./atoms";
 import {
   confounderOutputSchema,
   heroPanelSchema,
@@ -189,12 +190,39 @@ describe("scoreOutputSchema", () => {
     expect(r.success).toBe(true);
   });
 
-  it("rejects a claim basis outside verified|modelled", () => {
+  it("coerces an unrecognised claim basis to the conservative modelled, never verified", () => {
     const r = scoreOutputSchema.safeParse({
       confidence: 50,
       confidence_gap: 10,
       claims: [{ path: "causes[0]", confidence: 80, basis: "guessed" }],
     });
-    expect(r.success).toBe(false);
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.claims[0].basis).toBe("modelled");
+  });
+
+  it("defaults a missing claim basis to modelled rather than failing the stage", () => {
+    const r = scoreOutputSchema.safeParse({
+      confidence: 50,
+      confidence_gap: 10,
+      claims: [{ path: "actions[0]", confidence: 40 }],
+    });
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.claims[0].basis).toBe("modelled");
+  });
+
+  it("leaves a valid claim basis untouched", () => {
+    const r = scoreOutputSchema.safeParse({
+      confidence: 50,
+      confidence_gap: 10,
+      claims: [{ path: "causes[0]", confidence: 80, basis: "verified" }],
+    });
+    expect(r.success).toBe(true);
+    expect(r.success && r.data.claims[0].basis).toBe("verified");
+  });
+
+  it("keeps the STORED content basis strict: tolerance is only at the score boundary", () => {
+    expect(basisEnum.safeParse("guessed").success).toBe(false);
+    expect(basisEnum.safeParse("verified").success).toBe(true);
+    expect(basisEnum.safeParse("modelled").success).toBe(true);
   });
 });

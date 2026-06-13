@@ -35,9 +35,15 @@ a fifteen-minute seed on cosmetic overflow is not worth it.
 **How to apply:** array caps slice to max instead of rejecting (`cappedArray`,
 `looseStringArray`, the URL arrays in `lib/cortex/src/schemas/atoms.ts`); the
 decorative hero trend pulls the first numeric token per point and drops the rest.
-But semantic enums (verified|modelled basis, confounder verdict) are NEVER
-coerced; a wrong enum must still trigger the self-correcting retry so meaning is
-not silently corrupted.
+But coercion must move toward the SAFE value, and strictness must live at the
+storage boundary. The score-stage claim `basis` coerces an unknown or missing
+value to the conservative `modelled` (never `verified`: unknown provenance is
+never promoted) at the STAGE INPUT, which removes a fragile dependency on the
+retry; the STORED content schema (`basisEnum`) stays strict so persisted data is
+still exactly verified|modelled. The confounder verdict is never coerced. The
+principle: tolerate cosmetic and safe-default cases at the model-output boundary,
+keep the storage schema strict, and never coerce a semantic enum in a direction
+that could silently overstate meaning.
 
 ## Provider rate limits dominate the seed wall-clock
 Free-tier Anthropic and Gemini return frequent HTTP 429 under the layer fan-out
