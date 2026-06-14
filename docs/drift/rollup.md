@@ -1,12 +1,13 @@
-# Drift rollup: Phases A through L
+# Drift rollup: Phases A through M
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase L (the portal security surfaces over the Tier 3 backend:
-posture, connection-security posture, break-glass administration plus the all-role
-human signal read, and provenance verification; gated, not a milestone).
+Last updated after Phase M (the closing full verification of the connector and SOC 2
+stage, Phases H through L, against Part 8 of the addendum, plus the consolidated
+build-report append; verification and reporting only, no product code change; gated,
+not a milestone).
 
 ## Phase verdicts
 
@@ -24,6 +25,7 @@ human signal read, and provenance verification; gated, not a milestone).
 | J | Split Pipeline (Tier 2, the Lens In-Boundary) | Pass | no (gated, paused for owner confirmation) |
 | K | Tier 3: Cryptographic Isolation, No Standing Access, Hash-Chained Provenance | Pass | yes (paused for owner review) |
 | L | Connected Portal Security Surfaces (Posture, Connections, Break-glass, Provenance) | Pass | no (gated, paused for owner review) |
+| M | Stage 2 Full Verification and the Build-Report Append | Pass | no (gated, paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -63,7 +65,7 @@ human signal read, and provenance verification; gated, not a milestone).
   cloud KMS or bring-your-own-key service implements the same interface with no
   envelope or call-site change. Captured here and in `phase-K.md`.
 - Provenance ledger append-only is enforced in the application, not yet at the DB role
-  (K). The module exposes only `appendEntry` and `verifyChain` and links entries by
+  (K, re-confirmed in M). The module exposes only `appendEntry` and `verifyChain` and links entries by
   content hash, so any edit, reorder, or delete breaks `verifyChain`; revoking UPDATE
   and DELETE on the table at the database-role level is a deployment-time hardening
   left to the operator. Integrity control today is the hash chain plus the serialized
@@ -240,8 +242,25 @@ human signal read, and provenance verification; gated, not a milestone).
   (`crypto_shredded`, `break_glass_required`, and the encryption error types) rather
   than returning an empty result that would read as "no data"; the orchestrator records
   a loud layer failure instead of grounding on nothing.
+- Phase M is verification and reporting only (M). The connector and SOC 2 stage (H
+  through L) was verified against Part 8 with no product code change; item 2 is recorded
+  as partial (the catalogue is complete at 46 connectors across ten families, but only
+  the warehouse family runs two connectors end to end) and item 9 as met-with-residual
+  (application-layer append-only plus the hash chain plus the UI verify, with
+  database-role write blocking deferred to deployment), and the connected-refresh time
+  was measured on the real warehouse path, not a stub or an invented number.
 
 ## No faked output, any phase
+
+Phase M added no faked output and no faked telemetry: it built nothing and changed no
+product code. It verified the stage and recorded an honest result, marking item 2
+partial (the catalogue is complete and honest at 46 connectors across ten families, but
+only the warehouse family runs two connectors end to end) and item 9 met-with-residual
+(application-layer append-only plus the hash chain plus the UI verify, with
+database-role write blocking still a deployment-time hardening), and the
+connected-refresh latency was measured on the real warehouse path (median 60.9 ms on
+local Postgres-wire), not a stub or an invented number. Phase L below holds, and the
+earlier phases under it.
 
 Phase L added no faked output and no faked telemetry. The portal security surfaces
 render only real backend facts: the customer-managed KMS is shown as "available, not

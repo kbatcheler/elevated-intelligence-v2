@@ -578,3 +578,123 @@ silent spinner. Zero new npm dependencies; no em-dash or en-dash.
 
 Phase L is gated. Execution pauses here for owner review before the next phase. Do not
 auto-advance.
+
+## Phase M: full verification of the connector and SOC 2 stage, and this append
+
+Phase M is the closing gate of the connector and SOC 2 stage (Phases H through L). It
+builds no product feature and changed no product code: it verifies the stage against
+Part 8 of the addendum and writes this consolidated append, which Part 8 item 11
+requires. The per-phase sections above hold the detail; this section gathers the seven
+elements item 11 asks to put on record. Zero new npm dependencies; no em-dash or
+en-dash.
+
+### The connector framework
+
+A single internal workspace package, `lib/connectors`, defines one uniform connector
+contract with a capability-minimal context (resolveSecret, tokenize, now, log; no
+database handle and no filesystem). Every extraction returns a `DerivedSignalSet`, the
+math-only contract that carries scores, ratios, distributions, counts, aggregates,
+trend deltas, and non-reversible embeddings, and nothing reversible into a person or
+account. A Zod schema plus the runtime guard (`assertDerivedSignalSet`) reject any
+out-of-shape or raw value, and `guardedExtractSignals` wraps every run with the
+no-write tripwire. The connector path imports only `@workspace/db/contracts`, never the
+db root, so it never holds a handle to our store and can run inside the in-client edge
+agent; a static import-boundary test enforces this.
+
+### The catalogue, implemented versus declared
+
+The catalogue is the full 46 connectors across all ten Part 1 families, seeded
+idempotently into the `connectors` table. Two connectors are implemented and run end to
+end: `generic-sql` and `redshift`, both in the bring-your-own-warehouse family, proven
+against a real PostgreSQL-wire warehouse through the derive-and-discard path (a
+structured, parameterized, aggregate-only measure DSL with no free-form SQL, a
+read-only transaction, numeric-only columns, every return guarded). The other 44
+connectors across the remaining nine families are declared with correct layer and
+signal mapping but have no runtime; the registry returns an honest "available, not
+connected" for them and the connected refresh rejects them rather than faking data.
+This is the staged design: the Part 8 "at least two per family run end to end" is the
+end-state acceptance for the later connector phases, and the remaining families stay
+declared because their drivers would be new dependencies, held off under the
+zero-new-dependency rule.
+
+### The new tables and routes
+
+- Tables added across the stage: `connectors`, `tenant_connections`, `connector_runs`,
+  `derived_signals`, `provenance_ledger`, `tenant_keys` (Phase H, Part 4 schema);
+  `edge_agents` (Phase I); `kms_local_keys` and `access_grant_events` (Phase K); plus a
+  `tenants.dataMode` column. The signal envelope is stored inside the existing
+  `derived_signals.value` jsonb, so Tier 3 added no ciphertext columns.
+- Routes added across the stage: the tenant-scoped, bearer-gated `/api/agent` register,
+  config-pull, and signal-ingest routes (Phase I); the owner-only security routes for
+  the tenant key lifecycle (provision, status, revoke), break-glass grant
+  administration (create, list, revoke) plus the access-event audit, the all-role human
+  signal read that gates on an active grant, and the provenance verify route (Phase K),
+  with the key-status route extended to also return `customerKms` (Phase L).
+
+### The split-pipeline change to the cortex
+
+Tier 2 (Phase J) splits the cortex by sensitivity. In connected data mode the two Lens
+stages (perceive, hypothesise) run in-boundary on a local model seat through one narrow
+seam (`ExtractionZoneRuntime`), because the Lens is where the client's own signals are
+first interpreted. The external Synthesist (narrate, Claude) and the adversarial seats
+(confound and challenge, Gemini) plus the Evaluator and enrichment stay on their
+external models and receive only the profile, the in-boundary Lens output, and the
+math-only derived-signal grounding, never raw client content. The split is a no-op in
+outside_in mode, which is byte-for-byte unchanged. An unconfigured connected Lens fails
+loud with "available, not connected" rather than silently sending the sensitive stages
+to an external provider.
+
+### Subprocessor list
+
+The external model providers are the only data subprocessors: Anthropic backs the
+Anthropic-hosted seats (the profile build, the Synthesist that narrates, the Evaluator
+and enrichment, and on the outside_in path the Lens stages), and Gemini backs the
+adversarial Confounder and Challenger seats. In connected mode they receive only the
+de-identified, aggregated derived signals and the in-boundary Lens output, so raw client
+records never transit a third party. The warehouse connectors run inside the
+deployment boundary against the client's own warehouse; the local KMS, the envelope
+encryption, the break-glass ledger, the provenance chain, and the edge-agent runtime all
+run inside the application and the Postgres the operator already controls, so they add no
+new hosted subprocessor. A future customer-managed KMS would introduce the customer's own
+key service as a subprocessor under the same interface; today it reads "available, not
+connected".
+
+### The measured connected-refresh time
+
+Measured on the real path, not the stubbed integration test: the `generic-sql`
+warehouse connector run through `refreshConnectedTenant` against a real PostgreSQL-wire
+warehouse (the local Postgres reached as a warehouse over DATABASE_URL), with a
+disposable 5,000-row table and four aggregate-only measures. One warmup run was
+discarded, then three timed runs were taken, and the temporary tenant and table were
+deleted after.
+
+- Per run: 51.2 ms, 60.9 ms, 67.6 ms. Median 60.9 ms, range 51.2 to 67.6 ms.
+- Each run extracted four measures, fanned them across the fourteen layers the connector
+  feeds (56 `derived_signals` rows), sealed every value in its own AES-256-GCM envelope
+  under the tenant key, and stamped a provenance root; all 56 stored values were verified
+  to be encrypted envelopes, not plaintext.
+- This is a local Postgres-wire measurement of the in-boundary extract, derive, encrypt,
+  and persist floor. It is not client wide-area-network latency: a real client warehouse
+  over a network link adds round-trip and query time on top. The number records the
+  in-boundary processing cost connected mode adds over outside_in, which has no extraction
+  and no encryption.
+
+### Verification
+
+- Typecheck and build are green across the workspace (exit 0 on both). The full suite is
+  green: 382 tests (api-server 123, portal 144, cortex 66, connectors 27, edge-agent 10,
+  db 8, scripts 4). No new tests were added this phase; the suite is the standing
+  acceptance evidence for the Part 8 behavioural items and the regression contract.
+- All eleven Part 8 items were checked. Nine are met; item 2 is partial (the catalogue is
+  complete and honest, but only the warehouse family has two connectors that run end to
+  end) and item 9 is met with a logged residual (append-only is application-layer plus the
+  hash chain plus the UI verify; database-role-level write blocking is a deployment-time
+  hardening that is not in place). Both are stated honestly here and in `phase-M.md`,
+  never rubber-stamped.
+- Long-dash sweep zero on both sides: the source guard over lib, artifacts, docs, and
+  scripts, and a row-cast sweep over all 24 public tables.
+
+### Gate
+
+Phase M is gated and closes the connector and SOC 2 stage. Execution pauses here for
+owner review before the next stage. Do not auto-advance.
