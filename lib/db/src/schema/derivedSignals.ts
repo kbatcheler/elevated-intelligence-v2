@@ -1,5 +1,6 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
+import type { EncryptedSignalEnvelope } from "../contracts/signalEnvelope";
 import { tenantsTable } from "./tenants";
 
 // The "math, not records" store. Each row is one derived signal computed by a
@@ -18,7 +19,7 @@ export const derivedSignalsTable = pgTable("derived_signals", {
   signalKey: text("signal_key").notNull(),
   // A finite number or a numeric array only. Enforced by the DerivedSignalSet
   // guard before any write reaches this table.
-  value: jsonb("value").notNull().$type<number | number[]>(),
+  value: jsonb("value").notNull().$type<number | number[] | EncryptedSignalEnvelope>(),
   window: text("window"),
   computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
   sourceConnectorKey: text("source_connector_key"),

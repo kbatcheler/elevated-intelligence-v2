@@ -8,6 +8,7 @@ import { agentRouter } from "./routes/agent";
 import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
+import { securityRouter } from "./routes/security";
 import { tenantsRouter } from "./routes/tenants";
 
 const app = express();
@@ -58,6 +59,7 @@ app.use("/api", requireAuth);
 app.use("/api", layersRouter);
 app.use("/api", architectureRouter);
 app.use("/api", tenantsRouter);
+app.use("/api", securityRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });

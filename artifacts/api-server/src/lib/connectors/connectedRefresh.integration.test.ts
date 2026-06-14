@@ -8,10 +8,13 @@ import {
   connectorsTable,
   db,
   derivedSignalsTable,
+  isEncryptedSignalEnvelope,
   tenantConnectionsTable,
   tenantsTable,
 } from "@workspace/db";
 import { EnvSecretStore } from "../secrets/secretStore";
+import { decryptSignalValue } from "../security/signalCrypto";
+import { getTenantKey } from "../security/tenantKeyService";
 import { refreshConnectedTenant } from "./connectedRefresh";
 
 // The boundary refresh persists real rows, so this runs against a real database.
@@ -178,11 +181,18 @@ describe("connected refresh: boundary runtime", () => {
     expect(new Set(signals.map((s) => s.signalKey))).toEqual(
       new Set(["gross_margin_pct", "status_distribution"]),
     );
-    // Only math is stored: a numeric scalar and a numeric vector, nothing else.
+    // Only math is stored, and it is stored encrypted: each value is an envelope
+    // on disk, and decrypting under the tenant key recovers the numeric scalar
+    // and numeric vector, nothing else.
+    const tenantKey = await getTenantKey(tenantA);
+    expect(tenantKey?.status).toBe("active");
+    const activeKeyRef = tenantKey!.kmsKeyRef;
     const margin = signals.find((s) => s.signalKey === "gross_margin_pct")!;
-    expect(margin.value).toBe(0.42);
+    expect(isEncryptedSignalEnvelope(margin.value)).toBe(true);
+    expect(await decryptSignalValue(margin.value, activeKeyRef)).toBe(0.42);
     const dist = signals.find((s) => s.signalKey === "status_distribution")!;
-    expect(dist.value).toEqual([3, 5, 2]);
+    expect(isEncryptedSignalEnvelope(dist.value)).toBe(true);
+    expect(await decryptSignalValue(dist.value, activeKeyRef)).toEqual([3, 5, 2]);
 
     const connection = await db
       .select({ lastRunAt: tenantConnectionsTable.lastRunAt })

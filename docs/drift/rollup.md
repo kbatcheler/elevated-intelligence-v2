@@ -1,11 +1,11 @@
-# Drift rollup: Phases A through J
+# Drift rollup: Phases A through K
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase J (the split pipeline, Tier 2, the Lens in-boundary; gated
-but not a milestone).
+Last updated after Phase K (Tier 3: per-tenant cryptographic isolation, no standing
+human access, and the hash-chained provenance ledger; backend only, a milestone).
 
 ## Phase verdicts
 
@@ -21,6 +21,7 @@ but not a milestone).
 | H | Connector Framework and Registry | Pass | yes (paused for owner review) |
 | I | Connected Mode, Edge Agent, and Runtime No-Write Guard | Pass | yes (paused for owner review) |
 | J | Split Pipeline (Tier 2, the Lens In-Boundary) | Pass | no (gated, paused for owner confirmation) |
+| K | Tier 3: Cryptographic Isolation, No Standing Access, Hash-Chained Provenance | Pass | yes (paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -52,6 +53,19 @@ but not a milestone).
 - Express-to-full total cost exceeds a direct full seed (F). Express optimizes time
   to first ready, not total cost: express plus a later upgrade is more wall-clock
   and spend than one direct full seed. A deliberate trade, not a defect.
+- Local KMS is a software key store, not an HSM (K). The default `KmsRuntime` holds
+  the per-tenant key-encryption keys in operator-controlled Postgres
+  (`kms_local_keys`), so the isolation and crypto-shred guarantees hold in software
+  but the keys are not in dedicated key hardware. The customer-managed-key path is a
+  swappable adapter that reads "available, not connected" until configured; a real
+  cloud KMS or bring-your-own-key service implements the same interface with no
+  envelope or call-site change. Captured here and in `phase-K.md`.
+- Provenance ledger append-only is enforced in the application, not yet at the DB role
+  (K). The module exposes only `appendEntry` and `verifyChain` and links entries by
+  content hash, so any edit, reorder, or delete breaks `verifyChain`; revoking UPDATE
+  and DELETE on the table at the database-role level is a deployment-time hardening
+  left to the operator. Integrity control today is the hash chain plus the serialized
+  append.
 
 ## Live but runtime-only or cosmetic
 
@@ -205,7 +219,36 @@ but not a milestone).
   the adapter never logs an upstream error body and never exposes the api key through
   the seam.
 
+- Envelope stored inside `derived_signals.value` jsonb, no new column (K). Each signal
+  value becomes `{v,alg,keyRef,iv,tag,ct,wrappedDek}` in the existing jsonb rather than
+  adding ciphertext columns, so the connected persist and read paths change but the
+  table shape does not; the derived-set root hash is still computed over the plaintext
+  math, not the ciphertext.
+- One per-tenant KEK, no global HKDF (K). The local KMS holds a distinct random 32-byte
+  key-encryption key per tenant rather than deriving per-tenant keys from one master,
+  because crypto-shred must destroy exactly one tenant's ability to decrypt and nothing
+  else; a shared master with per-tenant derivation could not be shredded per tenant.
+- No standing access, break-glass for every role including owners (K). Reading raw
+  signal values requires tenant access plus an active, unexpired, unrevoked grant even
+  for an owner, and every access appends an `access_grant_events` row; the in-boundary
+  machine-grounding read is a separate service API that is exempt by design, never a
+  middleware bypass of the human guard.
+- Reads fail loud, never silent empty grounding (K). A revoked or missing key, a
+  legacy-plaintext row, or an absent or expired grant raises a typed error
+  (`crypto_shredded`, `break_glass_required`, and the encryption error types) rather
+  than returning an empty result that would read as "no data"; the orchestrator records
+  a loud layer failure instead of grounding on nothing.
+
 ## No faked output, any phase
+
+Phase K added no faked output and no faked telemetry. The local KMS performs real
+AES-256-GCM wrap and unwrap and a real key destroy (crypto-shred is proven by a read
+that returns a typed `crypto_shredded` error after revoke, not a stubbed value); the
+customer-managed-key adapter reports an honest "available, not connected" until a key
+is configured rather than fabricating a wrap or a status; the break-glass and
+provenance surfaces are exercised end to end over real HTTP against a real Postgres,
+and verifyChain is tested on both a clean and a deliberately corrupted chain. Phase J
+below holds, and the earlier phases under it.
 
 Phase J added no faked output and no faked telemetry. The in-boundary adapter is a
 real HTTP client, proven against a real `node:http` server; when no local model is

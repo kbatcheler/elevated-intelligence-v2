@@ -366,3 +366,142 @@ connected-mode screens. Do not auto-advance.
 Phase J is not a milestone, but the protocol gates every phase. Execution pauses here
 for owner confirmation before Tier 3 (Phase K) and the portal connected-mode screens
 (Phase L). Do not auto-advance.
+
+## Phase K: Tier 3, per-tenant cryptographic isolation, no standing access, and the hash-chained provenance ledger
+
+Tier 3 is the SOC 2 hardening tier and a milestone. It is backend only: the portal
+surfaces (security posture, break-glass screen, connections screen, provenance panel)
+are Phase L and are not built here. Every acceptance item is proven by test, not by
+UI. Three capabilities land: per-tenant cryptographic isolation with crypto-shredding
+on key revocation, no standing human access to raw signals with an owner-approved
+break-glass grant, and the provenance ledger upgraded to an append-only hash chain.
+This phase added zero npm dependencies (node:crypto, the pg already in the lockfile,
+and workspace packages only) and contains no em-dash or en-dash.
+
+### What was built
+
+- **The KMS seam** (`artifacts/api-server/src/lib/security/kms.ts`). A `KmsRuntime`
+  interface (`provisionTenantKey`, `wrapDek`, `unwrapDek`, `destroyKey`, `status`)
+  with a local implementation and a swappable cloud/customer adapter. The local
+  runtime holds one random 32-byte key-encryption key (KEK) per tenant and wraps and
+  unwraps per-row data-encryption keys (DEKs) with AES-256-GCM under that KEK. Key
+  material is never logged. The cloud/customer adapter reports "available, not
+  connected" until a customer-managed key is configured, so the seam is honest about
+  what is and is not wired.
+- **Envelope encryption** (`artifacts/api-server/src/lib/security/signalCrypto.ts`).
+  Each signal value is sealed with a fresh random DEK under AES-256-GCM; the stored
+  envelope is `{v, alg, keyRef, iv, tag, ct, wrappedDek}` written inside the existing
+  `derived_signals.value` jsonb, so no schema column churn was needed. `isEnvelope`
+  guards the shape. Plaintext, ciphertext, and keys are never logged. Typed errors
+  `CryptoShreddedError` and `SignalEncryptionError` make every failure loud.
+- **Persist and machine read** (the connected persist path plus the machine-grounding
+  read). The plaintext `DerivedSignalSet` is validated first (the guard is unchanged),
+  an active tenant key is required for connected tenants, and each value is encrypted
+  before insert; the derived-set root hash is still computed over the plaintext math.
+  The in-boundary machine-grounding read decrypts for the pipeline only and is a
+  separate service API, not a middleware bypass. Both reads require an active
+  `tenant_keys` row before decrypting any stored signal and verify that each envelope's
+  `keyRef` matches that active key, so a missing key, or an envelope sealed under a
+  different key, is refused rather than trusted on its own embedded reference. A revoked
+  or missing KEK, a keyRef mismatch, or a legacy-plaintext row, raises a typed failure;
+  the orchestrator records a loud layer failure rather than grounding on empty data.
+- **Tenant key lifecycle** (`tenantKeyService.ts` plus owner-only routes). Provision
+  creates and activates a tenant key; status reads provisioned/active/revoked plus the
+  KMS provider; revoke destroys the KEK material first and only then commits
+  `tenant_keys.status` as revoked and stamps `revokedAt`, so the system never reports a
+  revoked key while its material still exists (a failed destroy throws before any status
+  change), and the revocation is emitted as a structured log line. Signal rows are not
+  deleted: the ciphertext is left inert and the key is what dies.
+- **Break-glass, no standing access** (`breakGlass.ts`, `signalRead.ts`, and the new
+  `access_grant_events` table). A human raw-signal read requires tenant access plus an
+  active, unexpired, unrevoked grant for every role, owners included; each access
+  appends an event row tied to the grant and the user. The pipeline machine read stays
+  exempt through its own separate service API, never a relaxation of the guard.
+- **The provenance ledger** (`artifacts/api-server/src/lib/provenance/ledger.ts`). An
+  append-only per-tenant hash chain exposing only `appendEntry` and `verifyChain` (no
+  update, no delete). Appends serialize on a Postgres transaction-scoped advisory lock
+  per tenant; `contentHash = sha256(canonical({tenantId, claimPath, sourceRef,
+  prevHash}))` and `prevHash` is the prior entry content hash. The orchestrator writes
+  entries after the layer is verified and modelled, over source and provenance
+  references only, never raw client data.
+
+### Implemented versus declared (the customer-managed-key boundary)
+
+- The local KMS is fully implemented and is the default. It is a software key store,
+  not a hardware security module: it provides per-tenant key isolation and genuine
+  crypto-shredding (destroying one tenant KEK permanently unwraps that tenant's DEKs
+  and nothing else), but the keys live in operator-controlled storage rather than in
+  dedicated key hardware. Specifically the KEK material sits in the same Postgres
+  database as the ciphertext it protects (`kms_local_keys` alongside `derived_signals`).
+  The shred is real for the live store, but co-location means it does not defend against
+  a database-admin compromise, nor against a backup or snapshot taken before revocation
+  that captures both KEK and ciphertext. A customer-managed KMS, where the KEK never
+  enters our database, is the boundary that closes that gap.
+- The customer-managed-key (CMK) path is declared and stubbed honestly. Until a
+  customer key is configured the cloud/customer adapter status reads "available, not
+  connected"; it never fabricates a wrap or a status. A real cloud KMS or a true
+  bring-your-own-key arrangement implements the same `KmsRuntime` interface and drops
+  in with no change to the envelope format or the call sites.
+
+### Crypto-shred evidence
+
+- Revoking a tenant key destroys the KEK and leaves the encrypted rows in place. A
+  subsequent human read of that tenant's raw signals fails with a typed
+  `crypto_shredded` error even under a valid break-glass grant, and the machine read
+  fails loud the same way. This is proven end to end by the security integration test:
+  provision and seal signals, revoke the key, then assert the read returns
+  `crypto_shredded` rather than any plaintext. The data is unreadable because the only
+  key that could unwrap it no longer exists.
+
+### Database-level append-only intent
+
+- The provenance ledger is append-only by service contract: the module exports only
+  `appendEntry` and `verifyChain`, with no update or delete path, and the chain links
+  each entry to its predecessor by content hash so any in-place edit, reorder, or
+  deletion breaks `verifyChain`. The integrity guarantee is the hash chain plus the
+  serialized append, verifiable at any time; database-role-level append-only
+  enforcement (revoking UPDATE and DELETE on the table) is a deployment-time hardening
+  left for the operator and does not change the application contract.
+
+### Subprocessor list
+
+- Unchanged in shape. Tier 3 adds no new hosted subprocessor: the local KMS, the
+  envelope encryption, the break-glass ledger, and the provenance chain all run inside
+  the application and Postgres the operator already controls. A future customer-managed
+  KMS would introduce the customer's own key service as a subprocessor under the same
+  interface; today it is "available, not connected".
+
+### Verification
+
+- Typecheck and build are green across the workspace. The full suite is green: 123
+  tests across 15 files (up from 96), with 27 new tests this phase: envelope crypto
+  round-trip, wrong/missing-key, keyRef-mismatch, and legacy-plaintext typed errors, and
+  GCM tamper detection (`signalCrypto.test.ts`); the revoke failure-injection and
+  crypto-shred lifecycle (`tenantKeyService.integration.test.ts`); chain order, tamper
+  detection, the append-only
+  surface, and verifyChain on clean and corrupted chains (`provenance/ledger.test.ts`);
+  and the HTTP security surface end to end (`routes/security.integration.test.ts`):
+  owner-only key lifecycle, no standing access for any role, grant enables read and
+  every access is logged, expiry and revoke both deny, owner-only provenance verify,
+  and the crypto-shred read failure.
+- Acceptance is proven by test, not by UI, as the phase requires. The portal has no
+  Tier 3 surface yet (Phase L), so the Playwright testing skill, which is for UI flows
+  and explicitly not for API-only verification, is not applicable here; the unit and
+  integration suites are the acceptance evidence.
+- outside_in is unchanged: outside_in tenants have no derived signals, no tenant key,
+  and no encryption, and the grounding regression test still proves the no-grounding
+  prompts are byte-for-byte identical.
+- Fail-loud honesty: a revoked or missing key, a legacy-plaintext row, a missing or
+  expired or revoked break-glass grant, and an unconfigured customer KMS all surface
+  as typed errors or an "available, not connected" status, never a silent empty result
+  or a fabricated value.
+- Zero new npm dependencies (node:crypto, the pg already in the lockfile, the global
+  fetch, and workspace packages only).
+- Long-dash sweep zero across source (the guard over lib, artifacts, docs, and
+  scripts) and data (a row-cast sweep over all 24 public tables, which now includes
+  `kms_local_keys` and `access_grant_events`, returns zero em-dash and en-dash hits).
+
+### Milestone
+
+Phase K is a milestone hard-stop. Execution pauses here for owner review before Phase
+L (the portal connected-mode and security screens). Do not auto-advance.

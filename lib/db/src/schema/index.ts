@@ -29,5 +29,12 @@ export * from "./connectorRuns";
 export * from "./derivedSignals";
 export * from "./provenanceLedger";
 export * from "./tenantKeys";
+// The local KMS emulation's durable keyring (development and CI only; a customer
+// KMS replaces it in production). Holds key material behind the KMS seam, never
+// referenced by application code outside lib/security/kms.
+export * from "./kmsLocalKeys";
+// Per-access break-glass audit events (access_grants holds the grant; this holds
+// each access under it).
+export * from "./accessGrantEvents";
 // Per-tenant credential for the in-client extraction agent (Part 3, Tier 1).
 export * from "./edgeAgents";

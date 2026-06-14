@@ -56,6 +56,10 @@ import {
   type PipelineSubStageName,
 } from "@workspace/db";
 import { refreshConnectedTenant } from "../connectors/connectedRefresh";
+import { CryptoShreddedError } from "../security/errors";
+import { decryptSignalValue } from "../security/signalCrypto";
+import { getTenantKey } from "../security/tenantKeyService";
+import { appendEntry } from "../provenance/ledger";
 import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } from "./queue";
 
 // In express mode, only these high-signal layers run the full nine-stage
@@ -444,6 +448,33 @@ async function runLayer(
         set: { ...row, generatedAt: new Date() },
       });
 
+    // Provenance ledger: one tamper-evident, hash-chained entry per claim path,
+    // recording only the source reference, never raw data. Verified and modelled
+    // claims both chain in. This is the Processing Integrity evidence, written
+    // here where the orchestrator owns all side effects; a failure surfaces as a
+    // loud layer error, never a silent gap in the evidence. The refs are dash-
+    // swept to hold the typography ban on every stored string.
+    const provenanceClaims = [
+      ...narrate.verified_claims.map((c) => ({
+        basis: "verified",
+        path: c.claim_path,
+        urls: c.source_urls,
+      })),
+      ...narrate.modelled_claims.map((c) => ({
+        basis: "modelled",
+        path: c.claim_path,
+        urls: c.source_urls,
+      })),
+    ];
+    for (const claim of provenanceClaims) {
+      const refs = claim.urls.length > 0 ? claim.urls.join(" ") : "(none)";
+      await appendEntry({
+        tenantId,
+        claimPath: stripDashes(layer.key + "." + claim.path),
+        sourceRef: stripDashes(claim.basis + ":" + refs),
+      });
+    }
+
     await db
       .update(tenantPipelineRunsTable)
       .set({ status: "done", finishedAt: new Date(), error: null })
@@ -635,6 +666,17 @@ async function runLayers(
 // it carries no raw client content, because nothing reversible is ever stored in
 // derived_signals in the first place.
 async function loadLayerGrounding(tenantId: string): Promise<Map<string, LayerGrounding>> {
+  // Crypto-shred gate. If the tenant key is revoked, its signals are unreadable
+  // by anyone, including this in-boundary machine read: fail loud rather than
+  // ground a diagnosis on nothing.
+  const keyRow = await getTenantKey(tenantId);
+  if (keyRow && keyRow.status === "revoked") {
+    throw new CryptoShreddedError(
+      tenantId,
+      "tenant key revoked; derived signals are unreadable until re-provisioned and refreshed",
+    );
+  }
+
   const rows = await db
     .select({
       layerKey: derivedSignalsTable.layerKey,
@@ -648,8 +690,32 @@ async function loadLayerGrounding(tenantId: string): Promise<Map<string, LayerGr
     .where(eq(derivedSignalsTable.tenantId, tenantId))
     .orderBy(asc(derivedSignalsTable.layerKey), asc(derivedSignalsTable.signalKey));
 
+  if (rows.length === 0) {
+    return new Map<string, LayerGrounding>();
+  }
+
+  // There is ciphertext to ground on, so an active tenant key must exist. A
+  // missing key row (ciphertext with no key) is as unreadable as a revoked one:
+  // fail loud, and never decrypt on the strength of the envelope's embedded keyRef.
+  if (!keyRow || keyRow.status !== "active") {
+    throw new CryptoShreddedError(
+      tenantId,
+      "no active tenant key for stored signals; grounding is unreadable until re-provisioned and refreshed",
+    );
+  }
+  const activeKeyRef = keyRow.kmsKeyRef;
+
+  // Decrypt every signal under the tenant's active key. This is the only place the
+  // plaintext math is recovered for grounding, and it runs in-boundary; the
+  // de-identified result is what flows on to the external seats. A revoked or
+  // missing key, a keyRef that does not match the active key, or a legacy
+  // plaintext row, throws and fails the run loudly.
+  const decrypted = await Promise.all(
+    rows.map(async (r) => ({ r, value: await decryptSignalValue(r.value, activeKeyRef) })),
+  );
+
   const byLayer = new Map<string, LayerGrounding>();
-  for (const r of rows) {
+  for (const { r, value } of decrypted) {
     let grounding = byLayer.get(r.layerKey);
     if (!grounding) {
       grounding = { layerKey: r.layerKey, signals: [] };
@@ -657,7 +723,7 @@ async function loadLayerGrounding(tenantId: string): Promise<Map<string, LayerGr
     }
     grounding.signals.push({
       signalKey: r.signalKey,
-      value: r.value,
+      value,
       ...(r.window ? { window: r.window } : {}),
       ...(r.sourceConnectorKey ? { sourceConnectorKey: r.sourceConnectorKey } : {}),
       ...(r.computedAt ? { computedAt: r.computedAt.toISOString() } : {}),

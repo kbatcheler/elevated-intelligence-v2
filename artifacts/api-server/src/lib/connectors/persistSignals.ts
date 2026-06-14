@@ -3,6 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { assertDerivedSignalSet, getDescriptor } from "@workspace/connectors";
 import type { DerivedSignalSet } from "@workspace/connectors";
 import { db, derivedSignalsTable } from "@workspace/db";
+import { encryptSignalValue } from "../security/signalCrypto";
+import { ensureActiveTenantKey } from "../security/tenantKeyService";
 
 // The caller side of derive and discard. A connector returns only math (a
 // DerivedSignalSet); it never has a database handle. Writing that math to our
@@ -85,12 +87,26 @@ export async function persistDerivedSignalSet(
   const rootHash = derivedSetRootHash(set);
   const computedAt = args.computedAt ?? new Date();
 
-  const rows = set.signals.flatMap((signal) =>
+  // Per-tenant cryptographic isolation (Tier 3). Resolve the tenant's active key
+  // (provisioning one on first use), then seal each signal value in its own
+  // envelope before it reaches the store: one data key per signal value, reused
+  // across the layers that signal feeds. The plaintext math is encrypted here
+  // and discarded; only envelopes are written. A revoked tenant throws here,
+  // before any delete, so a crypto-shredded tenant cannot be written either.
+  const { kmsKeyRef } = await ensureActiveTenantKey(args.tenantId);
+  const encrypted = await Promise.all(
+    set.signals.map(async (signal) => ({
+      signal,
+      envelope: await encryptSignalValue(signal.value, kmsKeyRef),
+    })),
+  );
+
+  const rows = encrypted.flatMap(({ signal, envelope }) =>
     layers.map((layerKey) => ({
       tenantId: args.tenantId,
       layerKey,
       signalKey: signal.key,
-      value: signal.value,
+      value: envelope,
       window: signal.window ?? null,
       computedAt,
       sourceConnectorKey: args.connectorKey,
