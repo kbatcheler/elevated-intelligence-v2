@@ -1,16 +1,21 @@
-# Drift rollup: Phases A through Q
+# Drift rollup: Phases A through T
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase Q (secrets vault: a zero-SDK GCP Secret Manager REST adapter behind
-the existing `SecretStore` seam that is "available, not connected" until `GCP_PROJECT_ID` is
-set, provider selection via `SECRET_STORE_PROVIDER`, every runtime secret resolved by name
-through the store rather than from `process.env` at the call site, the KMS key ref kept on
-its own separate boundary by design, and an acceptance test that sweeps every public text
-and jsonb column plus `.replit` for a resolved sentinel and finds none; a build phase, gated,
-the last of the autonomous O-P-Q run, so execution stops for owner review after it).
+Last updated after Phase T (client onboarding experience, the milestone close of the
+owner-authorized autonomous R-S-T run: a client-admin self-serves client-viewer onboarding
+through a new session-gated `/api/client` router that mints, lists, and revokes client-viewer
+PINs whose scope is forced server-side to the caller's own org and the `client-viewer` role, a
+widening attempt rejected loudly with `scope_org_forbidden` / `scope_role_forbidden`; the
+client-viewer is made strictly read-only, with both action mutation routes and the break-glass
+raw-signal read now refusing the seat at the server and the portal hiding the controls it would
+be refused; a client first-run surface and a rollout runbook are added. Logged milestone
+decision: a client-viewer sees diagnosis plus reasoning plus provenance for their own tenant and
+nothing that crosses the client boundary (not cost or spend, not connector internals, not
+another tenant, not break-glass, not action writes). This is the milestone hard stop, so
+execution pauses for owner review after Phase T).
 
 ## Phase verdicts
 
@@ -33,6 +38,9 @@ the last of the autonomous O-P-Q run, so execution stops for owner review after 
 | O | Connector Operational Reality | Pass | no (gated, autonomous O-P-Q run) |
 | P | Observability and Alerting | Pass | no (gated, autonomous O-P-Q run) |
 | Q | Secrets Vault | Pass | no (gated, autonomous O-P-Q run; owner review after Q) |
+| R | Expand Test Coverage and Confirm CI | Pass | no (gated, autonomous R-S-T run) |
+| S | Retention and Deletion | Pass | no (gated, autonomous R-S-T run) |
+| T | Client Onboarding Experience | Pass | yes (milestone hard-stop, paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -289,8 +297,63 @@ the last of the autonomous O-P-Q run, so execution stops for owner review after 
   ceiling and warns at the threshold, enforced both in the seed and refresh routes (typed
   HTTP error) and defensively in the seed path; the owner-only `priorityOverride` bypasses
   the global ceiling only, never the per-tenant ceiling.
+- Token-scoped erasure deliberately unsupported for aggregate signals (S). The Operations
+  prompt's S allows a token-scoped delete "within a tenant where identity threads exist", but
+  derived signals are aggregate math with no identity thread, so a `tokenRef` erasure is
+  rejected with `token_erasure_not_supported_for_aggregate_signals` before any delete rather
+  than silently widened to a full tenant erasure. A future per-identity store would add a real
+  token-scoped path; this seam refuses honestly rather than overloading.
+- Erasure appends a ledger redaction, never trims the ledger (S). A tenant erasure deletes
+  the derived signals but preserves the append-only provenance ledger by appending a
+  `redaction:derived_signals:tenant` entry with a `sha256:<digest>` over the erased ids and
+  provenance refs, in the same transaction as the delete, so `verifyChain` keeps passing. The
+  new `appendEntryTx` export composes the append inside the caller's transaction and adds no
+  update or delete path. The `retention_events.redactionLedgerEntryId` is a plain uuid pointer,
+  not a foreign key, so the audit and the ledger stay independent.
+- Client-viewer is a strictly read-only seat (T). The plan's read list was diagnosis plus
+  reasoning plus provenance; the applied and architect-endorsed default extends it with an
+  explicit write refusal, so a client-viewer is 403 on both action mutation routes (it reads the
+  war room and track record but cannot commit a move or advance an action) and on the
+  break-glass raw-signal read. Provider seats and the client-admin (on their own bound tenant)
+  remain the writers, and the portal hides any control a viewer would be refused. A separate
+  client action-writer role is the future path if customer governance ever needs one.
+- Client-admin self-serve onboarding is scope-forced, never scope-trusting (T). The new
+  `/api/client` router lets a client-admin mint, list, and revoke client-viewer PINs only; the
+  scope is forced server-side to the caller's own org and the `client-viewer` role, and a
+  `scopeOrgId` or `scopeRole` in the body exists only so a widening attempt is rejected loudly
+  (`scope_org_forbidden`, `scope_role_forbidden`) rather than silently overridden. A shared
+  `mintInvitePin` helper backs both this route and the owner admin route so they cannot drift.
 
 ## No faked output, any phase
+
+Phase T added no faked output and no faked telemetry. The onboarding surface shows only
+persisted invite rows, and a one-time PIN code is shown once at mint and never stored or
+re-fetched (only its HMAC hash is persisted), so the UI never displays a code it cannot prove it
+just generated; the loading, empty, ready, and error states are distinct. The UI gating mirrors
+the server gate rather than hiding a still-open capability: a client-viewer is refused at the
+server on the action routes and the break-glass read, and the portal simply does not offer those
+controls. No test was made to pass by weakening an assertion; the positive action-write tests
+were moved to a genuinely authorized actor (a bound client-admin) rather than relaxing the gate.
+Phase S below holds, and the earlier phases under it.
+
+Phase S added no faked output and no faked telemetry. Every retention figure is computed from
+persisted state: the `deletedDerivedSignalCount` is the real number of rows the delete
+returned, never an estimate, and a TTL tick that purges nothing writes no audit row rather
+than a zero-count row, so a reader never sees a purge that did not happen. The erasure records
+a `sha256` digest over the erased ids and provenance refs as evidence, not the erased values,
+and appends it to the ledger rather than trimming the ledger, so `verifyChain` keeps passing
+on real chain data. Token-scoped erasure is refused honestly with a typed error rather than
+silently widened. No test was made to pass by weakening an assertion; the ledger surface test
+was widened to admit the new append-only helper while still asserting no update or delete
+export. Phase R below holds, and the earlier phases under it.
+
+Phase R added no faked output and no faked telemetry: it added test coverage and changed no
+product code. The prompt-hygiene detector reports only what it actually finds, a digit welded
+to a unit, and never flags a bare number, so it neither invents a violation nor masks one;
+the guard scans the real prompt sources and was green on them without any source being
+altered to pass, and the breakage is demonstrated through synthetic strings in the test, not
+by committing a bad prompt. No invariant test was made to pass by weakening the assertion.
+Phase Q below holds, and the earlier phases under it.
 
 Phase Q added no faked output and no faked telemetry, and where a real managed backend is not
 connected it ships an honest adapter rather than a fake. The GCP Secret Manager adapter

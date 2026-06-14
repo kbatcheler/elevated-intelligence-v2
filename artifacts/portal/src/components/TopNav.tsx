@@ -10,6 +10,10 @@ interface NavItem {
   label: string;
 }
 
+// Diagnosis, reasoning and provenance surfaces every authenticated seat may
+// reach (each is tenant-fenced server-side). Connections and Break-glass are the
+// provider-side operator tools, appended below only for provider roles, so a
+// client seat never sees connector internals or the raw signal read.
 const PRIMARY: NavItem[] = [
   { to: "/", label: "Brief" },
   { to: "/board", label: "Board pack" },
@@ -21,8 +25,6 @@ const PRIMARY: NavItem[] = [
   { to: "/heartbeat", label: "Heartbeat" },
   { to: "/reasoning", label: "Architecture" },
   { to: "/actions", label: "Actions" },
-  { to: "/connections", label: "Connections" },
-  { to: "/break-glass", label: "Break-glass" },
 ];
 
 const PERSPECTIVES: { value: Perspective; label: string }[] = [
@@ -42,6 +44,14 @@ export function TopNav() {
   const { path } = useRouter();
 
   const items = [...PRIMARY];
+  const isProvider = user?.role.startsWith("provider") ?? false;
+  if (isProvider) {
+    items.push({ to: "/connections", label: "Connections" });
+    items.push({ to: "/break-glass", label: "Break-glass" });
+  }
+  if (user?.role === "client-admin") {
+    items.push({ to: "/onboarding", label: "Onboarding" });
+  }
   if (user?.role === "provider-owner") {
     items.push({ to: "/security", label: "Security" });
     items.push({ to: "/spend", label: "Spend" });

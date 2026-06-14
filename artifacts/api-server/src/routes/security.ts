@@ -23,6 +23,7 @@ import {
   revokeTenantKey,
 } from "../lib/security/tenantKeyService";
 import { verifyChain } from "../lib/provenance/ledger";
+import { isProvider } from "../lib/auth/access";
 import { requireOwner, requireTenantAccess } from "../middleware/auth";
 
 // The Tier 3 security surface (Phase K, backend only; the portal UI is Phase L).
@@ -304,9 +305,13 @@ securityRouter.get(
   },
 );
 
-// ── Break-glass human signal read (any role, active grant required) ───────────
+// ── Break-glass human signal read (provider roles only, active grant required) ─
 // requireTenantAccess fences the tenant for the seat; the grant check is the
-// additional gate that binds EVERY role, the owner included. No standing access.
+// additional gate that binds EVERY provider role, the owner included. No
+// standing access. Phase T: a tenant's raw decrypted signals are the closest
+// thing to its source data, which the client onboarding boundary fences off from
+// client seats, so break-glass stays a provider-side incident tool. A client
+// role is refused here even when bound to the tenant and even under a grant.
 
 securityRouter.get(
   "/security/tenants/:id/signals",
@@ -314,6 +319,10 @@ securityRouter.get(
   async (req, res, next) => {
     const tenantId = String(req.params.id);
     const user = req.user!;
+    if (!isProvider(user.role)) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
     try {
       const grant = await requireActiveBreakGlassGrant(user.id, tenantId);
       const signals = await readDecryptedSignalsForHuman(tenantId);

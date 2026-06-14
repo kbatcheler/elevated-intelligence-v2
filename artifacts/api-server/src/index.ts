@@ -3,6 +3,7 @@ import { startAlertNotifier } from "./lib/alerts/notifier";
 import { ensureProviderOrgAndOwner } from "./lib/auth/bootstrap";
 import { startConnectorMaintenance } from "./lib/connectors/oauthRefresh";
 import { logger } from "./lib/logger";
+import { startRetentionPurge } from "./lib/retention/retention";
 
 const port = Number(process.env.PORT ?? "3001");
 
@@ -35,6 +36,11 @@ async function start(): Promise<void> {
   // exactly once. Like the maintenance loop, started only here so importing the
   // app in tests never starts a timer.
   startAlertNotifier(logger);
+
+  // Start the in-process retention purge loop (Phase S). Each tick removes
+  // derived signals past the configured TTL and audits what it removed. Started
+  // only here so importing the app in tests never starts a timer.
+  startRetentionPurge(logger);
 }
 
 void start();

@@ -43,3 +43,6 @@ export * from "./modelUsage";
 // Operational alert events (Phase O): the alert seam a connector error or a
 // failed OAuth token refresh records, which the Phase P notifier consumes.
 export * from "./alertEvents";
+// Retention and deletion audit (Phase S): one row per scheduled TTL purge or
+// operator-authorized tenant erasure of derived signals.
+export * from "./retentionEvents";

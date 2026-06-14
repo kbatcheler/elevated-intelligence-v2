@@ -6,10 +6,12 @@ import { adminRouter } from "./routes/admin";
 import { architectureRouter } from "./routes/architecture";
 import { agentRouter } from "./routes/agent";
 import { authRouter } from "./routes/auth";
+import { clientRouter } from "./routes/client";
 import { captureError } from "./lib/observability/sentryReporter";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
 import { operationsRouter } from "./routes/operations";
+import { retentionRouter } from "./routes/retention";
 import { securityRouter } from "./routes/security";
 import { spendRouter } from "./routes/spend";
 import { tenantsRouter } from "./routes/tenants";
@@ -59,6 +61,12 @@ app.use("/api/spend", requireAuth, requireOwner, spendRouter);
 // concerns, never visible to a client or portfolio seat.
 app.use("/api/operations", requireAuth, requireOwner, operationsRouter);
 
+// The client-admin onboarding surface. requireAuth runs here; the router itself
+// restricts every route to the client-admin role and forces the invite scope to
+// the caller's own org and the client-viewer role, so a client-admin can onboard
+// viewers into their own org and reach nothing on the provider side.
+app.use("/api/client", requireAuth, clientRouter);
+
 // The in-client extraction agent surface. Gated by its own per-tenant agent
 // credential (inside agentRouter), not by a user session, so it is mounted ahead
 // of the session gate below. It never trusts a proxy-injected client certificate
@@ -73,6 +81,7 @@ app.use("/api", layersRouter);
 app.use("/api", architectureRouter);
 app.use("/api", tenantsRouter);
 app.use("/api", securityRouter);
+app.use("/api", retentionRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });

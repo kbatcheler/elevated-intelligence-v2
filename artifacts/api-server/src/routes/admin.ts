@@ -9,9 +9,9 @@ import {
   tenantsTable,
   usersTable,
 } from "@workspace/db";
-import { generatePinCode, hashPinCode, pinState } from "../lib/auth/pin";
+import { mintInvitePin } from "../lib/auth/inviteMinting";
+import { pinState } from "../lib/auth/pin";
 import { logger } from "../lib/logger";
-import { requireSecret } from "../lib/secrets/secretStore";
 
 // The owner Access console API. requireAuth and requireOwner are applied where
 // this router is mounted, so every handler here can assume an owner caller.
@@ -83,53 +83,28 @@ adminRouter.post("/pins", async (req, res, next) => {
   }
 
   try {
-    const secret = await requireSecret("SESSION_SECRET");
-    const expiresAt = new Date(Date.now() + expiresInDays * 24 * 60 * 60 * 1000);
-
-    // codeHash is unique. A collision is astronomically unlikely, but retry a
-    // few times rather than surfacing a 500 in that one-in-many-lifetimes case.
-    let lastErr: unknown = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const code = generatePinCode();
-      const codeHash = hashPinCode(code, secret);
-      try {
-        const inserted = await db
-          .insert(invitePinsTable)
-          .values({
-            codeHash,
-            label: label ?? null,
-            maxUses,
-            expiresAt,
-            createdBy: owner.id,
-            scopeOrgId,
-            scopeRole: scopeRole ?? null,
-          })
-          .returning();
-        const pin = inserted[0];
-        logger.info({ pinId: pin.id, createdBy: owner.id }, "invite pin minted");
-        res.status(201).json({
-          pin: {
-            id: pin.id,
-            code, // shown once, never stored or returned again
-            label: pin.label,
-            maxUses: pin.maxUses,
-            useCount: pin.useCount,
-            expiresAt: pin.expiresAt,
-            scopeOrgId: pin.scopeOrgId,
-            scopeRole: pin.scopeRole,
-            createdAt: pin.createdAt,
-          },
-        });
-        return;
-      } catch (err) {
-        const code23505 =
-          (err as { code?: string })?.code === "23505" ||
-          (err as { cause?: { code?: string } })?.cause?.code === "23505";
-        if (!code23505) throw err;
-        lastErr = err;
-      }
-    }
-    throw lastErr ?? new Error("failed to mint a unique PIN");
+    const minted = await mintInvitePin({
+      label: label ?? null,
+      maxUses,
+      expiresInDays,
+      scopeOrgId,
+      scopeRole: scopeRole ?? null,
+      createdBy: owner.id,
+    });
+    logger.info({ pinId: minted.id, createdBy: owner.id }, "invite pin minted");
+    res.status(201).json({
+      pin: {
+        id: minted.id,
+        code: minted.code, // shown once, never stored or returned again
+        label: minted.label,
+        maxUses: minted.maxUses,
+        useCount: minted.useCount,
+        expiresAt: minted.expiresAt,
+        scopeOrgId: minted.scopeOrgId,
+        scopeRole: minted.scopeRole,
+        createdAt: minted.createdAt,
+      },
+    });
   } catch (err) {
     next(err);
   }

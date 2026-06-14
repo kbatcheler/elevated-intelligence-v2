@@ -50,8 +50,12 @@ function committedKey(layerKey: string, title: string | null): string {
 // Interactive what-if simulation is deferred on purpose: its numbers would be
 // invented, which this product does not do.
 export function WarRoomPage() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { currentId, current, status: tenantStatus } = useTenant();
+  // A client-viewer is a read-only seat: it reads the decision picture but never
+  // commits or advances a move. The server enforces this; the UI must not offer
+  // an affordance that would only fail with a 403.
+  const canAct = user?.role !== "client-viewer";
   const [state, setState] = useState<State>({ kind: "loading" });
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
@@ -236,6 +240,7 @@ export function WarRoomPage() {
                     <MoveCard
                       key={`${m.layerKey}-${i}`}
                       move={m}
+                      canAct={canAct}
                       busy={busy.has(committedKey(m.layerKey, m.action.title))}
                       onCommit={() => onCommit(m)}
                     />
@@ -249,7 +254,13 @@ export function WarRoomPage() {
                 <SectionHeading eyebrow="Committed" title="Moves made, and where they stand" />
                 <div style={{ display: "grid", gap: 10 }}>
                   {committed.map((a) => (
-                    <CommittedCard key={a.id} action={a} busy={busy.has(a.id)} onStatus={(s) => onStatus(a, s)} />
+                    <CommittedCard
+                      key={a.id}
+                      action={a}
+                      canAct={canAct}
+                      busy={busy.has(a.id)}
+                      onStatus={(s) => onStatus(a, s)}
+                    />
                   ))}
                 </div>
               </section>
@@ -273,7 +284,17 @@ function LayerTag({ layer }: { layer: SignalLayer }) {
   );
 }
 
-function MoveCard({ move, busy, onCommit }: { move: RecommendedMove; busy: boolean; onCommit: () => void }) {
+function MoveCard({
+  move,
+  canAct,
+  busy,
+  onCommit,
+}: {
+  move: RecommendedMove;
+  canAct: boolean;
+  busy: boolean;
+  onCommit: () => void;
+}) {
   const a = move.action;
   const committable = Boolean(a.title) && a.basis != null && a.confidence != null;
   return (
@@ -289,7 +310,9 @@ function MoveCard({ move, busy, onCommit }: { move: RecommendedMove; busy: boole
           {a.timing && <span>Timing: {a.timing}</span>}
           {a.owner && <span>Owner: {a.owner}</span>}
         </div>
-        {committable ? (
+        {!canAct ? (
+          <span className="eyebrow" style={{ color: "var(--slate-light)" }}>Read-only access</span>
+        ) : committable ? (
           <button className="btn-primary" onClick={onCommit} disabled={busy}>
             {busy ? "Committing" : "Commit move"}
           </button>
@@ -303,10 +326,12 @@ function MoveCard({ move, busy, onCommit }: { move: RecommendedMove; busy: boole
 
 function CommittedCard({
   action,
+  canAct,
   busy,
   onStatus,
 }: {
   action: CommittedAction;
+  canAct: boolean;
   busy: boolean;
   onStatus: (status: CommittedAction["status"]) => void;
 }) {
@@ -327,7 +352,11 @@ function CommittedCard({
           <ConfidencePill basis={action.basis} confidence={action.confidence} />
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <StatusControls status={action.status} busy={busy} onStatus={onStatus} />
+          {canAct ? (
+            <StatusControls status={action.status} busy={busy} onStatus={onStatus} />
+          ) : (
+            <span className="eyebrow" style={{ color: "var(--slate-light)" }}>Read-only access</span>
+          )}
         </div>
       </div>
     </div>

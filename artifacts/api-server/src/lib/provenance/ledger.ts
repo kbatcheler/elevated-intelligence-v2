@@ -47,46 +47,62 @@ function lockKey(tenantId: string): bigint {
   return createHash("sha256").update(tenantId, "utf8").digest().readBigInt64BE(0);
 }
 
-// Append one entry to a tenant's chain. The advisory lock is held for the
-// transaction, so the tail read and the insert cannot interleave with another
-// append for the same tenant.
-export async function appendEntry(input: AppendEntryInput): Promise<ProvenanceLedgerEntry> {
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(${lockKey(input.tenantId)})`);
+// A database transaction handle, as drizzle hands it to a `db.transaction`
+// callback. Typed structurally off `db.transaction` so the ledger append can run
+// inside a caller's transaction (the retention erasure) without importing
+// drizzle's internal transaction type.
+type LedgerTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-    // The tail is the entry whose contentHash no other entry chains from. With
-    // the advisory lock held there is exactly one, or none for a genesis append.
-    const tail = await tx
-      .select({ contentHash: provenanceLedgerTable.contentHash })
-      .from(provenanceLedgerTable)
-      .where(
-        sql`${provenanceLedgerTable.tenantId} = ${input.tenantId} and not exists (
-          select 1 from ${provenanceLedgerTable} as c
-          where c.tenant_id = ${input.tenantId} and c.prev_hash = ${provenanceLedgerTable.contentHash}
-        )`,
-      )
-      .limit(1);
-    const prevHash = tail[0]?.contentHash ?? null;
+// The core append, run against a supplied transaction. The advisory lock is held
+// for that transaction, so the tail read and the insert cannot interleave with
+// another append for the same tenant, and the whole thing composes inside a
+// larger caller transaction (so an erasure can delete signals and append its
+// redaction atomically).
+export async function appendEntryTx(
+  tx: LedgerTx,
+  input: AppendEntryInput,
+): Promise<ProvenanceLedgerEntry> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(${lockKey(input.tenantId)})`);
 
-    const contentHash = hashEntry({
+  // The tail is the entry whose contentHash no other entry chains from. With
+  // the advisory lock held there is exactly one, or none for a genesis append.
+  const tail = await tx
+    .select({ contentHash: provenanceLedgerTable.contentHash })
+    .from(provenanceLedgerTable)
+    .where(
+      sql`${provenanceLedgerTable.tenantId} = ${input.tenantId} and not exists (
+        select 1 from ${provenanceLedgerTable} as c
+        where c.tenant_id = ${input.tenantId} and c.prev_hash = ${provenanceLedgerTable.contentHash}
+      )`,
+    )
+    .limit(1);
+  const prevHash = tail[0]?.contentHash ?? null;
+
+  const contentHash = hashEntry({
+    tenantId: input.tenantId,
+    claimPath: input.claimPath,
+    sourceRef: input.sourceRef,
+    prevHash,
+  });
+
+  const inserted = await tx
+    .insert(provenanceLedgerTable)
+    .values({
       tenantId: input.tenantId,
       claimPath: input.claimPath,
       sourceRef: input.sourceRef,
+      contentHash,
       prevHash,
-    });
+    })
+    .returning();
+  return inserted[0]!;
+}
 
-    const inserted = await tx
-      .insert(provenanceLedgerTable)
-      .values({
-        tenantId: input.tenantId,
-        claimPath: input.claimPath,
-        sourceRef: input.sourceRef,
-        contentHash,
-        prevHash,
-      })
-      .returning();
-    return inserted[0]!;
-  });
+// Append one entry to a tenant's chain in its own transaction. The advisory lock
+// is held for the transaction, so the tail read and the insert cannot interleave
+// with another append for the same tenant.
+export async function appendEntry(input: AppendEntryInput): Promise<ProvenanceLedgerEntry> {
+  return db.transaction((tx) => appendEntryTx(tx, input));
 }
 
 export interface VerifyResult {

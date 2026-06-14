@@ -228,8 +228,9 @@ describe("committed actions", () => {
     confidence: 72,
   };
 
-  it("commits an action and reads it back in the track record", async () => {
-    const session = await loginSession("client-viewer");
+  it("lets a client-admin commit an action and reads it back in the track record", async () => {
+    // A client-admin acting on its own tenant may write; a client-viewer may not.
+    const session = await loginSession("portfolio-user");
     const created = await api(`/api/tenants/${ids.tenantA}/actions`, {
       method: "POST",
       body: validBody,
@@ -246,7 +247,7 @@ describe("committed actions", () => {
       basis: "modelled",
       confidence: 72,
       status: "committed",
-      committedBy: ids.clientViewer,
+      committedBy: ids.portfolioUser,
     });
 
     const list = await api(`/api/tenants/${ids.tenantA}/actions`, { session });
@@ -256,7 +257,7 @@ describe("committed actions", () => {
   });
 
   it("advances a committed action through its honest lifecycle", async () => {
-    const session = await loginSession("client-viewer");
+    const session = await loginSession("portfolio-user");
     const created = await api(`/api/tenants/${ids.tenantA}/actions`, {
       method: "POST",
       body: validBody,
@@ -277,7 +278,7 @@ describe("committed actions", () => {
   });
 
   it("rejects an invalid commit body", async () => {
-    const session = await loginSession("client-viewer");
+    const session = await loginSession("portfolio-user");
     const r = await api(`/api/tenants/${ids.tenantA}/actions`, {
       method: "POST",
       body: { layerKey: "", title: "", basis: "guessed", confidence: 200 },
@@ -288,13 +289,48 @@ describe("committed actions", () => {
   });
 
   it("404s a status update for an action that does not exist", async () => {
-    const session = await loginSession("client-viewer");
+    const session = await loginSession("portfolio-user");
     const r = await api(
       `/api/tenants/${ids.tenantA}/actions/00000000-0000-0000-0000-000000000000/status`,
       { method: "POST", body: { status: "done" }, session },
     );
     expect(r.status).toBe(404);
     expect(r.json).toEqual({ error: "not_found" });
+  });
+
+  it("refuses a client-viewer committing to a tenant it can read (read-only seat)", async () => {
+    // tenantA IS in the client-viewer's scope, so this is not tenant fencing:
+    // it proves the viewer seat itself cannot write the track record.
+    const session = await loginSession("client-viewer");
+    const r = await api(`/api/tenants/${ids.tenantA}/actions`, {
+      method: "POST",
+      body: validBody,
+      session,
+    });
+    expect(r.status).toBe(403);
+    expect(r.json).toEqual({ error: "forbidden" });
+  });
+
+  it("refuses a client-viewer advancing an action it can read (read-only seat)", async () => {
+    // A provider commits a real action on tenantA, then the read-only viewer,
+    // which CAN read that action, is refused when it tries to advance it.
+    const provider = await loginSession("member");
+    const created = await api(`/api/tenants/${ids.tenantA}/actions`, {
+      method: "POST",
+      body: validBody,
+      session: provider,
+    });
+    expect(created.status).toBe(201);
+    const actionId = (created.json as { action: { id: string } }).action.id;
+
+    const session = await loginSession("client-viewer");
+    const r = await api(`/api/tenants/${ids.tenantA}/actions/${actionId}/status`, {
+      method: "POST",
+      body: { status: "in_progress" },
+      session,
+    });
+    expect(r.status).toBe(403);
+    expect(r.json).toEqual({ error: "forbidden" });
   });
 
   it("fences a client seat out of committing to a tenant it cannot access", async () => {

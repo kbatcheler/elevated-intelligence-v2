@@ -1101,3 +1101,229 @@ local-dev default and read path, not a durable writable vault.
 
 Phase Q is the final phase of the owner-authorized autonomous run of O, P, and Q. Execution
 stops here for owner review of all three phases.
+
+## Phase R: expand test coverage and confirm CI
+
+Phase R hardens the regression gate. The Operations prompt names this phase "introduce
+testing", but a Vitest suite and a GitHub Actions CI workflow have existed since Phase B,
+so the adaptation guide rescopes R to "expand test coverage": prove every load-bearing
+invariant has a test that turns red when broken, add the one missing guard, and confirm CI
+runs typecheck, build, and test and blocks on failure. Zero new npm dependencies, no
+em-dash or en-dash.
+
+### The invariant ledger
+
+Seven of the eight load-bearing invariants were already pinned by a test that asserts the
+failing case: the DerivedSignalSet guard rejecting raw records
+(`lib/db/src/contracts/derivedSignalSet.test.ts`); the connector and edge-agent extraction
+path holding no db handle and no `node:fs` (the two `importBoundary.test.ts` files); the
+four PIN failure modes returning one byte-identical error with a valid PIN succeeding and
+decrementing exactly once, plus requireOwner refusing a member and admitting an owner (the
+auth integration suite); the session cookie verifying valid and rejecting tampered and
+expired (`session.test.ts`); the provenance ledger append-only with a broken chain detected
+(`ledger.test.ts`); and the long-dash guard scanning authored source (`emDashGuard.test.ts`).
+
+### The gap: prompt hygiene (invariant 7)
+
+The one missing guard was a check that the prompt builders carry no hardcoded example figure
+that a model could echo as if it were a real measurement. `lib/cortex/src/prompts/promptHygiene.ts`
+is a pure detector: `scanLineForLiteralFigures` matches digits welded to a unit (basis
+points, percent, dollar) with three unit-anchored regexes, so a bare placeholder, a schema
+field name, or a numeric scale bound never matches, and a line carrying the
+`PROMPT_HYGIENE_ALLOW_MARKER` is an explicit, greppable exemption. `promptHygiene.test.ts`
+walks the real prompt directory (excluding test files and the detector module, which
+necessarily contain the example strings), asserts the authored builders scan to zero, then
+proves the guard bites on synthetic bps, percent, and dollar strings while staying clean on
+legitimate placeholders and interpolation tokens. No prompt source was altered to pass; the
+scan was green on the real sources.
+
+### CI blocks on failure
+
+`.github/workflows/ci.yml` installs with a frozen lockfile then runs `pnpm run typecheck`,
+`pnpm run build`, and `pnpm run test` as separate required steps of the `verify` job, so any
+nonzero exit fails the job and blocks the merge. The hosted runner cannot execute inside
+this environment, so the same four steps are run locally and pass, which is the evidence the
+hosted job would produce (a recurring environmental fact logged since Phase B).
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both).
+- Full suite green at 482 tests (api-server 198 across 26 files, portal 149, cortex 84 across
+  10 files, connectors 29, edge-agent 10, db 8, scripts 4); the 4 new tests are the
+  prompt-hygiene guard.
+- Long-dash sweep zero on both sides: the source guard over lib, artifacts, docs, scripts,
+  `replit.md`, `.replit`, and `.github`, and a database-wide cast over every text and jsonb
+  column in every public table (`TOTAL DASH HITS 0`).
+- Zero new npm dependencies (Vitest was already in the lockfile; the detector is pure
+  TypeScript, the guard uses only `node:fs` and `node:path` in the test).
+
+## Phase S: retention and deletion
+
+Phase S gives derived signals a lifecycle: a scheduled time-to-live purge so a tenant's
+derived state does not outlive its usefulness, and an operator-authorized erasure that removes
+a tenant's derived signals on demand. Both leave evidence, and the erasure preserves the
+append-only provenance ledger rather than trimming it. The phase added zero npm dependencies
+and contains no em-dash or en-dash in source or in data.
+
+### The retention_events audit table
+
+`lib/db/src/schema/retentionEvents.ts` adds `retention_events`, the what/when/authority record
+for every retention action. A `retention_action` enum carries the two kinds, `ttl_purge` and
+`tenant_erasure`. The row records `tenantId` and `authorityUserId` as set-null foreign keys so
+the audit survives the later deletion of the tenant or the operator it names, the
+`authorityRole`, a `scope` jsonb, a `deletedDerivedSignalCount` integer defaulting to zero, an
+optional `redactionLedgerEntryId` uuid that points at the provenance redaction (deliberately a
+plain pointer, not a foreign key, so the ledger remains an independent append-only structure
+the audit never constrains or cascades into), a `reason`, and `createdAt`. Two indexes serve
+the by-tenant and by-time reads.
+
+### The append-only ledger, composed in a transaction
+
+The erasure must delete derived signals and append a redaction atomically, but the provenance
+ledger must never gain a mutation path. `ledger.ts` is refactored to expose `appendEntryTx`,
+which performs the same advisory-locked tail-read-then-insert append inside a caller's
+transaction; `appendEntry` is now a thin wrapper that opens its own transaction and delegates
+to it. The exported surface is `appendEntry`, `appendEntryTx`, and `verifyChain`: still no
+update and no delete, so the ledger stays append-only while the erasure can compose its
+redaction into the same transaction as its delete.
+
+### The TTL purge
+
+`runRetentionPurge` deletes every derived signal whose `computedAt` has fallen behind the TTL
+cutoff. Because a refresh supersedes the prior set and resets `computedAt`, "not refreshed
+within the TTL" is exactly this predicate. `getRetentionTtlDays` reads `RETENTION_TTL_DAYS` (a
+positive integer number of days) and defaults to 90. The purge writes one `ttl_purge` audit
+row per affected tenant; a tick that purges nothing writes no row and logs nothing, so the
+audit never holds an empty-tick artifact. `startRetentionPurge` runs the loop on
+`RETENTION_PURGE_INTERVAL_MS` (default 6 hours) and mirrors the connector-maintenance and
+notifier loops exactly: started only from the server entrypoint, never overlapping, swallowing
+a tick failure so a transient error never crashes the process, and unref'ing its timer.
+
+### The tenant erasure
+
+`eraseTenantDerivedSignals` runs in a single transaction: it deletes the tenant's derived
+signals (returning their ids and provenance refs), computes a `sha256` digest over the sorted
+ids, the sorted provenance refs, the count, and the scope, appends a provenance redaction
+through `appendEntryTx` with `claimPath` `redaction:derived_signals:tenant` and `sourceRef`
+`sha256:<digest>`, and inserts a `tenant_erasure` audit row carrying the redaction entry id.
+The delete, the redaction, and the audit share one transaction, so the erasure is all or
+nothing, and `verifyChain` still passes afterward because the ledger only grew. The redaction
+is a statement that the referenced signals were erased, with the digest as evidence, never the
+erased values.
+
+### The HTTP surface
+
+`artifacts/api-server/src/routes/retention.ts` is an owner-only router mounted in `app.ts`.
+`DELETE /api/retention/tenants/:id/derived-signals` runs the erasure; a body carrying a
+`tokenRef` is rejected with a 400 and the code
+`token_erasure_not_supported_for_aggregate_signals` before any delete (derived signals are
+aggregate math with no identity thread, so a token-scoped erasure has nothing to scope to),
+and an unknown tenant returns a 404 `tenant_not_found`. `GET /api/retention/tenants/:id/events`
+returns the audit trail. A client and a member each receive a 403.
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both).
+- Full suite green at 495 tests (api-server 211 across 28 files, portal 149, cortex 84 across
+  10 files, connectors 29, edge-agent 10, db 8, scripts 4); the 13 new tests are the retention
+  service integration suite (5: TTL purge of a stale signal, retention of a fresh signal, the
+  empty-tick no-audit no-op, the erasure delete plus redaction plus audit with the chain still
+  intact, and the aggregate-scope guard) and the retention route integration suite (8: owner
+  erasure, client and member 403, unknown-tenant 404, token-scope 400, the events read, and
+  the audit shape), with the ledger surface test widened to admit `appendEntryTx`.
+- Long-dash sweep zero on both sides: the source guard over lib, artifacts, docs, scripts,
+  `replit.md`, `.replit`, and `.github`, and a database-wide cast over every text and jsonb
+  column in every public table (`TOTAL DASH HITS 0`, now including `retention_events`).
+- Zero new npm dependencies (the purge and erasure use the existing pg-backed db, the Node
+  `node:crypto` digest, and workspace packages only).
+
+### Logged drift
+
+- Token-scoped erasure is deliberately unsupported for derived signals: aggregate math has no
+  identity thread, so a `tokenRef` is rejected rather than silently widened to a full tenant
+  erasure. A future per-identity store would add a real token-scoped path.
+- The provenance ledger is never trimmed: an erasure appends a redaction rather than deleting
+  the entries it references, so the hash chain stays intact and `verifyChain` keeps passing.
+- `appendEntryTx` is an append-only transaction composition helper, not a mutation path, and
+  must not be reverted; the erasure relies on appending the redaction in the same transaction
+  as its delete.
+- `retention_events.redactionLedgerEntryId` is a plain uuid pointer, not a foreign key, so the
+  audit table and the provenance ledger remain independent structures.
+
+The architect `evaluate_task` returned PASS with no blocking issues. The drift report is
+`phase-S.md`; the drift index and the rollup are updated to "A through S". Per the
+owner-authorized autonomous R-S-T run this does not pause; it proceeds to Phase T, the
+milestone, after which execution stops for owner review.
+
+## Phase T: client onboarding experience
+
+Phase T is the third and final phase of the owner-authorized autonomous R-S-T run and is itself
+the milestone hard stop. The Operations prompt frames this stage as "add organizations", but
+organizations, the four roles, scoped registration PINs, and per-tenant fencing already landed
+in Phase D, so Phase T delivers what was missing on that base: a client-admin onboards their own
+read-only colleagues without the provider, the client side has an honest first run, the
+client-viewer seat is fenced off from everything that crosses the client boundary, and the
+rollout is documented.
+
+### The logged decision
+
+A client-viewer sees the diagnosis, the full reasoning chain, and the provenance for their own
+bound tenant, and nothing that crosses the client boundary: not cost or spend, not connector
+internals, not another tenant, not the break-glass raw-signal path, and not the action write
+surface. The client-viewer is a strictly read-only seat; provider seats and the client-admin
+(on their own tenant) remain the writers.
+
+### The client onboarding router
+
+`artifacts/api-server/src/routes/client.ts` is a new `/api/client` router, session-gated and
+restricted to `client-admin` callers bound to an org. `POST /viewer-pins` mints a client-viewer
+PIN whose scope is forced server-side to the caller's own org and the `client-viewer` role; a
+widening attempt in the body is rejected loudly (`scope_org_forbidden`, `scope_role_forbidden`)
+rather than silently overridden. `GET /viewer-pins` lists only own-org viewer invites, and
+`POST /viewer-pins/:id/revoke` revokes only an own-org viewer invite (a cross-org or non-viewer
+PIN is 404). A shared `mintInvitePin` helper now backs both this route and the owner admin route
+so they mint identically.
+
+### The read-only client-viewer
+
+Both action mutation routes in `tenants.ts` now return 403 for a client-viewer after the
+tenant-access check, so a viewer reads the war room and track record but cannot commit a move or
+advance an action. The break-glass human-signal read in `security.ts` now refuses any
+non-provider role before the grant check, closing the one client-reachable path to raw decrypted
+signals. The portal mirrors both gates: the war room hides the commit and status controls for a
+viewer, so no affordance silently fails.
+
+### The client first run
+
+`clientApi.ts` is a framework-free typed client (list, mint, revoke) that maps a 401 to
+unauthorized, a non-ok body to its server error code, an empty list to a distinct empty state,
+and a thrown fetch to an error. `Onboarding.tsx` is the client-admin first-run surface (mint a
+one-time viewer code, list own-org invites with the active versus revoked distinction, revoke),
+with honest loading, empty, ready, and error states. The rollout is documented in
+`docs/client-onboarding-runbook.md`.
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both).
+- Full suite green at 526 tests (api-server 227, portal 164, cortex 84, connectors 29,
+  edge-agent 10, db 8, scripts 4); the 31 new tests are the 14 client onboarding route tests, 2
+  read-only proofs in the tenants route suite, and 15 portal `clientApi` tests, with the
+  positive action-write tests moved to a bound client-admin actor.
+- Long-dash sweep zero on both sides (the source guard and a database-wide row cast over every
+  public table, `TOTAL DASH HITS 0`).
+- Zero new npm dependencies.
+
+### Logged drift
+
+- "Client onboarding experience", not "add organizations": the primitives are Phase D; T builds
+  the self-serve onboarding, first run, and runbook on top.
+- The client-viewer is read-only, extending the plan's read list with an explicit write refusal
+  (the architect's recommendation, applied and logged).
+- Break-glass is now provider-only: a client boundary that fences off source data must also fence
+  off its closest proxy, so a client seat is refused before the grant check.
+
+The architect `evaluate_task` returned PASS (no remaining HIGH or MEDIUM, after the first
+review's HIGH on a writable client-viewer was fixed and re-verified). The drift report is
+`phase-T.md`; the drift index and the rollup are updated to "A through T". Phase T is the
+milestone hard stop and the end of the R-S-T run: execution PAUSES for owner review and does not
+auto-advance.

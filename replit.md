@@ -77,6 +77,34 @@ No secret VALUE is ever persisted to a database column or to `.replit`; only ref
 sweeps every public text and jsonb column plus `.replit` for a resolved sentinel and
 asserts none is present.
 
+## Retention and deletion (Phase S)
+
+Derived signals are ephemeral by design: each refresh supersedes the prior set and resets
+its `computedAt`, so a signal "not refreshed within the TTL" is one whose `computedAt` has
+fallen behind the cutoff. Two paths live in
+`artifacts/api-server/src/lib/retention/retention.ts`:
+
+- A scheduled TTL purge (`runRetentionPurge`) removes signals older than the configured age
+  and writes one `ttl_purge` audit row per affected tenant; a tick that purges nothing
+  writes no row. It mirrors the connector-maintenance and notifier loops: started ONLY from
+  the server entrypoint (`startRetentionPurge` in `index.ts`), never overlapping, swallowing
+  a tick failure, with an unref'd timer. TTL defaults to 90 days, overridable with
+  `RETENTION_TTL_DAYS` (positive integer days); the purge cadence defaults to 6 hours,
+  overridable with `RETENTION_PURGE_INTERVAL_MS`.
+- An operator-authorized erasure (`eraseTenantDerivedSignals`) deletes a tenant's derived
+  signals and, in the SAME transaction, appends an append-only provenance redaction
+  (`claimPath` `redaction:derived_signals:tenant`, `sourceRef` a `sha256:` digest over the
+  erased ids, provenance refs, count and scope) and writes a `tenant_erasure` audit row. The
+  ledger is never mutated or trimmed, so `verifyChain` still passes. Token-scoped erasure is
+  deliberately unsupported: derived signals are aggregate math with no identity thread, so a
+  `tokenRef` is rejected with `token_erasure_not_supported_for_aggregate_signals` rather than
+  silently widened to a full tenant erasure.
+
+Erasure is owner-only over HTTP (`DELETE /api/retention/tenants/:id/derived-signals`), and
+the audit is readable at `GET /api/retention/tenants/:id/events`. Every purge and erasure is
+recorded in `retention_events` with what, when, and on whose authority (a scheduled purge's
+authority is the system itself; an erasure records the authorizing owner).
+
 ## Working with this repo
 
 - Run checks through the configured workflows (`typecheck`, `build`, `test`), not a direct

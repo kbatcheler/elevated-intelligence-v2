@@ -618,6 +618,13 @@ tenantsRouter.post("/tenants/:id/actions", requireTenantAccess, async (req, res,
     res.status(401).json({ error: "unauthenticated" });
     return;
   }
+  // A client-viewer is a read-only seat: it sees the track record but never
+  // writes to it. Provider roles and a client-admin acting on their own tenant
+  // may commit; requireTenantAccess has already fenced the tenant for the seat.
+  if (user.role === "client-viewer") {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
   try {
     const d = parsed.data;
     const inserted = await db
@@ -666,6 +673,16 @@ tenantsRouter.post(
     const parsed = updateActionStatusSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "invalid_input" });
+      return;
+    }
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    // Advancing an action is a write; a client-viewer is read-only here too.
+    if (user.role === "client-viewer") {
+      res.status(403).json({ error: "forbidden" });
       return;
     }
     try {
