@@ -1,10 +1,10 @@
-# Drift rollup: Phases A through G
+# Drift rollup: Phases A through H
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase G (the parity gate and core build report milestone).
+Last updated after Phase H (the connector framework and registry milestone).
 
 ## Phase verdicts
 
@@ -17,6 +17,7 @@ Last updated after Phase G (the parity gate and core build report milestone).
 | E | Product Surfaces | Pass | no |
 | F | Fast Seeding and World-Class Seed Data | Pass | no |
 | G | Parity Gate and Core Build Report | Pass | yes (paused for owner review) |
+| H | Connector Framework and Registry | Pass | yes (paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -134,8 +135,32 @@ Last updated after Phase G (the parity gate and core build report milestone).
 - Three V1 extras not carried (G). The company picker and library mode, the coachmark
   tour, and the signal ticker are outside the named reference-surface set and the
   Phase B through F acceptance items, so they are a scope decision, available later.
+- New internal workspace package `lib/connectors` (H). The connector framework is a
+  workspace package rather than a folder in api-server, mirroring lib/cortex and
+  lib/db, so the contract is importable by the api-server and a future in-client
+  agent without dragging in the server. Zero new npm deps; pg and @types/pg were
+  already in the lockfile.
+- Connector path imports `@workspace/db/contracts` only, never the db root (H).
+  Importing the db root opens the application Postgres pool as a side effect; the
+  contracts subpath keeps the connector path free of any handle to our store so it
+  can run inside the in-client edge agent. Enforced by a static import-boundary test.
+- Two warehouse reference connectors implemented, 44 declared (H). The spec's full
+  "at least two per family run end to end" is the end-state acceptance for the later
+  connector phases; the Phase H order asks for the two bring-your-own-warehouse
+  reference connectors, done, with the rest declared and rendered as available, not
+  connected. Postgres stands in for the client warehouse in the end-to-end test
+  (Redshift speaks the Postgres wire and generic-sql targets any Postgres-wire
+  warehouse); Snowflake, BigQuery, and Databricks stay declared because their
+  drivers would be new dependencies. The connectors table stores the catalogue
+  surface only; the registry-only `path` and `implemented` fields are not columns.
 
 ## No faked output, any phase
+
+Phase H added no generation and no faked output: the two warehouse reference
+connectors run real aggregate SQL against a real warehouse and return computed
+math, the other 44 connectors are honestly declared and return an "available, not
+connected" error rather than stub data, and the catalogue's declared signal keys
+are statements of capability, not measurements. The earlier phases hold as below.
 
 Across A through G nothing is stubbed, mocked, or faked: the cortex and Confounder
 run live (C) and were exercised again by four end-to-end Phase F live seeds (three

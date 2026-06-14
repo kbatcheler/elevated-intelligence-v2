@@ -11,10 +11,12 @@
     "test": "vitest run",
     "seed:tenant": "tsx src/scripts/seedTenant.ts",
     "seed:demo": "tsx src/scripts/seedDemo.ts",
+    "seed:connectors": "tsx src/scripts/seedConnectors.ts",
     "anchor:sweep": "tsx src/scripts/anchorSweep.ts"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",
+    "@workspace/connectors": "workspace:*",
     "@workspace/cortex": "workspace:*",
     "@workspace/db": "workspace:*",
     "cors": "^2.8.6",

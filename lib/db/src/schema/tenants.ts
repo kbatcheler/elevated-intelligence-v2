@@ -9,6 +9,13 @@ export const tenantStatusEnum = pgEnum("tenant_status", [
   "stale",
 ]);
 
+// How a tenant's intelligence is sourced. outside_in is the default: derived from
+// public and outside-in signals only, with no client systems connected.
+// connected means the tenant has live connectors feeding derived signals. This
+// column declares the mode; the pipeline behavior that branches on it is wired in
+// a later phase, so the value is recorded but not yet acted upon.
+export const tenantDataModeEnum = pgEnum("tenant_data_mode", ["outside_in", "connected"]);
+
 export const tenantsTable = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -21,6 +28,7 @@ export const tenantsTable = pgTable("tenants", {
   founded: integer("founded"),
   tagline: text("tagline"),
   status: tenantStatusEnum("status").notNull().default("seeding"),
+  dataMode: tenantDataModeEnum("data_mode").notNull().default("outside_in"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

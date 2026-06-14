@@ -13,6 +13,9 @@
     },
     {
       "path": "../../lib/cortex"
+    },
+    {
+      "path": "../../lib/connectors"
     }
   ]
 }

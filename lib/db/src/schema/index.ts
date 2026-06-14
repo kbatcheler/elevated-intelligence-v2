@@ -20,3 +20,12 @@ export * from "./tenantPipelineRuns";
 export * from "./pipelineJobs";
 export * from "./committedActions";
 export * from "./claimBrokenReports";
+// Connectors and SOC 2 (V2). The catalogue, per-tenant connections and runs, the
+// "math, not records" derived signal store, the append-only provenance ledger,
+// and per-tenant key references. access_grants (break-glass) already exists above.
+export * from "./connectors";
+export * from "./tenantConnections";
+export * from "./connectorRuns";
+export * from "./derivedSignals";
+export * from "./provenanceLedger";
+export * from "./tenantKeys";
