@@ -12,7 +12,7 @@ import {
   revokeBreakGlassGrant,
 } from "../lib/security/breakGlass";
 import { BreakGlassRequiredError, CryptoShreddedError, SignalEncryptionError } from "../lib/security/errors";
-import { getKmsRuntime } from "../lib/security/kms";
+import { customerKmsStatus, getKmsRuntime } from "../lib/security/kms";
 import { readDecryptedSignalsForHuman } from "../lib/security/signalRead";
 import {
   ensureActiveTenantKey,
@@ -72,6 +72,9 @@ securityRouter.get("/security/tenants/:id/key", requireOwner, async (req, res, n
       status: key?.status ?? "none",
       revokedAt: key?.revokedAt ?? null,
       kms: getKmsRuntime().status(),
+      // The declared customer-managed KMS seam and its honest connection state, so
+      // the posture view can show "available, not connected" without inventing it.
+      customerKms: customerKmsStatus(),
     });
   } catch (err) {
     next(err);

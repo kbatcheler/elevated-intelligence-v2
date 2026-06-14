@@ -1,11 +1,12 @@
-# Drift rollup: Phases A through K
+# Drift rollup: Phases A through L
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase K (Tier 3: per-tenant cryptographic isolation, no standing
-human access, and the hash-chained provenance ledger; backend only, a milestone).
+Last updated after Phase L (the portal security surfaces over the Tier 3 backend:
+posture, connection-security posture, break-glass administration plus the all-role
+human signal read, and provenance verification; gated, not a milestone).
 
 ## Phase verdicts
 
@@ -22,6 +23,7 @@ human access, and the hash-chained provenance ledger; backend only, a milestone)
 | I | Connected Mode, Edge Agent, and Runtime No-Write Guard | Pass | yes (paused for owner review) |
 | J | Split Pipeline (Tier 2, the Lens In-Boundary) | Pass | no (gated, paused for owner confirmation) |
 | K | Tier 3: Cryptographic Isolation, No Standing Access, Hash-Chained Provenance | Pass | yes (paused for owner review) |
+| L | Connected Portal Security Surfaces (Posture, Connections, Break-glass, Provenance) | Pass | no (gated, paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -240,6 +242,16 @@ human access, and the hash-chained provenance ledger; backend only, a milestone)
   a loud layer failure instead of grounding on nothing.
 
 ## No faked output, any phase
+
+Phase L added no faked output and no faked telemetry. The portal security surfaces
+render only real backend facts: the customer-managed KMS is shown as "available, not
+connected" exactly as the backend reports it, every fetch error is a distinct state
+from an empty result, the three Tier 3 refusals (break-glass required, crypto-
+shredded, unreadable) each map to their own honest notice rather than an empty list,
+and the human signal read shows decrypted values exactly as the math produced them,
+never cached or exported and never invented when absent. The e2e ran against a real
+signed-in provider-owner over real HTTP, not a mocked shell. Phase K below holds, and
+the earlier phases under it.
 
 Phase K added no faked output and no faked telemetry. The local KMS performs real
 AES-256-GCM wrap and unwrap and a real key destroy (crypto-shred is proven by a read

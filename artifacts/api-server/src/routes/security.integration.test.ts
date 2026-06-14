@@ -206,6 +206,11 @@ describe("tenant key lifecycle (owner only)", () => {
     expect(r.status).toBe(200);
     expect(r.json).toMatchObject({ provisioned: true, status: "active" });
     expect((r.json as { kms: { provider: string } }).kms.provider).toBeTruthy();
+    // The declared customer-managed KMS seam is surfaced honestly as available but
+    // not connected, so the posture view never invents a customer key.
+    const customerKms = (r.json as { customerKms: { connected: boolean; detail: string } }).customerKms;
+    expect(customerKms.connected).toBe(false);
+    expect(customerKms.detail).toContain("available, not connected");
   });
 
   it("rejects a non-owner from the key surface", async () => {

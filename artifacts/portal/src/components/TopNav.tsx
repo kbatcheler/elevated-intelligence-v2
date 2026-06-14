@@ -22,6 +22,7 @@ const PRIMARY: NavItem[] = [
   { to: "/reasoning", label: "Architecture" },
   { to: "/actions", label: "Actions" },
   { to: "/connections", label: "Connections" },
+  { to: "/break-glass", label: "Break-glass" },
 ];
 
 const PERSPECTIVES: { value: Perspective; label: string }[] = [
@@ -41,7 +42,10 @@ export function TopNav() {
   const { path } = useRouter();
 
   const items = [...PRIMARY];
-  if (user?.role === "provider-owner") items.push({ to: "/admin", label: "Admin" });
+  if (user?.role === "provider-owner") {
+    items.push({ to: "/security", label: "Security" });
+    items.push({ to: "/admin", label: "Admin" });
+  }
 
   return (
     <header style={{ background: "var(--paper)", borderBottom: "1px solid var(--border)" }}>

@@ -34,3 +34,9 @@ row to text catches dashes buried anywhere in jsonb.
 **How to apply:** the sanitizer already runs at the jsonb persist boundaries, so a
 code-only or docs-only phase will sweep clean without DB writes, but the gate still
 expects this sweep to be run and reported as 0.
+
+## ASCII-only extends to decorative separators
+
+The "ASCII hyphen only" rule is read strictly in review: even non-dash decorative
+non-ASCII in source (e.g. box-drawing U+2500 runs used as "----" comment separators)
+gets flagged. Use plain ASCII "// -- ..." separators in code comments, not box-drawing.

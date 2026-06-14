@@ -505,3 +505,76 @@ and workspace packages only) and contains no em-dash or en-dash.
 
 Phase K is a milestone hard-stop. Execution pauses here for owner review before Phase
 L (the portal connected-mode and security screens). Do not auto-advance.
+
+## Phase L: the portal security surfaces over Tier 3
+
+Phase L is the portal over the Phase K Tier 3 backend, changing no Tier 3 guarantee.
+It adds four surfaces: an owner-only security console (key lifecycle posture,
+connection-security posture, break-glass administration, and provenance verification)
+and a separate all-role human signal read page. Every panel renders only real backend
+facts with designed loading, empty, and error states, never a fabricated value or a
+silent spinner. Zero new npm dependencies; no em-dash or en-dash.
+
+### What it surfaces
+
+- **Security posture.** The tenant key status (active, revoked, or not provisioned),
+  the active KMS provider and connected state, and the customer-managed KMS shown as
+  "available, not connected", with owner provision and revoke actions. A revoked key
+  reads as revoked, not as missing data.
+- **Connection-security posture.** The connection's protection facts only (key status
+  and KMS). The existing `/connections` feeds page is left intact and untouched; this
+  is a distinct security view, not a replacement.
+- **Break-glass administration and the access audit.** Owners create time-boxed grants
+  (the user picker reuses the owner-only `GET /api/admin/users`), see every grant with
+  its live state distinguished as active versus expired versus revoked, revoke an
+  active grant, and read the append-only access-event audit of every read made under a
+  grant.
+- **The all-role human signal read.** A separate page, deliberately not owner-only
+  because the `GET .../signals` endpoint gates on an active grant for every role rather
+  than on ownership. It reads the decrypted human signals for the current tenant under
+  an active grant, mapping each Tier 3 refusal (grant required, crypto-shredded,
+  unreadable), the empty case, and the ready case to its own honest state. Decrypted
+  values are rendered exactly as the math produced them and are never cached or
+  exported.
+- **Provenance verification.** The per-tenant chain verify result, reported as intact
+  or broken with the chain length, the broken index, and detail.
+
+### The data layer
+
+- `artifacts/portal/src/lib/securityApi.ts` is a framework-free client mirroring
+  `adminApi.ts`: typed outcomes for every call, a 401 mapped to an unauthorized signal
+  so the shell logs the seat out, and the three Tier 3 failure codes mapped to their
+  own honest UI states by branching on the response body's error code
+  (`break_glass_required` -> 403, `crypto_shredded` -> 409, `signal_unreadable` ->
+  422), never an empty list. A fetch error is always a distinct outcome from an empty
+  result.
+
+### Minimal backend addition
+
+- `GET /api/security/tenants/:id/key` now also returns `customerKms` from
+  `customerKmsStatus()`, so the posture view shows the declared customer-managed-KMS
+  seam ("available, not connected") without the UI inventing it. A route test asserts
+  the field is present and honest. No other endpoint was added.
+
+### Verification
+
+- Typecheck and build are green across the workspace. The full suite is green: 382
+  tests (portal 144, up from 108 with 36 new in `securityApi.test.ts`; api-server 123;
+  cortex 66; connectors 27; edge-agent 10; db 8; scripts 4). The new portal tests
+  exercise every securityApi helper (URL, method, body), the ready, empty, and error
+  outcomes, the 401 unauthorized path, the `no_key_to_revoke` case, the three typed
+  Tier 3 codes, and the verify payload.
+- e2e acceptance with the Playwright testing skill: signed in as a seeded provider-
+  owner and verified the security console header and all four tabs render honest non-
+  loading states, then verified the all-role human signal read shows exactly one honest
+  state (break-glass grant required, as expected with no active grant), never a spinner
+  and never a fabricated value.
+- Fail-loud honesty: a revoked or missing key, a missing or expired or revoked grant,
+  a crypto-shredded or unreadable read, and an unconfigured customer KMS all surface as
+  their own designed state, never a silent empty result or a fabricated value.
+- Zero new npm dependencies; the long-dash sweep is zero across the Phase L source.
+
+### Gate
+
+Phase L is gated. Execution pauses here for owner review before the next phase. Do not
+auto-advance.

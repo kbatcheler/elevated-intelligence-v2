@@ -429,3 +429,66 @@ export interface Architecture {
   seats: Record<string, ArchitectureSeat>;
   stages: ArchitectureStage[];
 }
+
+// ── Tier 3 security surface (Phase L UI over the Phase K backend) ─────────────
+// Every field mirrors the real /api/security payloads. Nothing here is invented
+// client-side: a declared-but-unconnected KMS reports its honest state, a revoked
+// key is shown as such, and the three typed read failures map to explicit states.
+
+export interface KmsStatus {
+  provider: string;
+  connected: boolean;
+  detail: string;
+}
+
+// GET /api/security/tenants/:id/key. status is "none" when no key is provisioned.
+export interface KeyStatus {
+  tenantId: string;
+  provisioned: boolean;
+  status: "active" | "revoked" | "none";
+  revokedAt: string | null;
+  kms: KmsStatus;
+  customerKms: KmsStatus;
+}
+
+// A break-glass grant row from GET/POST .../grants. Dates are ISO strings.
+export interface Grant {
+  id: string;
+  userId: string;
+  tenantId: string;
+  grantedBy: string;
+  reason: string;
+  grantedAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+}
+
+// One audit row from GET .../access-events, newest first.
+export interface AccessEvent {
+  id: string;
+  grantId: string;
+  userId: string;
+  tenantId: string;
+  action: string;
+  detail: string | null;
+  createdAt: string;
+}
+
+// GET .../provenance/verify. brokenAt and detail appear only on a broken chain.
+export interface VerifyResult {
+  ok: boolean;
+  length: number;
+  brokenAt?: number;
+  detail?: string;
+}
+
+// One decrypted signal from GET .../signals, reachable only under a break-glass
+// grant. value is a scalar or a vector exactly as the math produced it.
+export interface HumanSignal {
+  layerKey: string;
+  signalKey: string;
+  value: number | number[];
+  window: string | null;
+  sourceConnectorKey: string | null;
+  computedAt: string;
+}

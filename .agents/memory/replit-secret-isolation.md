@@ -19,3 +19,16 @@ an app bug but is not. Verify secret-dependent behavior instead by:
 - integration tests that boot the real app and inject a test secret store, and
 - reading the resulting DB state directly (e.g. confirm the bootstrapped owner row).
 After a secret is added, restart the workflows so their processes pick it up.
+
+## Live owner login for the Playwright testing skill
+
+The testing skill (Playwright) drives a real browser and must actually log in, but
+OWNER_PASSWORD is not in the testing runtime either, and the users table stores only
+the scrypt hash, so the real owner password cannot be recovered to type it.
+
+**Pattern that works:** seed a disposable provider-owner directly in the DB before the
+e2e and delete it after. Compute password_hash yourself with the app's own scrypt
+parameters and format (see the auth password lib) using a password you choose; a
+provider-owner legitimately sees all tenants, so one seeded owner exercises every
+owner-gated surface. Clean up the row at the end. This is a DB seed step, not a bypass
+of any access gate.

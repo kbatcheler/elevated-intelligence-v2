@@ -18,6 +18,8 @@ import { AskDifferentDayPage } from "./pages/AskDifferentDayPage";
 import { DependencyMapPage } from "./pages/DependencyMapPage";
 import { HeartbeatPage } from "./pages/HeartbeatPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
+import { BreakGlassPage } from "./pages/BreakGlassPage";
+import { SecurityConsole } from "./security/SecurityConsole";
 import { EmptyState, PageWidth } from "./primitives";
 
 const BOOT_FLAG = "ei.booted";
@@ -87,8 +89,12 @@ function Routes({ ownerOnlyAdmin }: { ownerOnlyAdmin: boolean }) {
       return <ActionsPage />;
     case "/connections":
       return <ConnectionsPage />;
+    case "/break-glass":
+      return <BreakGlassPage />;
     case "/design-language":
       return <Dashboard />;
+    case "/security":
+      return ownerOnlyAdmin ? <SecurityConsole /> : <NotFound />;
     case "/admin":
       return ownerOnlyAdmin ? <AccessConsole /> : <NotFound />;
     default:
