@@ -17,6 +17,7 @@ import {
   fetchHomepageContext,
   LAYER_STAGES,
   modelForStage,
+  profileSchema,
   runChallenge,
   runConfound,
   runEnrichment,
@@ -32,6 +33,7 @@ import {
   type EnrichmentOutput,
   type HypothesisedLayer,
   type LayerDescriptor,
+  type LayerGrounding,
   type NarrateOutput,
   type PerceiveOutput,
   type Logger,
@@ -41,6 +43,7 @@ import {
 } from "@workspace/cortex";
 import {
   db,
+  derivedSignalsTable,
   layersTable,
   PIPELINE_SUB_STAGES,
   tenantLayersTable,
@@ -50,6 +53,7 @@ import {
   type PipelineSubStage,
   type PipelineSubStageName,
 } from "@workspace/db";
+import { refreshConnectedTenant } from "../connectors/connectedRefresh";
 import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } from "./queue";
 
 // In express mode, only these high-signal layers run the full nine-stage
@@ -325,6 +329,10 @@ async function runLayer(
   profile: ProfileOutput,
   layer: LayerDescriptor,
   opts: SeedOptions,
+  // Connected-mode derived-signal grounding for this layer. Undefined in
+  // outside_in mode, where it must change nothing: the runners append a
+  // grounding block only when this is present, so the prompts stay identical.
+  grounding?: LayerGrounding,
 ): Promise<LayerOutcome> {
   const resume = opts.resume !== false;
   const mode = opts.mode ?? "full";
@@ -356,9 +364,11 @@ async function runLayer(
   const log = opts.log;
 
   try {
-    const perceive = await executeStage<PerceiveOutput>(ctx, "perceive", () => runPerceive(profile, layer, log));
+    const perceive = await executeStage<PerceiveOutput>(ctx, "perceive", () =>
+      runPerceive(profile, layer, log, grounding),
+    );
     const hypothesise = await executeStage<HypothesisedLayer>(ctx, "hypothesise", () =>
-      runHypothesise(profile, layer, perceive, log),
+      runHypothesise(profile, layer, perceive, log, grounding),
     );
     // The reduced express chain skips the two adversarial sub-stages on a
     // non-priority layer. narrate and score still run, but with empty confounder
@@ -374,20 +384,20 @@ async function runLayer(
       await persistSubStages(ctx);
     } else {
       confound = await executeStage<ConfounderOutput>(ctx, "confound", () =>
-        runConfound(profile, layer, hypothesise, log),
+        runConfound(profile, layer, hypothesise, log, grounding),
       );
       challenge = await executeStage<ChallengeOutput>(ctx, "challenge", () =>
-        runChallenge(profile, layer, hypothesise, confound, log),
+        runChallenge(profile, layer, hypothesise, confound, log, grounding),
       );
     }
     const narrate = await executeStage<NarrateOutput>(ctx, "narrate", () =>
-      runNarrate(profile, layer, hypothesise, confound, challenge, log),
+      runNarrate(profile, layer, hypothesise, confound, challenge, log, grounding),
     );
     const score = await executeStage<ScoreOutput>(ctx, "score", () =>
-      runScore(profile, layer, narrate, confound, challenge, log),
+      runScore(profile, layer, narrate, confound, challenge, log, grounding),
     );
     const { hero, peers, supplements } = await executeEnrichment(ctx, () =>
-      runEnrichment(profile, layer, narrate, log),
+      runEnrichment(profile, layer, narrate, log, grounding),
     );
 
     // The Evaluator (score) is the single writer of confidence and basis; the
@@ -480,6 +490,19 @@ async function loadRegistry(): Promise<LayerDescriptor[]> {
 export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<SeedResult> {
   const log = opts.log;
 
+  // The dataMode branch is decided here, by a tenant lookup, before any work.
+  // A connected tenant is refreshed in place and grounds on its own derived
+  // signals, so the outside_in path below is left entirely untouched (no extra
+  // step runs for an outside_in tenant beyond this single lookup).
+  const existingTenant = await db
+    .select({ id: tenantsTable.id, dataMode: tenantsTable.dataMode })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.url, rawUrl))
+    .limit(1);
+  if (existingTenant[0]?.dataMode === "connected") {
+    return seedConnectedTenant(existingTenant[0].id, rawUrl, opts);
+  }
+
   log.info({ url: rawUrl }, "seed: fetching homepage ground truth");
   const homepage = await fetchHomepageContext(rawUrl, log);
 
@@ -499,54 +522,7 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   }
   log.info({ tenantId, layers: registry.length }, "seed: fanning out across layers");
 
-  // The seed limiter runs on the Postgres-backed queue, not module memory: one
-  // job per layer is enqueued, then this instance drains the queue with up to
-  // LAYER_CONCURRENCY claim loops. Each claim is atomic (FOR UPDATE SKIP
-  // LOCKED), so concurrent workers and instances share the work without ever
-  // double-processing a layer, and a crashed worker's job is reclaimed and
-  // resumed once its lease expires.
-  const mode = opts.mode ?? "full";
-  const layerByKey = new Map(registry.map((l) => [l.key, l] as const));
-  await enqueueSeedLayers(
-    tenantId,
-    registry.map((l) => l.key),
-    mode,
-  );
-
-  const workerId = `${process.pid}-${randomUUID()}`;
-  const outcomes = new Map<string, LayerOutcome>();
-  const drain = async (): Promise<void> => {
-    for (;;) {
-      const job = await claimNextSeedJob(tenantId, workerId);
-      if (!job) return;
-      const layer = layerByKey.get(job.payload.layerKey);
-      if (!layer) {
-        await markSeedJob(job.id, "error", { lastError: `unknown layer ${job.payload.layerKey}` });
-        continue;
-      }
-      const outcome = await runLayer(tenantId, profile, layer, { ...opts, mode: job.payload.mode });
-      outcomes.set(layer.key, outcome);
-      await markSeedJob(job.id, outcome.status === "error" ? "error" : "done", {
-        runId: outcome.runId,
-        lastError: outcome.status === "error" ? outcome.reason : undefined,
-      });
-    }
-  };
-  const workerCount = Math.min(layerConcurrency(), registry.length);
-  await Promise.all(Array.from({ length: workerCount }, () => drain()));
-
-  // Reassemble outcomes in registry order. A missing entry can only mean a
-  // worker never reached the layer (it would otherwise be built/skipped/error),
-  // which is itself a failure of the run.
-  const layers = registry.map(
-    (l) =>
-      outcomes.get(l.key) ?? {
-        layerKey: l.key,
-        status: "error" as const,
-        reason: "layer was not processed by any worker",
-        telemetry: [],
-      },
-  );
+  const layers = await runLayers(tenantId, profile, registry, opts);
 
   const anyError = layers.some((o) => o.status === "error");
   await db
@@ -567,6 +543,188 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
       latencyMs: profileResult.telemetry.latencyMs,
       searchCalls: profileResult.telemetry.searchCalls,
     },
+    layers,
+  };
+}
+
+// Fan out across the registry layers and drain the work. The seed limiter runs
+// on the Postgres-backed queue, not module memory: one job per layer is
+// enqueued, then this instance drains the queue with up to LAYER_CONCURRENCY
+// claim loops. Each claim is atomic (FOR UPDATE SKIP LOCKED), so concurrent
+// workers and instances share the work without ever double-processing a layer,
+// and a crashed worker's job is reclaimed and resumed once its lease expires.
+// Both seed paths use this: outside_in passes no grounding (identical prompts),
+// connected passes per-layer derived-signal grounding.
+async function runLayers(
+  tenantId: string,
+  profile: ProfileOutput,
+  registry: LayerDescriptor[],
+  opts: SeedOptions,
+  groundingByLayer?: Map<string, LayerGrounding>,
+): Promise<LayerOutcome[]> {
+  const mode = opts.mode ?? "full";
+  const layerByKey = new Map(registry.map((l) => [l.key, l] as const));
+  await enqueueSeedLayers(
+    tenantId,
+    registry.map((l) => l.key),
+    mode,
+  );
+
+  const workerId = `${process.pid}-${randomUUID()}`;
+  const outcomes = new Map<string, LayerOutcome>();
+  const drain = async (): Promise<void> => {
+    for (;;) {
+      const job = await claimNextSeedJob(tenantId, workerId);
+      if (!job) return;
+      const layer = layerByKey.get(job.payload.layerKey);
+      if (!layer) {
+        await markSeedJob(job.id, "error", { lastError: `unknown layer ${job.payload.layerKey}` });
+        continue;
+      }
+      const outcome = await runLayer(
+        tenantId,
+        profile,
+        layer,
+        { ...opts, mode: job.payload.mode },
+        groundingByLayer?.get(layer.key),
+      );
+      outcomes.set(layer.key, outcome);
+      await markSeedJob(job.id, outcome.status === "error" ? "error" : "done", {
+        runId: outcome.runId,
+        lastError: outcome.status === "error" ? outcome.reason : undefined,
+      });
+    }
+  };
+  const workerCount = Math.min(layerConcurrency(), registry.length);
+  await Promise.all(Array.from({ length: workerCount }, () => drain()));
+
+  // Reassemble outcomes in registry order. A missing entry can only mean a
+  // worker never reached the layer (it would otherwise be built/skipped/error),
+  // which is itself a failure of the run.
+  return registry.map(
+    (l) =>
+      outcomes.get(l.key) ?? {
+        layerKey: l.key,
+        status: "error" as const,
+        reason: "layer was not processed by any worker",
+        telemetry: [],
+      },
+  );
+}
+
+// Build per-layer grounding from the tenant's persisted derived signals: only
+// de-identified math (scalars and numeric vectors), grouped by the layer each
+// signal feeds. This is the connected-mode replacement for the homepage snippet;
+// it carries no raw client content, because nothing reversible is ever stored in
+// derived_signals in the first place.
+async function loadLayerGrounding(tenantId: string): Promise<Map<string, LayerGrounding>> {
+  const rows = await db
+    .select({
+      layerKey: derivedSignalsTable.layerKey,
+      signalKey: derivedSignalsTable.signalKey,
+      value: derivedSignalsTable.value,
+      window: derivedSignalsTable.window,
+      sourceConnectorKey: derivedSignalsTable.sourceConnectorKey,
+      computedAt: derivedSignalsTable.computedAt,
+    })
+    .from(derivedSignalsTable)
+    .where(eq(derivedSignalsTable.tenantId, tenantId))
+    .orderBy(asc(derivedSignalsTable.layerKey), asc(derivedSignalsTable.signalKey));
+
+  const byLayer = new Map<string, LayerGrounding>();
+  for (const r of rows) {
+    let grounding = byLayer.get(r.layerKey);
+    if (!grounding) {
+      grounding = { layerKey: r.layerKey, signals: [] };
+      byLayer.set(r.layerKey, grounding);
+    }
+    grounding.signals.push({
+      signalKey: r.signalKey,
+      value: r.value,
+      ...(r.window ? { window: r.window } : {}),
+      ...(r.sourceConnectorKey ? { sourceConnectorKey: r.sourceConnectorKey } : {}),
+      ...(r.computedAt ? { computedAt: r.computedAt.toISOString() } : {}),
+    });
+  }
+  return byLayer;
+}
+
+// Connected mode is refresh-only. The tenant already exists and was profiled
+// once; we never refetch the homepage or rerun the profile stage. We refresh the
+// tenant's boundary connectors (deriving only math), then rebuild every layer
+// grounded on those derived signals in place of public web signal. The
+// outside_in seed path is left entirely untouched.
+async function seedConnectedTenant(
+  tenantId: string,
+  rawUrl: string,
+  opts: SeedOptions,
+): Promise<SeedResult> {
+  const log = opts.log;
+
+  // The stored profile is required: connected mode never regenerates it, so its
+  // absence is a loud failure, never a silent re-profile.
+  const profileRow = await db
+    .select({ profile: tenantProfileTable.profile })
+    .from(tenantProfileTable)
+    .where(eq(tenantProfileTable.tenantId, tenantId))
+    .limit(1);
+  if (!profileRow[0]) {
+    throw new Error(
+      `connected tenant ${tenantId} has no stored profile; seed it in outside_in mode before connecting`,
+    );
+  }
+  const parsedProfile = profileSchema.safeParse(profileRow[0].profile);
+  if (!parsedProfile.success) {
+    throw new Error(`connected tenant ${tenantId} has an invalid stored profile`);
+  }
+  const profile = parsedProfile.data;
+
+  log.info({ tenantId }, "connected: refreshing boundary connectors");
+  const refresh = await refreshConnectedTenant(tenantId, log);
+  log.info(
+    {
+      tenantId,
+      connections: refresh.length,
+      refreshed: refresh.filter((r) => r.status === "refreshed").length,
+    },
+    "connected: connector refresh complete",
+  );
+
+  const groundingByLayer = await loadLayerGrounding(tenantId);
+  log.info(
+    { tenantId, groundedLayers: groundingByLayer.size },
+    "connected: derived-signal grounding built",
+  );
+
+  const registry = await loadRegistry();
+  if (registry.length === 0) {
+    throw new Error("layer registry is empty; seed the registry before seeding a tenant");
+  }
+
+  // A refresh rebuilds every layer on the fresh grounding, so resume is forced
+  // off here: a previously built layer must be regenerated against the new
+  // signals, never skipped as already done.
+  const layers = await runLayers(
+    tenantId,
+    profile,
+    registry,
+    { ...opts, resume: false },
+    groundingByLayer,
+  );
+
+  const anyError = layers.some((o) => o.status === "error");
+  await db
+    .update(tenantsTable)
+    .set({ status: anyError ? "failed" : "ready", lastSeededAt: new Date() })
+    .where(eq(tenantsTable.id, tenantId));
+
+  return {
+    tenantId,
+    name: profile.name,
+    url: rawUrl,
+    // No profile stage runs in connected mode: the profile is loaded, not
+    // regenerated, so there is no profile telemetry to report.
+    profileTelemetry: {},
     layers,
   };
 }

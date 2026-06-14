@@ -14,6 +14,27 @@ export interface LayerDescriptor {
   diagnosticQuestion: string;
 }
 
+// A single derived signal as the cortex sees it: de-identified math only (a
+// score, ratio, count, aggregate, trend delta, or a non-reversible embedding),
+// never a raw client record. Mirrors the persisted derived_signals row narrowed
+// to what a prompt needs. This is the empirical anchor connected mode grounds on
+// in place of the public homepage snippet.
+export interface DerivedSignalView {
+  signalKey: string;
+  value: number | number[];
+  window?: string;
+  unit?: string;
+  sourceConnectorKey?: string;
+  computedAt?: string;
+}
+
+// The connected-mode grounding for one layer: the derived signals that anchor
+// this layer's reasoning. Carries only math, never raw client content.
+export interface LayerGrounding {
+  layerKey: string;
+  signals: DerivedSignalView[];
+}
+
 // Hygiene rules appended to every stage system prompt. Two hard rules:
 // invent no precise figures, and use no long dash.
 export const STAGE_RULES = [
@@ -67,6 +88,40 @@ export function priorStage(label: string, value: unknown, max = 6000): string {
   const text = JSON.stringify(value, null, 2);
   const clipped = text.length > max ? `${text.slice(0, max)}\n... (truncated)` : text;
   return `${label}:\n${clipped}`;
+}
+
+// Render the connected-mode derived-signal grounding for a layer's user prompt.
+// In connected mode the diagnosis is anchored on the client's own derived
+// metrics (de-identified aggregates and scores), never on raw records. Scalars
+// render in full; embeddings render by dimension only, never dumped, both to
+// bound the context and because a raw vector adds nothing the reasoning can use.
+// Returns an empty string when there is no grounding, so the outside_in prompts
+// stay byte-for-byte unchanged.
+export function derivedSignalsBlock(grounding: LayerGrounding | undefined): string {
+  if (!grounding || grounding.signals.length === 0) return "";
+  const lines: string[] = [
+    "GROUNDING SIGNALS (the client's own derived metrics for this layer: de-identified",
+    "aggregates and scores, never raw records). Treat these as the primary evidence for",
+    "this layer in place of public web signal:",
+  ];
+  for (const s of grounding.signals) {
+    const head = Array.isArray(s.value) ? `${s.signalKey} = vector[${s.value.length}]` : `${s.signalKey} = ${s.value}`;
+    const value = s.unit ? `${head} ${s.unit}` : head;
+    const meta: string[] = [];
+    if (s.window) meta.push(`window ${s.window}`);
+    if (s.sourceConnectorKey) meta.push(`source ${s.sourceConnectorKey}`);
+    if (s.computedAt) meta.push(`computed ${s.computedAt}`);
+    lines.push(`  - ${value}${meta.length ? ` (${meta.join(", ")})` : ""}`);
+  }
+  return lines.join("\n");
+}
+
+// The grounding lines a per-layer builder splices into its user message. Empty
+// in outside_in mode (no grounding), so those prompts are unchanged; in
+// connected mode it is a blank separator line followed by the signal block.
+export function groundingSection(grounding: LayerGrounding | undefined): string[] {
+  const block = derivedSignalsBlock(grounding);
+  return block ? ["", block] : [];
 }
 
 // An explicit output skeleton appended to a stage's user prompt. Models match

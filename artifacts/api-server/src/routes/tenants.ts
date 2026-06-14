@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   committedActionsTable,
   db,
+  edgeAgentsTable,
   layersTable,
   orgTenantsTable,
   tenantLayersTable,
@@ -11,6 +12,7 @@ import {
   tenantsTable,
 } from "@workspace/db";
 import { z } from "zod";
+import { createAgentCredential } from "../lib/agent/agentCredential";
 import { isProvider } from "../lib/auth/access";
 import { logger } from "../lib/logger";
 import { seedTenant } from "../lib/pipeline/orchestrator";
@@ -183,6 +185,118 @@ tenantsRouter.post("/tenants/:id/refresh", async (req, res, next) => {
       );
     });
     res.status(202).json({ tenantId, status: "seeding", mode });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Provision a per-tenant credential for the in-client extraction agent.
+// Provider-only: a credential lets its holder post derived signals for the
+// tenant, so issuing one is a trust decision the provider makes. The full token
+// is returned exactly once, here, and only its scrypt hash is stored; it cannot
+// be recovered later, so the operator must capture it now.
+const createAgentSchema = z.object({ label: z.string().min(1).max(120) });
+
+tenantsRouter.post("/tenants/:id/agents", async (req, res, next) => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  if (!isProvider(user.role)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  const parsed = createAgentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input" });
+    return;
+  }
+  try {
+    const tenantId = String(req.params.id);
+    const exists = await db
+      .select({ id: tenantsTable.id })
+      .from(tenantsTable)
+      .where(eq(tenantsTable.id, tenantId))
+      .limit(1);
+    if (!exists[0]) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+    const credential = await createAgentCredential();
+    await db.insert(edgeAgentsTable).values({
+      id: credential.agentId,
+      tenantId,
+      label: parsed.data.label,
+      tokenHash: credential.tokenHash,
+    });
+    res
+      .status(201)
+      .json({ agentId: credential.agentId, label: parsed.data.label, token: credential.token });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// List a tenant's agents. Provider-only. The token hash is never returned; this
+// is the issued-and-revoked ledger the console renders, not a way to recover a
+// credential.
+tenantsRouter.get("/tenants/:id/agents", async (req, res, next) => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  if (!isProvider(user.role)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  try {
+    const tenantId = String(req.params.id);
+    const agents = await db
+      .select({
+        id: edgeAgentsTable.id,
+        label: edgeAgentsTable.label,
+        status: edgeAgentsTable.status,
+        lastSeenAt: edgeAgentsTable.lastSeenAt,
+        createdAt: edgeAgentsTable.createdAt,
+        revokedAt: edgeAgentsTable.revokedAt,
+      })
+      .from(edgeAgentsTable)
+      .where(eq(edgeAgentsTable.tenantId, tenantId))
+      .orderBy(desc(edgeAgentsTable.createdAt));
+    res.json({ agents });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Revoke an agent credential. Provider-only. Revocation takes effect on the
+// agent's next call because requireAgent reloads the row every time and rejects
+// any status other than active.
+tenantsRouter.post("/tenants/:id/agents/:agentId/revoke", async (req, res, next) => {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  if (!isProvider(user.role)) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  try {
+    const tenantId = String(req.params.id);
+    const agentId = String(req.params.agentId);
+    const updated = await db
+      .update(edgeAgentsTable)
+      .set({ status: "revoked", revokedAt: new Date() })
+      .where(and(eq(edgeAgentsTable.id, agentId), eq(edgeAgentsTable.tenantId, tenantId)))
+      .returning({ id: edgeAgentsTable.id });
+    if (!updated[0]) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    res.json({ ok: true, agentId, status: "revoked" });
   } catch (err) {
     next(err);
   }

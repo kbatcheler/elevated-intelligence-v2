@@ -37,8 +37,14 @@ export {
   type HomepageContext,
 } from "./grounding/homepageContext";
 
-// Prompt-facing descriptor.
-export { type LayerDescriptor } from "./prompts/shared";
+// Prompt-facing descriptor and the connected-mode grounding contract.
+export {
+  derivedSignalsBlock,
+  groundingSection,
+  type LayerDescriptor,
+  type DerivedSignalView,
+  type LayerGrounding,
+} from "./prompts/shared";
 
 // Schemas and inferred types.
 export { profileSchema, type ProfileOutput } from "./schemas/profile";

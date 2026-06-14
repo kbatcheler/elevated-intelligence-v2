@@ -1,10 +1,11 @@
-# Drift rollup: Phases A through H
+# Drift rollup: Phases A through I
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase H (the connector framework and registry milestone).
+Last updated after Phase I (connected mode, the in-client edge agent, and the
+runtime no-write guard milestone).
 
 ## Phase verdicts
 
@@ -18,6 +19,7 @@ Last updated after Phase H (the connector framework and registry milestone).
 | F | Fast Seeding and World-Class Seed Data | Pass | no |
 | G | Parity Gate and Core Build Report | Pass | yes (paused for owner review) |
 | H | Connector Framework and Registry | Pass | yes (paused for owner review) |
+| I | Connected Mode, Edge Agent, and Runtime No-Write Guard | Pass | yes (paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -153,8 +155,42 @@ Last updated after Phase H (the connector framework and registry milestone).
   warehouse); Snowflake, BigQuery, and Databricks stay declared because their
   drivers would be new dependencies. The connectors table stores the catalogue
   surface only; the registry-only `path` and `implemented` fields are not columns.
+- New `edge_agents` table beyond the Part 4 Tier 1 minimum schema (I). The
+  per-tenant agent credential lives in its own table (a scrypt hash of the secret
+  plus an active or revoked status) rather than on `tenants` or in `tenant_keys`, so
+  a revoke is a single-row update and the credential never mixes with key material.
+  An addition, not a rename.
+- Agent bearer is the API trust root, mTLS terminates at a proxy (I). The server
+  reloads the credential row on every agent call for immediate revoke and never
+  trusts a proxy-injected client-certificate header; mutual TLS protects the channel
+  at the proxy while the bearer authorizes the request at the application. Proven
+  over a loopback client-certificate handshake (a no-certificate client is rejected).
+- Edge-agent base URL enforced HTTPS by default (I). Plain http is allowed only for
+  a loopback host or an explicit `EI_AGENT_INSECURE_HTTP=1` test opt-out, so the
+  bearer is never sent in clear by misconfiguration. Applied as the architect's
+  non-blocking security note and covered by a config test.
+- Connected grounding appended only on the connected path (I). Both data modes run
+  one shared `runLayers` helper and outside-in passes no grounding, so the
+  outside-in prompts are byte-for-byte unchanged while connected mode grounds on
+  `derived_signals` only.
+- Runtime no-write guard is a tripwire, not a sandbox (I). ESM `node:fs` bindings are
+  read-only and cannot be patched, so the runtime guard catches require-based ambient
+  writes only; the primary guarantee is the static import-boundary test that forbids
+  `node:fs` (and the db root) in connector and edge-agent source. The process-global
+  patch window could in principle trip a concurrent legitimate CommonJS filesystem
+  write during a long extraction, but no such live write path exists, so it is
+  recorded, not active. Edge connectors are declared not implemented; the runner is
+  proven with an injected stub over real mutual TLS, not faked telemetry.
 
 ## No faked output, any phase
+
+Phase I added no faked telemetry: no edge connector is implemented, every edge
+connector returns the honest "available, not connected" error, and the edge-agent
+runner is proven with an injected stub connector over a real mutual-TLS loopback
+rather than fabricated signals. Connected-mode grounding renders only the numeric
+`derived_signals` (a vector as `vector[len]`), never raw client text, and a raw
+`DerivedSignalSet` violation fails the run loudly in both the refresh service and the
+agent ingest path. Phase H below holds, and the earlier phases under it.
 
 Phase H added no generation and no faked output: the two warehouse reference
 connectors run real aggregate SQL against a real warehouse and return computed

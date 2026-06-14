@@ -4,6 +4,7 @@ import { logger } from "./lib/logger";
 import { requireAuth, requireOwner } from "./middleware/auth";
 import { adminRouter } from "./routes/admin";
 import { architectureRouter } from "./routes/architecture";
+import { agentRouter } from "./routes/agent";
 import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
@@ -43,6 +44,12 @@ app.use("/api/auth", authRouter);
 
 // Owner-only Access console API.
 app.use("/api/admin", requireAuth, requireOwner, adminRouter);
+
+// The in-client extraction agent surface. Gated by its own per-tenant agent
+// credential (inside agentRouter), not by a user session, so it is mounted ahead
+// of the session gate below. It never trusts a proxy-injected client certificate
+// header; the bearer credential is its sole trust root.
+app.use("/api/agent", agentRouter);
 
 // Everything else under /api requires a valid, non-disabled session. requireAuth
 // runs once here; the data routers follow. Per-tenant fencing is enforced inside

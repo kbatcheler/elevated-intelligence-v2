@@ -121,6 +121,22 @@ importers:
         specifier: 'catalog:'
         version: 3.2.6(@types/node@25.9.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
 
+  artifacts/edge-agent:
+    dependencies:
+      '@workspace/connectors':
+        specifier: workspace:*
+        version: link:../../lib/connectors
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.9.2
+      tsx:
+        specifier: 'catalog:'
+        version: 4.22.4
+      vitest:
+        specifier: 'catalog:'
+        version: 3.2.6(@types/node@25.9.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.4)
+
   artifacts/portal:
     devDependencies:
       '@replit/vite-plugin-cartographer':

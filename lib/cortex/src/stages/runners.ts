@@ -18,7 +18,7 @@ import {
   buildPerceive,
   buildScore,
 } from "../prompts/layerStages";
-import type { LayerDescriptor } from "../prompts/shared";
+import type { LayerDescriptor, LayerGrounding } from "../prompts/shared";
 import { profileSchema, type ProfileOutput } from "../schemas/profile";
 import {
   challengeOutputSchema,
@@ -122,8 +122,9 @@ export function runPerceive(
   profile: ProfileOutput,
   layer: LayerDescriptor,
   log: Logger = silentLogger,
+  grounding?: LayerGrounding,
 ): Promise<StageResult<PerceiveOutput>> {
-  const { system, user } = buildPerceive(profile, layer);
+  const { system, user } = buildPerceive(profile, layer, grounding);
   return runAnthropicStage("perceive", { system, user, schema: perceiveOutputSchema, log });
 }
 
@@ -132,8 +133,9 @@ export function runHypothesise(
   layer: LayerDescriptor,
   perceive: PerceiveOutput,
   log: Logger = silentLogger,
+  grounding?: LayerGrounding,
 ): Promise<StageResult<HypothesisedLayer>> {
-  const { system, user } = buildHypothesise(profile, layer, perceive);
+  const { system, user } = buildHypothesise(profile, layer, perceive, grounding);
   return runAnthropicStage("hypothesise", { system, user, schema: hypothesisedLayerSchema, log });
 }
 
@@ -142,8 +144,9 @@ export function runConfound(
   layer: LayerDescriptor,
   hypothesised: HypothesisedLayer,
   log: Logger = silentLogger,
+  grounding?: LayerGrounding,
 ): Promise<StageResult<ConfounderOutput>> {
-  const { system, user } = buildConfound(profile, layer, hypothesised);
+  const { system, user } = buildConfound(profile, layer, hypothesised, grounding);
   return runGeminiStage("confound", { system, user, schema: confounderOutputSchema, log });
 }
 
@@ -153,8 +156,9 @@ export function runChallenge(
   hypothesised: HypothesisedLayer,
   confounders: ConfounderOutput,
   log: Logger = silentLogger,
+  grounding?: LayerGrounding,
 ): Promise<StageResult<ChallengeOutput>> {
-  const { system, user } = buildChallenge(profile, layer, hypothesised, confounders);
+  const { system, user } = buildChallenge(profile, layer, hypothesised, confounders, grounding);
   return runGeminiStage("challenge", { system, user, schema: challengeOutputSchema, log });
 }
 
@@ -165,8 +169,9 @@ export function runNarrate(
   confounders: ConfounderOutput,
   challenge: ChallengeOutput,
   log: Logger = silentLogger,
+  grounding?: LayerGrounding,
 ): Promise<StageResult<NarrateOutput>> {
-  const { system, user } = buildNarrate(profile, layer, hypothesised, confounders, challenge);
+  const { system, user } = buildNarrate(profile, layer, hypothesised, confounders, challenge, grounding);
   return runAnthropicStage("narrate", { system, user, schema: narrateOutputSchema, log });
 }
 
@@ -177,8 +182,9 @@ export function runScore(
   confounders: ConfounderOutput,
   challenge: ChallengeOutput,
   log: Logger = silentLogger,
+  grounding?: LayerGrounding,
 ): Promise<StageResult<ScoreOutput>> {
-  const { system, user } = buildScore(profile, layer, narrate, confounders, challenge);
+  const { system, user } = buildScore(profile, layer, narrate, confounders, challenge, grounding);
   return runAnthropicStage("score", { system, user, schema: scoreOutputSchema, log });
 }
 
@@ -192,7 +198,8 @@ export function runEnrichment(
   layer: LayerDescriptor,
   narrate: NarrateOutput,
   log: Logger = silentLogger,
+  grounding?: LayerGrounding,
 ): Promise<StageResult<EnrichmentOutput>> {
-  const { system, user } = buildEnrichment(profile, layer, narrate);
+  const { system, user } = buildEnrichment(profile, layer, narrate, grounding);
   return runAnthropicStage("hero", { system, user, schema: enrichmentOutputSchema, log });
 }

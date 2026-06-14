@@ -17,4 +17,5 @@ export {
   genericSqlConnector,
 } from "./connectors/warehouse";
 export type { WarehouseMeasure } from "./connectors/warehouse";
+export { guardedExtractSignals } from "./guardedExtractSignals";
 export { assertDerivedSignalSet, isDerivedSignalSet, SIGNAL_KINDS } from "@workspace/db/contracts";

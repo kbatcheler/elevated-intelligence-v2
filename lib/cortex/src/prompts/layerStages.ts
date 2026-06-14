@@ -16,11 +16,13 @@ import type {
 } from "../schemas/stages";
 import {
   companyContext,
+  groundingSection,
   jsonShape,
   layerHeader,
   priorStage,
   STAGE_RULES,
   type LayerDescriptor,
+  type LayerGrounding,
 } from "./shared";
 
 // Gemini seats take a plain string system prompt.
@@ -82,7 +84,11 @@ const PERCEIVE_SHAPE = `
   "sector_context": "short paragraph on the company's market context"
 }`;
 
-export function buildPerceive(profile: ProfileOutput, layer: LayerDescriptor): CachedPromptPair {
+export function buildPerceive(
+  profile: ProfileOutput,
+  layer: LayerDescriptor,
+  grounding?: LayerGrounding,
+): CachedPromptPair {
   return {
     system: cachedSystem(
       "Lens",
@@ -97,7 +103,7 @@ export function buildPerceive(profile: ProfileOutput, layer: LayerDescriptor): C
       profile,
       PERCEIVE_SHAPE,
     ),
-    user: [layerHeader(layer), "", "Search the web first, then answer."].join("\n"),
+    user: [layerHeader(layer), ...groundingSection(grounding), "", "Search the web first, then answer."].join("\n"),
   };
 }
 
@@ -138,6 +144,7 @@ export function buildHypothesise(
   profile: ProfileOutput,
   layer: LayerDescriptor,
   perceive: PerceiveOutput,
+  grounding?: LayerGrounding,
 ): CachedPromptPair {
   return {
     system: cachedSystem(
@@ -153,7 +160,12 @@ export function buildHypothesise(
       profile,
       HYPOTHESISE_SHAPE,
     ),
-    user: [layerHeader(layer), "", priorStage("SIGNALS FROM PERCEIVE", perceive)].join("\n"),
+    user: [
+      layerHeader(layer),
+      ...groundingSection(grounding),
+      "",
+      priorStage("SIGNALS FROM PERCEIVE", perceive),
+    ].join("\n"),
   };
 }
 
@@ -178,6 +190,7 @@ export function buildConfound(
   profile: ProfileOutput,
   layer: LayerDescriptor,
   hypothesised: HypothesisedLayer,
+  grounding?: LayerGrounding,
 ): PromptPair {
   return {
     system: sys("Confounder", [
@@ -200,6 +213,7 @@ export function buildConfound(
       companyContext(profile),
       "",
       layerHeader(layer),
+      ...groundingSection(grounding),
       "",
       priorStage("CANDIDATE DIAGNOSIS TO STRESS-TEST", hypothesised),
       "",
@@ -231,6 +245,7 @@ export function buildChallenge(
   layer: LayerDescriptor,
   hypothesised: HypothesisedLayer,
   confounders: ConfounderOutput,
+  grounding?: LayerGrounding,
 ): PromptPair {
   return {
     system: sys("Challenger", [
@@ -245,6 +260,7 @@ export function buildChallenge(
       companyContext(profile),
       "",
       layerHeader(layer),
+      ...groundingSection(grounding),
       "",
       priorStage("CANDIDATE DIAGNOSIS", hypothesised),
       "",
@@ -323,6 +339,7 @@ export function buildNarrate(
   hypothesised: HypothesisedLayer,
   confounders: ConfounderOutput,
   challenge: ChallengeOutput,
+  grounding?: LayerGrounding,
 ): CachedPromptPair {
   return {
     system: cachedSystem(
@@ -347,6 +364,7 @@ export function buildNarrate(
     ),
     user: [
       layerHeader(layer),
+      ...groundingSection(grounding),
       "",
       priorStage("CANDIDATE DIAGNOSIS", hypothesised),
       "",
@@ -381,6 +399,7 @@ export function buildScore(
   narrate: NarrateOutput,
   confounders: ConfounderOutput,
   challenge: ChallengeOutput,
+  grounding?: LayerGrounding,
 ): CachedPromptPair {
   return {
     system: cachedSystem(
@@ -405,6 +424,7 @@ export function buildScore(
     ),
     user: [
       layerHeader(layer),
+      ...groundingSection(grounding),
       "",
       priorStage("FINAL CONTENT AND CLAIM SPLIT", narrate),
       "",
@@ -457,6 +477,7 @@ export function buildEnrichment(
   profile: ProfileOutput,
   layer: LayerDescriptor,
   narrate: NarrateOutput,
+  grounding?: LayerGrounding,
 ): CachedPromptPair {
   return {
     system: cachedSystem(
@@ -484,6 +505,11 @@ export function buildEnrichment(
       profile,
       ENRICHMENT_SHAPE,
     ),
-    user: [layerHeader(layer), "", priorStage("FINAL CONTENT", narrate.content)].join("\n"),
+    user: [
+      layerHeader(layer),
+      ...groundingSection(grounding),
+      "",
+      priorStage("FINAL CONTENT", narrate.content),
+    ].join("\n"),
   };
 }

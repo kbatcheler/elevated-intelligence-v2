@@ -29,3 +29,5 @@ export * from "./connectorRuns";
 export * from "./derivedSignals";
 export * from "./provenanceLedger";
 export * from "./tenantKeys";
+// Per-tenant credential for the in-client extraction agent (Part 3, Tier 1).
+export * from "./edgeAgents";
