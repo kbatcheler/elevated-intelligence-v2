@@ -39,7 +39,18 @@ export type ExtractionResult<T> =
       inputTokens: number | null;
       outputTokens: number | null;
     }
-  | { ok: false; reason: string; durationMs: number; rawText?: string };
+  | {
+      ok: false;
+      reason: string;
+      durationMs: number;
+      rawText?: string;
+      // Present when a 200 response was received before the failure (a billed
+      // call whose output failed schema validation): the tokens were really spent
+      // and must still be costed. Absent for a transport error or no-call.
+      billed?: boolean;
+      inputTokens?: number | null;
+      outputTokens?: number | null;
+    };
 
 // The boundary runtime a connected-mode Lens stage executes against. `model` and
 // `endpoint` are surfaced for telemetry and the audit story (which in-boundary

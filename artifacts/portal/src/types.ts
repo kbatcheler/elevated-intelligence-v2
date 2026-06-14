@@ -430,6 +430,67 @@ export interface Architecture {
   stages: ArchitectureStage[];
 }
 
+// ── Cost and token observability (Phase N, GET /api/spend/summary) ────────────
+// Every figure mirrors a real model_usage ledger sum: each row there is one real
+// model call, priced from its real token counts at the configured list-price
+// rates. Nothing on this surface is estimated or projected. Owner-only.
+export interface SpendTotals {
+  costUsd: number;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  webSearchCalls: number;
+}
+export interface SpendCaps {
+  globalMonthlyCapUsd: number;
+  tenantMonthlyCapUsd: number;
+  alertThreshold: number;
+  monthStart: string;
+  globalMonthSpendUsd: number;
+  globalOverThreshold: boolean;
+  globalOverCap: boolean;
+}
+export interface SpendByTenant {
+  tenantId: string | null;
+  name: string | null;
+  costUsd: number;
+  calls: number;
+}
+export interface SpendBySeat {
+  seat: string;
+  costUsd: number;
+  calls: number;
+}
+export interface SpendByStage {
+  stage: string;
+  costUsd: number;
+  calls: number;
+}
+export interface SpendByRun {
+  runId: string | null;
+  tenantId: string | null;
+  tenantName: string | null;
+  layerKey: string | null;
+  costUsd: number;
+  calls: number;
+  at: string;
+}
+export interface SpendDaily {
+  day: string;
+  costUsd: number;
+}
+export interface SpendSummary {
+  total: SpendTotals;
+  caps: SpendCaps;
+  byTenant: SpendByTenant[];
+  bySeat: SpendBySeat[];
+  byStage: SpendByStage[];
+  byRun: SpendByRun[];
+  daily: SpendDaily[];
+}
+
 // ── Tier 3 security surface (Phase L UI over the Phase K backend) ─────────────
 // Every field mirrors the real /api/security payloads. Nothing here is invented
 // client-side: a declared-but-unconnected KMS reports its honest state, a revoked

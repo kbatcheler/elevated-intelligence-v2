@@ -123,3 +123,14 @@ export {
   type StageContext,
 } from "./stages/extractionZone";
 export { callLocalJson, getExtractionRuntime, type LocalCallOptions } from "./clients/local";
+
+// Cost model (Phase N): the single place token counts become dollars.
+export {
+  costUsdForUsage,
+  ratesForModel,
+  SEAT_RATES,
+  LOCAL_RATES,
+  WEB_SEARCH_PER_CALL_USD,
+  type ModelRates,
+  type UsageCounts,
+} from "./pricing";

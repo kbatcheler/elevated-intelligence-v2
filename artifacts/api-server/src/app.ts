@@ -9,6 +9,7 @@ import { authRouter } from "./routes/auth";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
 import { securityRouter } from "./routes/security";
+import { spendRouter } from "./routes/spend";
 import { tenantsRouter } from "./routes/tenants";
 
 const app = express();
@@ -45,6 +46,11 @@ app.use("/api/auth", authRouter);
 
 // Owner-only Access console API.
 app.use("/api/admin", requireAuth, requireOwner, adminRouter);
+
+// Owner-only cost and token observability (Phase N). Mounted with its own gate
+// ahead of the shared session gate, like the admin console: spend is a provider-
+// owner concern, never visible to a client or portfolio seat.
+app.use("/api/spend", requireAuth, requireOwner, spendRouter);
 
 // The in-client extraction agent surface. Gated by its own per-tenant agent
 // credential (inside agentRouter), not by a user session, so it is mounted ahead

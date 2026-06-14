@@ -1,13 +1,13 @@
-# Drift rollup: Phases A through M
+# Drift rollup: Phases A through N
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase M (the closing full verification of the connector and SOC 2
-stage, Phases H through L, against Part 8 of the addendum, plus the consolidated
-build-report append; verification and reporting only, no product code change; gated,
-not a milestone).
+Last updated after Phase N (the first phase of Stage 3: cost and token observability,
+a real per-call `model_usage` ledger priced from real tokens at configured list-price
+rates, an owner-only Spend console, and env-backed monthly budget caps; a build phase,
+gated, not a milestone).
 
 ## Phase verdicts
 
@@ -26,6 +26,7 @@ not a milestone).
 | K | Tier 3: Cryptographic Isolation, No Standing Access, Hash-Chained Provenance | Pass | yes (paused for owner review) |
 | L | Connected Portal Security Surfaces (Posture, Connections, Break-glass, Provenance) | Pass | no (gated, paused for owner review) |
 | M | Stage 2 Full Verification and the Build-Report Append | Pass | no (gated, paused for owner review) |
+| N | Cost and Token Observability | Pass | no (gated, paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -249,8 +250,48 @@ not a milestone).
   (application-layer append-only plus the hash chain plus the UI verify, with
   database-role write blocking deferred to deployment), and the connected-refresh time
   was measured on the real warehouse path, not a stub or an invented number.
+- Cost priced by seat, never by a model literal (N). The Phase N pricing module resolves
+  a reported model string back to one of the three cortex seats through `SEATS` and prices
+  from `SEAT_RATES`, so the no-model-literal config invariant is preserved; a self-hosted
+  or unrecognised model takes the zero rate because it incurs no external per-token charge.
+- Pricing rates are published list prices, not the operator's contract (N). The seat rates
+  (reasoner 3 in / 15 out, evaluator 1 in / 5 out, grounder 1.25 in / 10 out per MTok,
+  web search 0.01 per call) are documented verify-before-trust defaults in the pricing
+  module and the console; negotiated or volume pricing will differ. An honest default, not
+  a measurement.
+- The `billed` telemetry flag is the no-fabrication gate (N). A `model_usage` row is
+  written only when a real token-billed response occurred (`billed && model`); a no-call
+  failure (no in-boundary model, a provider with no env, a transport failure before any
+  response) carries `billed: false` and writes nothing, and a billed-but-failed call is
+  recorded at its real cost. Tokens are summed across the two-attempt corrective retry so a
+  billed-then-retried attempt counts once, never dropped or doubled.
+- Usage tapped only in the orchestrator, the sole side-effect owner (N). One row per real
+  call from three taps (the stage run on the ok and error path, the enrichment as one row
+  not the batched folded peers, and the profile build after the tenant is ensured); resume
+  paths return before the tap so a resumed run records no duplicate. Cost tracking is
+  best-effort relative to the diagnosis: a ledger-write failure is logged and swallowed
+  rather than aborting a layer, so it can under-count but never break a seed.
+- Budget caps env-backed, enforced twice (N). `SPEND_GLOBAL_MONTHLY_CAP_USD` (default
+  1000), `SPEND_TENANT_MONTHLY_CAP_USD` (default 50), and `SPEND_ALERT_THRESHOLD` (default
+  0.8) drive a governor that reads the real summed ledger spend, refuses a new seed at a
+  ceiling and warns at the threshold, enforced both in the seed and refresh routes (typed
+  HTTP error) and defensively in the seed path; the owner-only `priorityOverride` bypasses
+  the global ceiling only, never the per-tenant ceiling.
 
 ## No faked output, any phase
+
+Phase N added no faked output and no faked telemetry: this is its defining constraint. The
+`model_usage` ledger holds a row only because a real provider call billed real tokens; the
+dollar figure is those real token counts at configured list-price rates (verify-before-
+trust defaults, stated as such), rounded to the ledger's six decimals, with a missing count
+treated as zero and never guessed. The `billed` flag is the gate: a call that made no
+request carries `billed: false` and writes nothing, so the ledger never contains a
+fabricated zero-cost line, and a 200 that billed tokens then failed our own validation is
+still recorded at the real cost. The corrective retry sums its billed attempts so a token
+count is never dropped or doubled. The Spend console renders only what the ledger holds,
+with honest loading, empty, error, and unauthorized states, and the summary reconciles to a
+direct `SUM` over the table. The budget governor decides on the real summed spend, not an
+estimate. Phase M below holds, and the earlier phases under it.
 
 Phase M added no faked output and no faked telemetry: it built nothing and changed no
 product code. It verified the stage and recorded an honest result, marking item 2

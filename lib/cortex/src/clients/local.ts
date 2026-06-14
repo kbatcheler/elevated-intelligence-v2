@@ -95,23 +95,42 @@ async function callOnce<T>(opts: LocalCallOptions<T>, correction?: Correction): 
     usage?: { prompt_tokens?: number; completion_tokens?: number };
     model?: string;
   } | null;
+  // Read token usage once here: this was a 200 response, so it is billed and its
+  // tokens must be reported even when the body is empty or then fails validation.
+  const inputTokens = payload?.usage?.prompt_tokens ?? null;
+  const outputTokens = payload?.usage?.completion_tokens ?? null;
   const text = payload?.choices?.[0]?.message?.content?.trim() ?? "";
   if (!text) {
-    return { ok: false, reason: "local model returned no text content", durationMs: Date.now() - tStart };
+    return {
+      ok: false,
+      reason: "local model returned no text content",
+      durationMs: Date.now() - tStart,
+      billed: true,
+      inputTokens,
+      outputTokens,
+    };
   }
 
   const validated = parseAndValidate(opts.schema, text);
   if (!validated.ok) {
     log.warn({ ctx: opts.context, reason: validated.reason }, "local model output rejected");
-    return { ok: false, reason: validated.reason, durationMs: Date.now() - tStart, rawText: text };
+    return {
+      ok: false,
+      reason: validated.reason,
+      durationMs: Date.now() - tStart,
+      rawText: text,
+      billed: true,
+      inputTokens,
+      outputTokens,
+    };
   }
   return {
     ok: true,
     value: validated.value,
     durationMs: Date.now() - tStart,
     model: payload?.model || opts.seat.model,
-    inputTokens: payload?.usage?.prompt_tokens ?? null,
-    outputTokens: payload?.usage?.completion_tokens ?? null,
+    inputTokens,
+    outputTokens,
   };
 }
 
@@ -125,17 +144,37 @@ export async function callLocalJson<T>(opts: LocalCallOptions<T>): Promise<Extra
   const log = opts.log ?? silentLogger;
   let correction: Correction | undefined;
   let last: ExtractionResult<T> = { ok: false, reason: "no attempt made", durationMs: 0 };
+  // Accumulate the real tokens across both attempts: a first attempt that fails
+  // schema validation still billed its tokens, so the row recorded for this call
+  // must carry the SUM of every billed attempt, never just the final one.
+  let accIn = 0;
+  let accOut = 0;
+  let anyBilled = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       last = await callOnce(opts, correction);
     } catch (e) {
       last = { ok: false, reason: e instanceof Error ? e.message : String(e), durationMs: 0 };
     }
-    if (last.ok) return last;
+    const billed = last.ok ? true : last.billed === true;
+    if (billed) {
+      anyBilled = true;
+      accIn += last.inputTokens ?? 0;
+      accOut += last.outputTokens ?? 0;
+    }
+    if (last.ok) {
+      return { ...last, inputTokens: accIn, outputTokens: accOut };
+    }
     if (attempt === 0) {
       log.info({ ctx: opts.context, attempt: 1, reason: last.reason }, "local model call retrying");
       correction = last.rawText ? { badText: last.rawText, reason: last.reason } : undefined;
     }
+  }
+  // Both attempts failed. If any consumed tokens, surface the summed real spend
+  // and mark it billed so the ledger records the loss honestly; otherwise the
+  // failure was a no-call and stays unbilled.
+  if (anyBilled) {
+    return { ...last, billed: true, inputTokens: accIn, outputTokens: accOut };
   }
   return last;
 }

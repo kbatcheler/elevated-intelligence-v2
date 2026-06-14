@@ -60,7 +60,9 @@ import { CryptoShreddedError } from "../security/errors";
 import { decryptSignalValue } from "../security/signalCrypto";
 import { getTenantKey } from "../security/tenantKeyService";
 import { appendEntry } from "../provenance/ledger";
+import { assertSeedWithinBudget } from "./budget";
 import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } from "./queue";
+import { recordModelUsageSafe } from "./usage";
 
 // In express mode, only these high-signal layers run the full nine-stage
 // adversarial chain (perceive through supplements). Every other layer runs a
@@ -91,6 +93,11 @@ export interface SeedOptions {
   // chain elsewhere. The queue carries the mode on each job; runLayer applies
   // the reduced behaviour.
   mode?: "full" | "express";
+  // Owner-only escape hatch from the GLOBAL monthly budget ceiling for a
+  // deliberately prioritised seed. Never bypasses a per-tenant ceiling. Threaded
+  // from the seed/refresh routes so the background backstop honours the same
+  // decision the route already approved.
+  priorityOverride?: boolean;
 }
 
 export interface LayerOutcome {
@@ -186,9 +193,18 @@ interface RunCtx {
   tenantId: string;
   layerKey: string;
   subStages: PipelineSubStage[];
+  // The injected logger, carried on the context so the usage-ledger taps inside
+  // executeStage and executeEnrichment can report a failed cost write without
+  // every call site threading a logger through.
+  log: Logger;
 }
 
-async function ensureRun(tenantId: string, layerKey: string, resume: boolean): Promise<RunCtx> {
+async function ensureRun(
+  tenantId: string,
+  layerKey: string,
+  resume: boolean,
+  log: Logger,
+): Promise<RunCtx> {
   const existing = await db
     .select()
     .from(tenantPipelineRunsTable)
@@ -201,7 +217,7 @@ async function ensureRun(tenantId: string, layerKey: string, resume: boolean): P
       .update(tenantPipelineRunsTable)
       .set({ status: "running", error: null, finishedAt: null, subStages: deepStripDashes(subStages) })
       .where(eq(tenantPipelineRunsTable.id, existing[0].id));
-    return { runId: existing[0].id, tenantId, layerKey, subStages };
+    return { runId: existing[0].id, tenantId, layerKey, subStages, log };
   }
 
   const subStages = freshSubStages();
@@ -209,7 +225,7 @@ async function ensureRun(tenantId: string, layerKey: string, resume: boolean): P
     .insert(tenantPipelineRunsTable)
     .values({ tenantId, layerKey, status: "running", subStages })
     .returning({ id: tenantPipelineRunsTable.id });
-  return { runId: inserted[0]!.id, tenantId, layerKey, subStages };
+  return { runId: inserted[0]!.id, tenantId, layerKey, subStages, log };
 }
 
 async function persistSubStages(ctx: RunCtx): Promise<void> {
@@ -242,6 +258,23 @@ async function executeStage<T>(
   const result = await run();
   node.telemetry = result.telemetry;
   node.durationMs = result.telemetry.latencyMs;
+  // Record the real cost of this single call. A billed call that failed schema
+  // validation is recorded too (its tokens were really spent); a no-call failure
+  // (no in-boundary model configured, missing provider env, a transport error
+  // before any response) carries billed:false and recordModelUsage skips it, so
+  // we never fabricate a zero-cost row for a call that never happened. Recorded
+  // only here, after run() actually fired, so a resumed (already done) sub-stage
+  // is never double-counted.
+  await recordModelUsageSafe(
+    {
+      tenantId: ctx.tenantId,
+      runId: ctx.runId,
+      stage,
+      layerKey: ctx.layerKey,
+      telemetry: result.telemetry,
+    },
+    ctx.log,
+  );
   if (!result.ok) {
     node.status = "error";
     node.error = result.reason;
@@ -301,6 +334,21 @@ async function executeEnrichment(
   await persistSubStages(ctx);
 
   const result = await run();
+  // hero, peers and supplements are ONE batched Evaluator call, so cost is
+  // recorded exactly once here, under a synthetic "enrichment" stage. The folded
+  // peers and supplements sub-stages (telemetry batched:true) are never recorded,
+  // so the Evaluator is never double- or triple-counted. Recorded for a failed
+  // call too: the batched call's tokens were still spent.
+  await recordModelUsageSafe(
+    {
+      tenantId: ctx.tenantId,
+      runId: ctx.runId,
+      stage: "enrichment",
+      layerKey: ctx.layerKey,
+      telemetry: result.telemetry,
+    },
+    ctx.log,
+  );
   if (!result.ok) {
     // One call failed, so all three artefacts failed: mark them together and
     // carry the real telemetry of the failing call on each.
@@ -371,8 +419,8 @@ async function runLayer(
     }
   }
 
-  const ctx = await ensureRun(tenantId, layer.key, effectiveResume);
   const log = opts.log;
+  const ctx = await ensureRun(tenantId, layer.key, effectiveResume, log);
 
   // The sensitivity routing for the two Lens stages. In connected mode runsInBoundary
   // (inside the runners) sends these to the local seat resolved from the env; in
@@ -553,6 +601,20 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   log.info({ url: rawUrl, grounded: homepage.ok }, "seed: running profile stage");
   const profileResult = await runProfile(rawUrl, homepage, log);
   if (!profileResult.ok) {
+    // The profile call may have consumed real tokens before failing schema
+    // validation. Record that spend now (the tenant shell does not exist yet, so
+    // tenantId is null) so a billed-but-failed profile lands on the ledger, then
+    // fail loud. recordModelUsageSafe is a no-op when the call was not billed.
+    await recordModelUsageSafe(
+      {
+        tenantId: null,
+        runId: null,
+        stage: "profile",
+        layerKey: null,
+        telemetry: profileResult.telemetry,
+      },
+      log,
+    );
     throw new Error(`profile stage failed: ${profileResult.reason}`);
   }
   const profile = profileResult.output;
@@ -560,9 +622,37 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   const tenantId = await ensureTenant(rawUrl, profile);
   log.info({ tenantId, name: profile.name }, "seed: tenant shell ready");
 
+  // The tenant-scope profile call has no layer run: record it once the tenant
+  // shell exists, with no runId and no layerKey, so its real cost is in the
+  // ledger like every other call.
+  await recordModelUsageSafe(
+    {
+      tenantId,
+      runId: null,
+      stage: "profile",
+      layerKey: null,
+      telemetry: profileResult.telemetry,
+    },
+    log,
+  );
+
   const registry = await loadRegistry();
   if (registry.length === 0) {
     throw new Error("layer registry is empty; seed the registry before seeding a tenant");
+  }
+
+  // Budget backstop before the layer fan-out (the expensive part). The seed and
+  // refresh routes gate this at the HTTP boundary before any spend; this second
+  // check covers the non-HTTP seed script path and marks the tenant honestly
+  // failed rather than leaving it stuck "seeding" if a ceiling was reached.
+  try {
+    await assertSeedWithinBudget({ tenantId, priorityOverride: opts.priorityOverride, log });
+  } catch (err) {
+    await db
+      .update(tenantsTable)
+      .set({ status: "failed", lastSeededAt: new Date() })
+      .where(eq(tenantsTable.id, tenantId));
+    throw err;
   }
   log.info({ tenantId, layers: registry.length }, "seed: fanning out across layers");
 
@@ -782,6 +872,20 @@ async function seedConnectedTenant(
   const registry = await loadRegistry();
   if (registry.length === 0) {
     throw new Error("layer registry is empty; seed the registry before seeding a tenant");
+  }
+
+  // Budget backstop before the connector-grounded layer fan-out, mirroring the
+  // outside_in seed path. The refresh route gates this at the HTTP boundary; this
+  // second check covers any non-HTTP caller and marks the tenant honestly failed
+  // rather than leaving it stuck "refreshing" if a ceiling was reached.
+  try {
+    await assertSeedWithinBudget({ tenantId, priorityOverride: opts.priorityOverride, log });
+  } catch (err) {
+    await db
+      .update(tenantsTable)
+      .set({ status: "failed", lastSeededAt: new Date() })
+      .where(eq(tenantsTable.id, tenantId));
+    throw err;
   }
 
   // A refresh rebuilds every layer on the fresh grounding, so resume is forced

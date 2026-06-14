@@ -698,3 +698,94 @@ deleted after.
 
 Phase M is gated and closes the connector and SOC 2 stage. Execution pauses here for
 owner review before the next stage. Do not auto-advance.
+
+## Phase N: cost and token observability
+
+Phase N opens Stage 3 (operations and economics). It puts a real cost on every model
+call the system makes, exposes that cost to the owner, and caps it. The single rule is
+that the ledger never fabricates: a dollar figure exists only because a real provider
+call billed real tokens, and a call that made no request bills nothing. Zero new npm
+dependencies; no em-dash or en-dash.
+
+### What Phase N built
+
+A new `model_usage` ledger records one row per real billed model call. A cortex pricing
+module turns the call's real token counts into dollars. A best-effort usage writer taps
+the orchestrator (the sole side-effect owner) to insert exactly one row per real call. A
+budget governor reads the ledger and enforces env-backed monthly caps before a seed
+spends. An owner-only Spend console renders the ledger with honest loading, empty, and
+error states.
+
+### The cost model and pricing honesty
+
+Pricing lives in one place (`lib/cortex/src/pricing.ts`), the only place token counts
+become dollars. The rates are published list-price defaults expressed in USD per
+1,000,000 tokens and per web-search call: the reasoner seat at 3 in / 15 out, the
+evaluator seat at 1 in / 5 out, the grounder seat at 1.25 in / 10 out, prompt-cache reads
+and writes at their published multiples of input, and a web-search tool call at 0.01.
+They are keyed by the three cortex seats, never by a literal model string, so the
+no-model-literal config invariant holds; a reported model string is resolved back to its
+seat through `SEATS`. A self-hosted or unrecognised model prices at zero because it
+incurs no external per-token charge. These are list prices the operator must verify
+against their own contract, stated as such in the module and the console; negotiated or
+volume pricing will differ. `costUsdForUsage` prices each token bucket at its rate plus
+the web-search calls and rounds to the six decimals of the ledger column; a missing count
+is treated as zero, never guessed.
+
+### The billed signal, so the ledger never fabricates a row
+
+A model call can fail two ways and only one costs money. A no-call failure (no
+in-boundary model configured, a provider integration with no env, or a transport failure
+before any response) spent nothing and must record nothing. A billed failure (a 200 that
+billed real tokens and then failed our own schema validation) spent the money and must be
+recorded at the real cost even though the stage failed. An explicit `billed` flag travels
+on the stage telemetry to tell the two apart: it means a real token-billed response
+occurred. The usage writer records a row only when `billed` is true and a model is
+present, so a no-call failure produces no row and the ledger holds no fabricated
+zero-cost line. Each client also sums token usage across its two-attempt corrective retry,
+so a billed-then-retried attempt counts once with the summed tokens, never dropped and
+never double-counted. The orchestrator taps usage in exactly three places (the stage run
+on both the ok and error path, the enrichment as a single row rather than the batched
+folded peers, and the profile build after the tenant is ensured), and resume paths return
+before the tap, so a resumed run records no duplicate.
+
+### The new table, route, and env
+
+- Table: `model_usage`, one row per real billed call, with the tenant (nullable, set null
+  on delete so cost history survives), the run id (nullable, no foreign key), stage, layer
+  key, seat, the reported model string, the token buckets, the web-search call count, the
+  `numeric(12,6)` cost, and the created-at; indexed on tenant and created-at.
+- Route: owner-only `GET /api/spend/summary`, returning the month, the totals, and the
+  breakdowns by tenant, seat, stage, run, and day, plus the caps and threshold; the
+  `numeric` cost is returned as a JS number. Member is 403, unauthenticated is 401.
+- Env: `SPEND_GLOBAL_MONTHLY_CAP_USD` (default 1000), `SPEND_TENANT_MONTHLY_CAP_USD`
+  (default 50), and `SPEND_ALERT_THRESHOLD` (default 0.8). The governor refuses a new seed
+  once a ceiling is reached and warns between the threshold and the ceiling; the owner-only
+  `priorityOverride` bypasses the global ceiling only, never the per-tenant ceiling.
+  Enforced in the seed and refresh routes with a clear typed HTTP error and again
+  defensively in the seed path before any model spend.
+
+### Subprocessor note
+
+Phase N adds no new data subprocessor. The cost ledger, the pricing math, the budget
+governor, and the spend console all run inside the application and the Postgres the
+operator already controls. The external model providers (Anthropic and Gemini) are
+unchanged from the connector stage; Phase N only counts and prices the calls already made
+to them.
+
+### Verification
+
+- Typecheck and build are green across the workspace (exit 0 on both). The full suite is
+  green at 417 tests (api-server 139, portal 149, cortex 80, connectors 27, edge-agent 10,
+  db 8, scripts 4); new this phase are the cortex pricing and billed-token tests, the
+  api-server budget and spend-summary integration tests, and the portal spend-api tests.
+- The spend summary reconciles to a direct `SUM` over `model_usage`; the usage tests prove
+  the one-row invariant, that a no-call failure records nothing, that a billed-but-failed
+  call records at the real cost, and that the corrective retry sums tokens.
+- Long-dash sweep zero on both sides: the source guard over lib, artifacts, docs, and
+  scripts, and a per-row cast over the `model_usage` ledger and the run telemetry.
+
+### Gate
+
+Phase N is gated and opens Stage 3. Execution pauses here for owner review before the next
+phase. Do not auto-advance.

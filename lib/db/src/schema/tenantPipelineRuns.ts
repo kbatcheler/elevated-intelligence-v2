@@ -38,6 +38,10 @@ export type SeatTelemetry = {
   // batched call (hero+peers+supplements run as one Haiku call). The
   // Intelligence Architecture summation skips these so cost is not tripled.
   batched?: boolean;
+  // True only when a real, token-billed provider response was received. The
+  // Phase N cost ledger records a row only for billed calls; a no-call failure
+  // is never costed.
+  billed?: boolean;
 };
 
 export type PipelineSubStage = {

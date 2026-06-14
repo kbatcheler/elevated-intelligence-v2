@@ -19,6 +19,12 @@ export interface StageTelemetry {
   // model call (the Evaluator's hero+peers+supplements are one Haiku call). The
   // Intelligence Architecture summation must not double-count these.
   batched?: boolean;
+  // True only when a real, token-billed provider response was received for this
+  // stage (a 200 with usage), success OR a schema-validation failure. The cost
+  // ledger records a row only for billed calls: a no-call failure (no in-boundary
+  // model configured, missing provider env, or a transport error before any
+  // response) carries billed:false and is honestly never costed.
+  billed?: boolean;
 }
 
 export type StageResult<T> =

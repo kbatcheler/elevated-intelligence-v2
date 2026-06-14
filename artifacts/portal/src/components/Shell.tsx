@@ -19,6 +19,7 @@ import { DependencyMapPage } from "./pages/DependencyMapPage";
 import { HeartbeatPage } from "./pages/HeartbeatPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { BreakGlassPage } from "./pages/BreakGlassPage";
+import { SpendPage } from "./pages/SpendPage";
 import { SecurityConsole } from "./security/SecurityConsole";
 import { EmptyState, PageWidth } from "./primitives";
 
@@ -95,6 +96,8 @@ function Routes({ ownerOnlyAdmin }: { ownerOnlyAdmin: boolean }) {
       return <Dashboard />;
     case "/security":
       return ownerOnlyAdmin ? <SecurityConsole /> : <NotFound />;
+    case "/spend":
+      return ownerOnlyAdmin ? <SpendPage /> : <NotFound />;
     case "/admin":
       return ownerOnlyAdmin ? <AccessConsole /> : <NotFound />;
     default:

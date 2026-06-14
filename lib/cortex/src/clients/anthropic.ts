@@ -47,7 +47,22 @@ export type AnthropicResult<T> =
       consultedUrls: string[];
       searchCallCount: number;
     }
-  | { ok: false; reason: string; durationMs: number; rawText?: string };
+  | {
+      ok: false;
+      reason: string;
+      durationMs: number;
+      rawText?: string;
+      // Present when a 200 response was received before the failure (a billed
+      // call whose output failed schema validation, or returned no text): the
+      // tokens were really spent and must still be costed. Absent for a transport
+      // error or a missing-env no-call.
+      billed?: boolean;
+      inputTokens?: number | null;
+      outputTokens?: number | null;
+      cacheReadTokens?: number | null;
+      cacheCreationTokens?: number | null;
+      searchCallCount?: number;
+    };
 
 // The model's own rejected output and the schema error, fed back on retry.
 type Correction = { badText: string; reason: string };
@@ -163,26 +178,35 @@ async function callOnce<T>(
     model?: string;
   };
   const { text, consultedUrls, searchBlockCount } = walkContent(payload.content);
-  if (!text) {
-    return { ok: false, reason: "Anthropic returned no text content", durationMs: Date.now() - tStart };
-  }
-  // Prefer the usage-reported search count; fall back to counting blocks.
+  // Prefer the usage-reported search count; fall back to counting blocks. The
+  // token usage is read once here: this was a 200 response, so it is billed and
+  // its tokens must be reported even when the body then fails validation.
   const searchCallCount = payload.usage?.server_tool_use?.web_search_requests ?? searchBlockCount;
+  const usageFields = {
+    inputTokens: payload.usage?.input_tokens ?? null,
+    outputTokens: payload.usage?.output_tokens ?? null,
+    cacheReadTokens: payload.usage?.cache_read_input_tokens ?? null,
+    cacheCreationTokens: payload.usage?.cache_creation_input_tokens ?? null,
+    searchCallCount,
+  };
+  if (!text) {
+    return { ok: false, reason: "Anthropic returned no text content", durationMs: Date.now() - tStart, billed: true, ...usageFields };
+  }
 
   const validated = parseAndValidate(opts.schema, text);
   if (!validated.ok) {
     log.warn({ ctx: opts.context, reason: validated.reason }, "Anthropic output rejected");
-    return { ok: false, reason: validated.reason, durationMs: Date.now() - tStart, rawText: text };
+    return { ok: false, reason: validated.reason, durationMs: Date.now() - tStart, rawText: text, billed: true, ...usageFields };
   }
   return {
     ok: true,
     value: validated.value,
     durationMs: Date.now() - tStart,
     model: payload.model ?? model,
-    inputTokens: payload.usage?.input_tokens ?? null,
-    outputTokens: payload.usage?.output_tokens ?? null,
-    cacheReadTokens: payload.usage?.cache_read_input_tokens ?? null,
-    cacheCreationTokens: payload.usage?.cache_creation_input_tokens ?? null,
+    inputTokens: usageFields.inputTokens,
+    outputTokens: usageFields.outputTokens,
+    cacheReadTokens: usageFields.cacheReadTokens,
+    cacheCreationTokens: usageFields.cacheCreationTokens,
     consultedUrls,
     searchCallCount,
   };
@@ -202,15 +226,52 @@ export async function callClaudeJson<T>(opts: AnthropicCallOptions<T>): Promise<
   const log = opts.log ?? silentLogger;
   let correction: Correction | undefined;
   let last: AnthropicResult<T> = { ok: false, reason: "no attempt made", durationMs: 0 };
+  // Accumulate the real tokens across both attempts: a first attempt that fails
+  // schema validation still billed its tokens, so the row recorded for this call
+  // must carry the SUM of every billed attempt, never just the final one.
+  const acc = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, search: 0 };
+  let anyBilled = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     last = await callOnce(opts, env, correction);
-    if (last.ok) return last;
+    const billed = last.ok ? true : last.billed === true;
+    if (billed) {
+      anyBilled = true;
+      acc.input += last.inputTokens ?? 0;
+      acc.output += last.outputTokens ?? 0;
+      acc.cacheRead += last.cacheReadTokens ?? 0;
+      acc.cacheCreation += last.cacheCreationTokens ?? 0;
+      acc.search += last.searchCallCount ?? 0;
+    }
+    if (last.ok) {
+      return {
+        ...last,
+        inputTokens: acc.input,
+        outputTokens: acc.output,
+        cacheReadTokens: acc.cacheRead,
+        cacheCreationTokens: acc.cacheCreation,
+        searchCallCount: acc.search,
+      };
+    }
     if (attempt === 0) {
       log.info({ ctx: opts.context, attempt: 1, reason: last.reason }, "Anthropic call retrying");
       // Only a validation miss carries rawText; feed it back so the retry is
       // corrective. Transient HTTP errors retry with the original prompt.
       correction = last.rawText ? { badText: last.rawText, reason: last.reason } : undefined;
     }
+  }
+  // Both attempts failed. If any consumed tokens, surface the summed real spend
+  // and mark it billed so the ledger records the loss honestly; otherwise the
+  // failure was a no-call and stays unbilled.
+  if (anyBilled) {
+    return {
+      ...last,
+      billed: true,
+      inputTokens: acc.input,
+      outputTokens: acc.output,
+      cacheReadTokens: acc.cacheRead,
+      cacheCreationTokens: acc.cacheCreation,
+      searchCallCount: acc.search,
+    };
   }
   return last;
 }

@@ -8,6 +8,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod/v4";
 import { callLocalJson, getExtractionRuntime } from "./local";
+import { callClaudeJson } from "./anthropic";
+import { callGeminiJson } from "./gemini";
 import type { LocalSeatConfig } from "../config";
 
 const schema = z.object({ answer: z.string(), n: z.number() });
@@ -122,6 +124,95 @@ describe("callLocalJson (in-boundary adapter transport)", () => {
     if (!res.ok) return;
     expect(res.value.answer).toBe("after-429");
     expect(received.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// The Phase N cost contract at the client seam: a real token-billed 200 response
+// is marked billed and its tokens are reported even on a schema-validation
+// failure, the corrective retry SUMS the tokens of every billed attempt (never
+// just the last), and a no-call failure (non-2xx, or no provider env) is NOT
+// billed so the ledger never fabricates a zero-cost row.
+describe("billed token accounting (in-boundary client)", () => {
+  it("marks a successful single call billed and reports its real tokens", async () => {
+    const res = await callLocalJson<Answer>({ seat: seat(), system: "S", user: "U", schema });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.inputTokens).toBe(11);
+    expect(res.outputTokens).toBe(7);
+  });
+
+  it("sums tokens across a parse-fail-then-retry so the first attempt is not dropped", async () => {
+    let call = 0;
+    handler = () => {
+      call += 1;
+      return call === 1
+        ? { status: 200, body: chatCompletion({ wrong: "shape" }) }
+        : { status: 200, body: chatCompletion({ answer: "fixed", n: 2 }) };
+    };
+    const res = await callLocalJson<Answer>({ seat: seat(), system: "S", user: "U", schema });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // Both attempts returned a 200 billing 11 in / 7 out: the recorded call must
+    // carry the SUM (22 / 14), never just the final attempt's 11 / 7.
+    expect(res.inputTokens).toBe(22);
+    expect(res.outputTokens).toBe(14);
+  });
+
+  it("does not mark a non-2xx response billed (no token cost to record)", async () => {
+    handler = () => ({ status: 500, body: "upstream boom" });
+    const res = await callLocalJson<Answer>({ seat: seat(), system: "S", user: "U", schema });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.billed).not.toBe(true);
+  });
+
+  it("reports billed tokens when both attempts fail validation (real spend, honest loss)", async () => {
+    handler = () => ({ status: 200, body: chatCompletion({ wrong: "shape" }) });
+    const res = await callLocalJson<Answer>({ seat: seat(), system: "S", user: "U", schema });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.billed).toBe(true);
+    expect(res.inputTokens).toBe(22);
+    expect(res.outputTokens).toBe(14);
+  });
+});
+
+// The no-env case for the external clients: with no provider integration
+// configured the call makes no request at all, so it is not billed and the
+// ledger records nothing. The env is cleared for the call and restored after.
+describe("billed token accounting (external clients, no provider env)", () => {
+  const KEYS = [
+    "AI_INTEGRATIONS_ANTHROPIC_BASE_URL",
+    "AI_INTEGRATIONS_ANTHROPIC_API_KEY",
+    "AI_INTEGRATIONS_GEMINI_BASE_URL",
+    "AI_INTEGRATIONS_GEMINI_API_KEY",
+  ] as const;
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it("anthropic with no env fails unbilled (no request made)", async () => {
+    const res = await callClaudeJson<Answer>({ model: "m", system: "S", user: "U", schema });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.billed).not.toBe(true);
+  });
+
+  it("gemini with no env fails unbilled (no request made)", async () => {
+    const res = await callGeminiJson<Answer>({ model: "m", systemPrompt: "S", userPrompt: "U", schema });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.billed).not.toBe(true);
   });
 });
 

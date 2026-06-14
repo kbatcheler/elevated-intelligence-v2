@@ -13,8 +13,9 @@ import {
 } from "@workspace/db";
 import { z } from "zod";
 import { createAgentCredential } from "../lib/agent/agentCredential";
-import { isProvider } from "../lib/auth/access";
+import { isOwner, isProvider } from "../lib/auth/access";
 import { logger } from "../lib/logger";
+import { assertSeedWithinBudget, BudgetExceededError } from "../lib/pipeline/budget";
 import { seedTenant } from "../lib/pipeline/orchestrator";
 import { requireTenantAccess } from "../middleware/auth";
 
@@ -73,9 +74,14 @@ tenantsRouter.get("/tenants", async (req, res, next) => {
 const seedTenantSchema = z.object({
   url: z.string().url().max(2000),
   mode: z.enum(["full", "express"]).default("full"),
+  // Owner-only: proceed past the global monthly budget ceiling for a prioritised
+  // seed. Honoured only for the owner role (checked below); never bypasses a
+  // per-tenant ceiling.
+  priorityOverride: z.boolean().optional(),
 });
 const refreshTenantSchema = z.object({
   mode: z.enum(["full", "express"]).default("full"),
+  priorityOverride: z.boolean().optional(),
 });
 
 // Create a tenant from a URL and seed it through the cortex. Provider-only:
@@ -101,6 +107,7 @@ tenantsRouter.post("/tenants", async (req, res, next) => {
   }
   try {
     const { url, mode } = parsed.data;
+    const priorityOverride = isOwner(user.role) && parsed.data.priorityOverride === true;
     // Pre-create (or reclaim) the shell so the caller gets an id at once and the
     // tenant shows as seeding in the switcher. seedTenant upserts this same row
     // by URL once the profile stage resolves the real name and scalars.
@@ -110,6 +117,25 @@ tenantsRouter.post("/tenants", async (req, res, next) => {
       .from(tenantsTable)
       .where(eq(tenantsTable.url, url))
       .limit(1);
+
+    // Budget gate, before any shell is created or any model budget is spent. A
+    // brand-new URL has no tenant yet, so only the global monthly ceiling
+    // applies; reclaiming an existing shell also checks that tenant's ceiling.
+    // The owner may override the global refusal for a prioritised seed.
+    try {
+      await assertSeedWithinBudget({
+        tenantId: existing[0]?.id ?? null,
+        priorityOverride,
+        log: logger,
+      });
+    } catch (err) {
+      if (err instanceof BudgetExceededError) {
+        res.status(402).json({ error: "budget_exceeded", scope: err.scope, message: err.message });
+        return;
+      }
+      throw err;
+    }
+
     let tenantId: string;
     if (existing[0]) {
       // A seed is already in flight for this URL. Re-triggering would delete the
@@ -128,7 +154,7 @@ tenantsRouter.post("/tenants", async (req, res, next) => {
         .returning({ id: tenantsTable.id });
       tenantId = inserted[0]!.id;
     }
-    void seedTenant(url, { log: logger, mode }).catch((err) => {
+    void seedTenant(url, { log: logger, mode, priorityOverride }).catch((err) => {
       logger.error(
         { url, err: err instanceof Error ? err.message : String(err) },
         "background tenant seed failed",
@@ -177,8 +203,22 @@ tenantsRouter.post("/tenants/:id/refresh", async (req, res, next) => {
       return;
     }
     const { mode } = parsed.data;
+    const priorityOverride = isOwner(user.role) && parsed.data.priorityOverride === true;
+
+    // Same budget gate as create: the tenant is known here, so both the global
+    // and this tenant's monthly ceiling are checked before any spend.
+    try {
+      await assertSeedWithinBudget({ tenantId, priorityOverride, log: logger });
+    } catch (err) {
+      if (err instanceof BudgetExceededError) {
+        res.status(402).json({ error: "budget_exceeded", scope: err.scope, message: err.message });
+        return;
+      }
+      throw err;
+    }
+
     await db.update(tenantsTable).set({ status: "seeding" }).where(eq(tenantsTable.id, tenantId));
-    void seedTenant(tenant.url, { log: logger, mode }).catch((err) => {
+    void seedTenant(tenant.url, { log: logger, mode, priorityOverride }).catch((err) => {
       logger.error(
         { tenantId, err: err instanceof Error ? err.message : String(err) },
         "background tenant refresh failed",

@@ -45,7 +45,20 @@ export type GeminiJsonResult<T> =
       groundingChunks: Array<{ uri: string; title: string }>;
       searchCallCount: number;
     }
-  | { ok: false; reason: string; durationMs: number; rawText?: string };
+  | {
+      ok: false;
+      reason: string;
+      durationMs: number;
+      rawText?: string;
+      // Present when a 200 response was received before the failure (a billed
+      // call whose output failed schema validation, or returned no text): the
+      // tokens were really spent and must still be costed. Absent for a transport
+      // error or a missing-env no-call.
+      billed?: boolean;
+      inputTokens?: number | null;
+      outputTokens?: number | null;
+      searchCallCount?: number;
+    };
 
 // The model's own rejected output and the schema error, fed back on retry.
 type Correction = { badText: string; reason: string };
@@ -128,9 +141,22 @@ async function callOnce<T>(
     opts.context,
   );
 
+  // Read token usage once here: this was a 200 response, so it is billed and its
+  // tokens must be reported even when the body is empty or then fails validation.
+  const usage = response.usageMetadata;
+  const inputTokens = usage?.promptTokenCount ?? null;
+  const outputTokens = usage?.candidatesTokenCount ?? null;
+
   const text = (response.text ?? "").trim();
   if (!text) {
-    return { ok: false, reason: "Gemini returned no text content", durationMs: Date.now() - tStart };
+    return {
+      ok: false,
+      reason: "Gemini returned no text content",
+      durationMs: Date.now() - tStart,
+      billed: true,
+      inputTokens,
+      outputTokens,
+    };
   }
 
   const candidate = response.candidates?.[0];
@@ -138,20 +164,28 @@ async function callOnce<T>(
   const webSearchQueries = gm?.["webSearchQueries"];
   const searchCallCount = Array.isArray(webSearchQueries) ? webSearchQueries.length : 0;
   const groundingChunks = extractGroundingUrls(candidate?.groundingMetadata?.groundingChunks);
-  const usage = response.usageMetadata;
 
   const validated = parseAndValidate(opts.schema, text);
   if (!validated.ok) {
     log.warn({ ctx: opts.context, reason: validated.reason }, "Gemini output rejected");
-    return { ok: false, reason: validated.reason, durationMs: Date.now() - tStart, rawText: text };
+    return {
+      ok: false,
+      reason: validated.reason,
+      durationMs: Date.now() - tStart,
+      rawText: text,
+      billed: true,
+      inputTokens,
+      outputTokens,
+      searchCallCount,
+    };
   }
   return {
     ok: true,
     value: validated.value,
     durationMs: Date.now() - tStart,
     model: opts.model,
-    inputTokens: usage?.promptTokenCount ?? null,
-    outputTokens: usage?.candidatesTokenCount ?? null,
+    inputTokens,
+    outputTokens,
     groundingChunks,
     searchCallCount,
   };
@@ -172,19 +206,39 @@ export async function callGeminiJson<T>(opts: GeminiJsonOptions<T>): Promise<Gem
   const log = opts.log ?? silentLogger;
   let correction: Correction | undefined;
   let last: GeminiJsonResult<T> = { ok: false, reason: "no attempt made", durationMs: 0 };
+  // Accumulate the real tokens across both attempts: a first attempt that fails
+  // schema validation still billed its tokens, so the row recorded for this call
+  // must carry the SUM of every billed attempt, never just the final one.
+  const acc = { input: 0, output: 0, search: 0 };
+  let anyBilled = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       last = await callOnce(opts, client, correction);
     } catch (e) {
       last = { ok: false, reason: e instanceof Error ? e.message : String(e), durationMs: 0 };
     }
-    if (last.ok) return last;
+    const billed = last.ok ? true : last.billed === true;
+    if (billed) {
+      anyBilled = true;
+      acc.input += last.inputTokens ?? 0;
+      acc.output += last.outputTokens ?? 0;
+      acc.search += last.searchCallCount ?? 0;
+    }
+    if (last.ok) {
+      return { ...last, inputTokens: acc.input, outputTokens: acc.output, searchCallCount: acc.search };
+    }
     if (attempt === 0) {
       log.info({ ctx: opts.context, attempt: 1, reason: last.reason }, "Gemini call retrying");
       // Only a validation miss carries rawText; feed it back so the retry is
       // corrective. Transient SDK errors retry with the original prompt.
       correction = last.rawText ? { badText: last.rawText, reason: last.reason } : undefined;
     }
+  }
+  // Both attempts failed. If any consumed tokens, surface the summed real spend
+  // and mark it billed so the ledger records the loss honestly; otherwise the
+  // failure was a no-call and stays unbilled.
+  if (anyBilled) {
+    return { ...last, billed: true, inputTokens: acc.input, outputTokens: acc.output, searchCallCount: acc.search };
   }
   return last;
 }

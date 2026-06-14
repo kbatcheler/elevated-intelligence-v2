@@ -50,6 +50,9 @@ function buildTelemetry(
     cacheReadTokens?: number | null;
     cacheCreationTokens?: number | null;
     searchCallCount?: number;
+    // True only when a real, token-billed provider response was received. Left
+    // false (the default) for a no-call failure so the ledger never costs it.
+    billed?: boolean;
   },
   // The model that actually ran. The external seats resolve it from config; the
   // in-boundary Lens passes its env-supplied local model so telemetry honestly
@@ -60,6 +63,7 @@ function buildTelemetry(
     seat: STAGE_CONFIG[stage].role,
     model: modelOverride ?? modelForStage(stage),
     latencyMs: p.durationMs,
+    billed: p.billed === true,
     ...(p.inputTokens != null ? { inputTokens: p.inputTokens } : {}),
     ...(p.outputTokens != null ? { outputTokens: p.outputTokens } : {}),
     ...(p.cacheReadTokens != null ? { cacheReadTokens: p.cacheReadTokens } : {}),
@@ -82,8 +86,34 @@ async function runAnthropicStage<T>(
     log: args.log,
     context: stage,
   });
-  if (!res.ok) return { ok: false, reason: res.reason, telemetry: buildTelemetry(stage, { durationMs: res.durationMs }) };
-  return { ok: true, output: res.value, telemetry: buildTelemetry(stage, res) };
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: res.reason,
+      telemetry: buildTelemetry(stage, {
+        durationMs: res.durationMs,
+        inputTokens: res.inputTokens,
+        outputTokens: res.outputTokens,
+        cacheReadTokens: res.cacheReadTokens,
+        cacheCreationTokens: res.cacheCreationTokens,
+        searchCallCount: res.searchCallCount,
+        billed: res.billed,
+      }),
+    };
+  }
+  return {
+    ok: true,
+    output: res.value,
+    telemetry: buildTelemetry(stage, {
+      durationMs: res.durationMs,
+      inputTokens: res.inputTokens,
+      outputTokens: res.outputTokens,
+      cacheReadTokens: res.cacheReadTokens,
+      cacheCreationTokens: res.cacheCreationTokens,
+      searchCallCount: res.searchCallCount,
+      billed: true,
+    }),
+  };
 }
 
 async function runGeminiStage<T>(
@@ -100,8 +130,30 @@ async function runGeminiStage<T>(
     log: args.log,
     context: stage,
   });
-  if (!res.ok) return { ok: false, reason: res.reason, telemetry: buildTelemetry(stage, { durationMs: res.durationMs }) };
-  return { ok: true, output: res.value, telemetry: buildTelemetry(stage, res) };
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: res.reason,
+      telemetry: buildTelemetry(stage, {
+        durationMs: res.durationMs,
+        inputTokens: res.inputTokens,
+        outputTokens: res.outputTokens,
+        searchCallCount: res.searchCallCount,
+        billed: res.billed,
+      }),
+    };
+  }
+  return {
+    ok: true,
+    output: res.value,
+    telemetry: buildTelemetry(stage, {
+      durationMs: res.durationMs,
+      inputTokens: res.inputTokens,
+      outputTokens: res.outputTokens,
+      searchCallCount: res.searchCallCount,
+      billed: true,
+    }),
+  };
 }
 
 // The honest unconfigured state: connected mode routes the Lens here, but no
@@ -139,14 +191,27 @@ async function runLocalStage<T>(
     context: stage,
   });
   if (!res.ok) {
-    return { ok: false, reason: res.reason, telemetry: buildTelemetry(stage, { durationMs: res.durationMs }, runtime.model) };
+    return {
+      ok: false,
+      reason: res.reason,
+      telemetry: buildTelemetry(
+        stage,
+        {
+          durationMs: res.durationMs,
+          inputTokens: res.inputTokens,
+          outputTokens: res.outputTokens,
+          billed: res.billed,
+        },
+        runtime.model,
+      ),
+    };
   }
   return {
     ok: true,
     output: res.value,
     telemetry: buildTelemetry(
       stage,
-      { durationMs: res.durationMs, inputTokens: res.inputTokens, outputTokens: res.outputTokens },
+      { durationMs: res.durationMs, inputTokens: res.inputTokens, outputTokens: res.outputTokens, billed: true },
       runtime.model,
     ),
   };

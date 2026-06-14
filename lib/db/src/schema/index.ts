@@ -38,3 +38,5 @@ export * from "./kmsLocalKeys";
 export * from "./accessGrantEvents";
 // Per-tenant credential for the in-client extraction agent (Part 3, Tier 1).
 export * from "./edgeAgents";
+// Cost and token observability (Phase N): one measured row per real model call.
+export * from "./modelUsage";
