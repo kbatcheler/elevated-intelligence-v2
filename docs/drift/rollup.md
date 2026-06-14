@@ -1,11 +1,11 @@
-# Drift rollup: Phases A through I
+# Drift rollup: Phases A through J
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase I (connected mode, the in-client edge agent, and the
-runtime no-write guard milestone).
+Last updated after Phase J (the split pipeline, Tier 2, the Lens in-boundary; gated
+but not a milestone).
 
 ## Phase verdicts
 
@@ -20,6 +20,7 @@ runtime no-write guard milestone).
 | G | Parity Gate and Core Build Report | Pass | yes (paused for owner review) |
 | H | Connector Framework and Registry | Pass | yes (paused for owner review) |
 | I | Connected Mode, Edge Agent, and Runtime No-Write Guard | Pass | yes (paused for owner review) |
+| J | Split Pipeline (Tier 2, the Lens In-Boundary) | Pass | no (gated, paused for owner confirmation) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -181,8 +182,40 @@ runtime no-write guard milestone).
   write during a long extraction, but no such live write path exists, so it is
   recorded, not active. Edge connectors are declared not implemented; the runner is
   proven with an injected stub over real mutual TLS, not faked telemetry.
+- The Lens is the in-boundary set; the Synthesist and adversarial seats stay external
+  (J). In connected mode only perceive and hypothesise run in-boundary on the local
+  seat, because the Lens is where the client's own signals are first interpreted; the
+  later external seats operate on the already-derived Lens output and the math-only
+  grounding, never raw client content, so they can stay on the stronger external
+  models. The split is a no-op in outside_in mode.
+- Fail loud, never a silent external fallback (J, the architect's Option C). A
+  connected run with no local seat configured returns "available, not connected"
+  rather than quietly sending the sensitive stages to an external provider. Honesty
+  over availability; the operator must configure the boundary model deliberately.
+- The local model identifier is read from env, not a source literal (J). Keeps the
+  existing no-literal-model-string invariant intact and `SEATS` at the three external
+  seats, while letting the operator pick any self-hosted model at deploy time via
+  `LOCAL_MODEL_BASE_URL`, `LOCAL_MODEL_MODEL`, and an optional `LOCAL_MODEL_API_KEY`.
+- One narrow seam (`ExtractionZoneRuntime`) for every in-boundary call, the TEE not
+  built (J). The cortex never knows whether the call is a plain HTTP adapter or a
+  future attested TEE runner, which is what lets the TEE drop in later with no stage
+  or orchestrator change. The in-boundary guarantee this phase is deployment-
+  topological (the model runs on operator-controlled infrastructure), not yet
+  cryptographically attested; the local endpoint is a trusted deployment target, and
+  the adapter never logs an upstream error body and never exposes the api key through
+  the seam.
 
 ## No faked output, any phase
+
+Phase J added no faked output and no faked telemetry. The in-boundary adapter is a
+real HTTP client, proven against a real `node:http` server; when no local model is
+configured `getExtractionRuntime` returns null and the connected Lens fails loud with
+"available, not connected" (telemetry model "local: not connected") rather than
+fabricating an answer or silently falling back to an external provider. The split-
+routing tests use an injected runtime to assert routing, not to stand in for real
+output that was required this phase, and the external seats still receive only the
+profile, the Lens output, and the math-only derived-signal grounding. outside_in is
+byte-for-byte unchanged. Phase I below holds, and the earlier phases under it.
 
 Phase I added no faked telemetry: no edge connector is implemented, every edge
 connector returns the honest "available, not connected" error, and the edge-agent

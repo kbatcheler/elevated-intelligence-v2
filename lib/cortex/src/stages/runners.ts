@@ -5,8 +5,10 @@
 
 import { callClaudeJson, type SystemBlock } from "../clients/anthropic";
 import { callGeminiJson } from "../clients/gemini";
-import { modelForStage, STAGE_CONFIG, type StageName } from "../config";
+import { getExtractionRuntime } from "../clients/local";
+import { modelForStage, runsInBoundary, STAGE_CONFIG, type StageName } from "../config";
 import type { HomepageContext } from "../grounding/homepageContext";
+import { DEFAULT_STAGE_CONTEXT, type StageContext } from "./extractionZone";
 import { silentLogger, type Logger } from "../logger";
 import { buildProfileUser, PROFILE_SYSTEM_PROMPT } from "../prompts/profile";
 import {
@@ -49,10 +51,14 @@ function buildTelemetry(
     cacheCreationTokens?: number | null;
     searchCallCount?: number;
   },
+  // The model that actually ran. The external seats resolve it from config; the
+  // in-boundary Lens passes its env-supplied local model so telemetry honestly
+  // records which model interpreted the signals.
+  modelOverride?: string,
 ): StageTelemetry {
   return {
     seat: STAGE_CONFIG[stage].role,
-    model: modelForStage(stage),
+    model: modelOverride ?? modelForStage(stage),
     latencyMs: p.durationMs,
     ...(p.inputTokens != null ? { inputTokens: p.inputTokens } : {}),
     ...(p.outputTokens != null ? { outputTokens: p.outputTokens } : {}),
@@ -98,6 +104,54 @@ async function runGeminiStage<T>(
   return { ok: true, output: res.value, telemetry: buildTelemetry(stage, res) };
 }
 
+// The honest unconfigured state: connected mode routes the Lens here, but no
+// in-boundary model is configured, so the run fails loudly rather than leaking
+// the sensitive stage to an external provider.
+const LOCAL_SEAT_UNCONFIGURED =
+  "local extraction seat available, not connected: set LOCAL_MODEL_BASE_URL and LOCAL_MODEL_MODEL to run the Lens in-boundary";
+
+// Run a Lens stage in-boundary (Tier 2, the split pipeline). Uses the injected
+// runtime when present (tests and the future TEE runner), otherwise the
+// configured local runtime. There is no web search: the in-boundary Lens grounds
+// on the client's own derived signals, not the public web.
+async function runLocalStage<T>(
+  stage: StageName,
+  ctx: StageContext,
+  args: { system: string | SystemBlock[]; user: string; schema: ZodType<T>; maxTokens?: number; log: Logger },
+): Promise<StageResult<T>> {
+  const runtime = ctx.extractionRuntime ?? getExtractionRuntime();
+  if (!runtime) {
+    return {
+      ok: false,
+      reason: LOCAL_SEAT_UNCONFIGURED,
+      telemetry: buildTelemetry(stage, { durationMs: 0 }, "local: not connected"),
+    };
+  }
+  // The in-boundary adapter takes a single system string; flatten any cached
+  // system blocks (provider-specific cache markers do not apply locally).
+  const system = typeof args.system === "string" ? args.system : args.system.map((b) => b.text).join("\n\n");
+  const res = await runtime.callJson<T>({
+    system,
+    user: args.user,
+    schema: args.schema,
+    maxTokens: args.maxTokens,
+    log: args.log,
+    context: stage,
+  });
+  if (!res.ok) {
+    return { ok: false, reason: res.reason, telemetry: buildTelemetry(stage, { durationMs: res.durationMs }, runtime.model) };
+  }
+  return {
+    ok: true,
+    output: res.value,
+    telemetry: buildTelemetry(
+      stage,
+      { durationMs: res.durationMs, inputTokens: res.inputTokens, outputTokens: res.outputTokens },
+      runtime.model,
+    ),
+  };
+}
+
 // ── profile (tenant scope) ──────────────────────────────────────────────────
 export async function runProfile(
   rawUrl: string,
@@ -123,8 +177,14 @@ export function runPerceive(
   layer: LayerDescriptor,
   log: Logger = silentLogger,
   grounding?: LayerGrounding,
+  // outside_in (the default) keeps the Lens on the external reasoner, unchanged.
+  // connected routes it in-boundary onto the local seat.
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<PerceiveOutput>> {
   const { system, user } = buildPerceive(profile, layer, grounding);
+  if (runsInBoundary("perceive", ctx.dataMode)) {
+    return runLocalStage("perceive", ctx, { system, user, schema: perceiveOutputSchema, log });
+  }
   return runAnthropicStage("perceive", { system, user, schema: perceiveOutputSchema, log });
 }
 
@@ -134,8 +194,12 @@ export function runHypothesise(
   perceive: PerceiveOutput,
   log: Logger = silentLogger,
   grounding?: LayerGrounding,
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<HypothesisedLayer>> {
   const { system, user } = buildHypothesise(profile, layer, perceive, grounding);
+  if (runsInBoundary("hypothesise", ctx.dataMode)) {
+    return runLocalStage("hypothesise", ctx, { system, user, schema: hypothesisedLayerSchema, log });
+  }
   return runAnthropicStage("hypothesise", { system, user, schema: hypothesisedLayerSchema, log });
 }
 

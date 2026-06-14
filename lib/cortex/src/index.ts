@@ -10,14 +10,19 @@ export {
   STAGE_CONFIG,
   LAYER_STAGES,
   VERIFICATION_CHANNELS,
+  IN_BOUNDARY_STAGES,
   modelForStage,
   seatForStage,
+  runsInBoundary,
+  resolveLocalSeat,
   type Provider,
   type SeatKey,
   type SeatConfig,
   type StageName,
   type StageConfig,
   type VerificationChannel,
+  type CortexDataMode,
+  type LocalSeatConfig,
 } from "./config";
 
 // Logger contract.
@@ -105,3 +110,16 @@ export {
 } from "./stages/runners";
 export { assembleLayerContent, type AssembleResult } from "./stages/assemble";
 export { type StageResult, type StageTelemetry } from "./stages/types";
+
+// The extraction-zone seam (Tier 2, the split pipeline) and the default
+// in-boundary adapter. The orchestrator threads StageContext through the Lens
+// stages; a future TEE runner implements ExtractionZoneRuntime and is dropped in
+// here without touching any stage or orchestrator code.
+export {
+  DEFAULT_STAGE_CONTEXT,
+  type ExtractionRequest,
+  type ExtractionResult,
+  type ExtractionZoneRuntime,
+  type StageContext,
+} from "./stages/extractionZone";
+export { callLocalJson, getExtractionRuntime, type LocalCallOptions } from "./clients/local";

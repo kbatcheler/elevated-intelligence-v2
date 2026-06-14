@@ -30,10 +30,12 @@ import {
   STAGE_CONFIG,
   type ChallengeOutput,
   type ConfounderOutput,
+  type CortexDataMode,
   type EnrichmentOutput,
   type HypothesisedLayer,
   type LayerDescriptor,
   type LayerGrounding,
+  type StageContext,
   type NarrateOutput,
   type PerceiveOutput,
   type Logger,
@@ -333,6 +335,11 @@ async function runLayer(
   // outside_in mode, where it must change nothing: the runners append a
   // grounding block only when this is present, so the prompts stay identical.
   grounding?: LayerGrounding,
+  // The grounding regime for this run. outside_in (the default) keeps every stage
+  // external and the call path byte-for-byte unchanged; connected routes the two
+  // Lens stages in-boundary onto the local seat while the external Synthesist and
+  // adversarial seats stay external on de-identified signals.
+  dataMode: CortexDataMode = "outside_in",
 ): Promise<LayerOutcome> {
   const resume = opts.resume !== false;
   const mode = opts.mode ?? "full";
@@ -363,12 +370,18 @@ async function runLayer(
   const ctx = await ensureRun(tenantId, layer.key, effectiveResume);
   const log = opts.log;
 
+  // The sensitivity routing for the two Lens stages. In connected mode runsInBoundary
+  // (inside the runners) sends these to the local seat resolved from the env; in
+  // outside_in mode dataMode is "outside_in" and the runners take the external path
+  // unchanged. The runtime is left to default resolution; tests inject their own.
+  const stageCtx: StageContext = { dataMode };
+
   try {
     const perceive = await executeStage<PerceiveOutput>(ctx, "perceive", () =>
-      runPerceive(profile, layer, log, grounding),
+      runPerceive(profile, layer, log, grounding, stageCtx),
     );
     const hypothesise = await executeStage<HypothesisedLayer>(ctx, "hypothesise", () =>
-      runHypothesise(profile, layer, perceive, log, grounding),
+      runHypothesise(profile, layer, perceive, log, grounding, stageCtx),
     );
     // The reduced express chain skips the two adversarial sub-stages on a
     // non-priority layer. narrate and score still run, but with empty confounder
@@ -561,6 +574,9 @@ async function runLayers(
   registry: LayerDescriptor[],
   opts: SeedOptions,
   groundingByLayer?: Map<string, LayerGrounding>,
+  // The grounding regime for this seed. outside_in (the default) leaves every
+  // stage external; connected routes the two Lens stages in-boundary per layer.
+  dataMode: CortexDataMode = "outside_in",
 ): Promise<LayerOutcome[]> {
   const mode = opts.mode ?? "full";
   const layerByKey = new Map(registry.map((l) => [l.key, l] as const));
@@ -587,6 +603,7 @@ async function runLayers(
         layer,
         { ...opts, mode: job.payload.mode },
         groundingByLayer?.get(layer.key),
+        dataMode,
       );
       outcomes.set(layer.key, outcome);
       await markSeedJob(job.id, outcome.status === "error" ? "error" : "done", {
@@ -710,6 +727,7 @@ async function seedConnectedTenant(
     registry,
     { ...opts, resume: false },
     groundingByLayer,
+    "connected",
   );
 
   const anyError = layers.some((o) => o.status === "error");

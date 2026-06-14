@@ -268,3 +268,101 @@ no-write guard with the expanded import-boundary tests.
 Phase I is a milestone hard-stop. Execution pauses here for owner review before Tier
 2 (the split extraction and synthesis pipeline), Tier 3, and the portal
 connected-mode screens. Do not auto-advance.
+
+## Phase J: The split pipeline (Tier 2, the Lens in-boundary)
+
+### What was built
+
+- **The extraction-zone seam** (`lib/cortex/src/stages/extractionZone.ts`). A
+  type-only contract: `ExtractionRequest`, `ExtractionResult`,
+  `ExtractionZoneRuntime` (a single `callJson` plus a readable `model` and
+  `endpoint` for telemetry, never a secret), and a per-run `StageContext`
+  (`dataMode` plus an optional `extractionRuntime`) with a `DEFAULT_STAGE_CONTEXT`
+  of outside_in. The cortex depends only on this interface. The module is the
+  documented TEE seam: a future confidential-computing runner that runs the same
+  call inside a trusted execution environment, with attestation, implements this
+  interface and drops in with no change to any stage or the orchestrator.
+- **The in-boundary adapter** (`lib/cortex/src/clients/local.ts`). `callLocalJson`
+  posts to an OpenAI-compatible `/v1/chat/completions` endpoint over the Node global
+  `fetch` (the de-facto interface every self-hosted server speaks: vLLM, Ollama,
+  TGI, llama.cpp), so no dependency is added. It requests strict JSON mode, sends a
+  Bearer token only when an api key is configured, honours a 429 Retry-After across
+  sub-attempts, and runs one self-correcting retry that feeds the model its own
+  rejected output and the schema error. There is no web-search or tool option by
+  construction: the in-boundary Lens grounds on the client's own derived signals,
+  not the public web. `HttpExtractionRuntime` wraps it as the default
+  `ExtractionZoneRuntime`; `getExtractionRuntime(env)` returns it when a local model
+  is configured and null otherwise.
+- **The local seat resolver** (`lib/cortex/src/config.ts`). A fourth provider,
+  `local`, plus `resolveLocalSeat(env)` reading `LOCAL_MODEL_BASE_URL`,
+  `LOCAL_MODEL_MODEL`, and an optional `LOCAL_MODEL_API_KEY`, returning null when
+  unconfigured. The seat's model is supplied at runtime, never a literal in source,
+  so the no-literal-model-string invariant still holds and `SEATS` stays the three
+  external seats. `CortexDataMode`, `IN_BOUNDARY_STAGES` (perceive, hypothesise),
+  and `runsInBoundary(stage, dataMode)` name the split.
+- **The Lens routing** (`lib/cortex/src/stages/runners.ts`). `runPerceive` and
+  `runHypothesise` gained a trailing `StageContext` defaulting to outside_in. When
+  `runsInBoundary` is true they call `runLocalStage`, which uses the injected
+  runtime (tests and the future TEE runner) or the configured local runtime; when
+  none is configured it fails loud with "available, not connected" and never falls
+  back to an external provider. Telemetry records the local model that actually ran.
+  Every other runner and the outside_in path are untouched.
+- **The orchestrator thread**
+  (`artifacts/api-server/src/lib/pipeline/orchestrator.ts`). `runLayer` and
+  `runLayers` carry a `dataMode` (default outside_in) and build the `StageContext`
+  for the two Lens stages only. `seedConnectedTenant` passes "connected"; the
+  outside_in seed passes nothing and is unchanged.
+
+### What runs where
+
+- In connected mode the two Lens stages (perceive, hypothesise) run in-boundary on
+  the local seat. The external Synthesist (narrate), the adversarial seats (confound,
+  challenge), and the Evaluator and Enrichment (score, hero, peers, supplements) stay
+  on their external models and receive only the profile, the in-boundary Lens output,
+  and the math-only derived-signal grounding, never raw client content.
+- In outside_in mode every stage runs externally exactly as before. The split is a
+  no-op on that path.
+
+### The TEE seam, stated honestly
+
+- The TEE is not built. The seam is: the cortex calls `ExtractionZoneRuntime`, and
+  the only implementation today is a plain HTTP adapter to a self-hosted model. The
+  in-boundary guarantee in this phase is deployment-topological (the model runs on
+  infrastructure the operator controls), not yet cryptographically attested. A later
+  confidential-computing runner implements the same interface, with hardware
+  attestation that only approved code touched the data, and is dropped in with no
+  change to any stage or the orchestrator. That single seam is the deliverable.
+- The local model endpoint is a trusted deployment target. The adapter never logs an
+  upstream error body (a local server could echo the sensitive prompt) and never
+  exposes the api key through the seam. The expected deployment is a loopback,
+  private-network, or operator-controlled HTTPS endpoint; a misconfigured public
+  endpoint would be an operator error, not a code path.
+
+### Subprocessor list
+
+- Unchanged in shape, narrowed in connected mode. With the local seat configured,
+  the most sensitive interpretation steps (the Lens) run inside the boundary, and the
+  external model subprocessors see only de-identified, already-derived signals and
+  the Lens output. No new hosted subprocessor is introduced.
+
+### Verification
+
+- Typecheck and build are green across the workspace. The full suite is green; cortex
+  is 66 (new this phase: the in-boundary adapter proven against a real `node:http`
+  server, and the split-routing tests with an injected runtime), api-server 96.
+- outside_in is unchanged: the grounding regression test still proves the
+  no-grounding prompts are byte-for-byte identical, and the split routers take the
+  external path unchanged when dataMode is outside_in (proven by a test that the
+  local runtime is never consulted in outside_in mode).
+- Fail-loud honesty: an unconfigured connected Lens returns "available, not
+  connected" with no silent external fallback, proven by test.
+- Zero new npm dependencies (workspace packages, Node built-ins, and the global fetch
+  only).
+- Long-dash sweep zero across source (the guard) and data (a row-cast sweep over all
+  22 public tables returns zero em-dash and en-dash hits).
+
+### Gate
+
+Phase J is not a milestone, but the protocol gates every phase. Execution pauses here
+for owner confirmation before Tier 3 (Phase K) and the portal connected-mode screens
+(Phase L). Do not auto-advance.
