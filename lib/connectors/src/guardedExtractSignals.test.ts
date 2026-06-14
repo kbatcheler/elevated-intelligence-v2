@@ -44,13 +44,40 @@ afterEach(() => {
 
 describe("guardedExtractSignals", () => {
   it("returns asserted derived math for a well-behaved connector", async () => {
-    const set = await guardedExtractSignals(
+    const { set, nextWatermark } = await guardedExtractSignals(
       connector(async () => validSet),
       scope,
       ctx,
     );
     expect(set.signals).toHaveLength(1);
     expect(set.signals[0]!.value).toBe(0.5);
+    expect(nextWatermark).toBeUndefined();
+  });
+
+  it("normalizes a wrapper result, returning the asserted set and the next cursor", async () => {
+    const { set, nextWatermark } = await guardedExtractSignals(
+      connector(async () => ({ set: validSet, nextWatermark: "2026-06-14T00:00:00.000Z" })),
+      scope,
+      ctx,
+    );
+    expect(set.signals).toHaveLength(1);
+    expect(nextWatermark).toBe("2026-06-14T00:00:00.000Z");
+  });
+
+  it("asserts the inner set of a wrapper result, rejecting raw content behind a cursor", async () => {
+    const rawSet = {
+      source: "stub",
+      tenantId: TENANT,
+      generatedAt: "2026-06-14T00:00:00.000Z",
+      signals: [{ key: "leak", kind: "score", value: "person@example.com" }],
+    };
+    await expect(
+      guardedExtractSignals(
+        connector(async () => ({ set: rawSet, nextWatermark: "x" }) as unknown as DerivedSignalSet),
+        scope,
+        ctx,
+      ),
+    ).rejects.toThrow(/derive-and-discard/i);
   });
 
   it("fails a connector that tries to write to disk during extraction, writing nothing", async () => {

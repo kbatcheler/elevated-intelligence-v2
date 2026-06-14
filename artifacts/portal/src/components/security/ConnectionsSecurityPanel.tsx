@@ -4,6 +4,7 @@ import { useAuth } from "../../lib/AuthContext";
 import { fetchKeyStatus } from "../../lib/securityApi";
 import { ErrorState, SectionHeading, SkeletonLines } from "../primitives";
 import { ConnectedPill, KeyStatusPill } from "./shared";
+import { ConnectorHealthSection } from "./ConnectorHealthSection";
 
 type State =
   | { kind: "loading" }
@@ -96,6 +97,8 @@ export function ConnectionsSecurityPanel({ tenantId }: { tenantId: string }) {
           </div>
         ))}
       </div>
+
+      <ConnectorHealthSection tenantId={tenantId} />
     </div>
   );
 }

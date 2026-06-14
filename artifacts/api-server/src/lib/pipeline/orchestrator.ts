@@ -60,6 +60,8 @@ import { CryptoShreddedError } from "../security/errors";
 import { decryptSignalValue } from "../security/signalCrypto";
 import { getTenantKey } from "../security/tenantKeyService";
 import { appendEntry } from "../provenance/ledger";
+import { getAlerter } from "../alerts/alerter";
+import { captureError } from "../observability/sentryReporter";
 import { assertSeedWithinBudget } from "./budget";
 import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } from "./queue";
 import { recordModelUsageSafe } from "./usage";
@@ -548,6 +550,32 @@ async function runLayer(
       .set({ status: "error", finishedAt: new Date(), error: stripDashes(reason) })
       .where(eq(tenantPipelineRunsTable.id, ctx.runId));
     log.error({ tenantId, layerKey: layer.key, reason }, "layer run failed");
+    // Phase P: record the failure on the alert seam and capture it to the error
+    // aggregator. Both are best-effort: a failure here must never mask or alter
+    // the original layer failure being returned below.
+    try {
+      await getAlerter().emit({
+        type: "seed_run_failed",
+        severity: "critical",
+        tenantId,
+        entityType: "pipeline_run",
+        entityId: ctx.runId,
+        message: stripDashes("seed layer run failed: " + layer.key + ": " + reason),
+        details: { layerKey: layer.key, reason: stripDashes(reason).slice(0, 500) },
+      });
+    } catch (alertErr) {
+      log.error(
+        { reason: alertErr instanceof Error ? alertErr.message : String(alertErr) },
+        "seed_run_failed alert emit failed",
+      );
+    }
+    await captureError(e, {
+      subsystem: "orchestrator",
+      tenantId,
+      layerKey: layer.key,
+      runId: ctx.runId,
+      level: "error",
+    });
     return {
       layerKey: layer.key,
       status: "error",

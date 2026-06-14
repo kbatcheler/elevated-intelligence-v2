@@ -223,6 +223,11 @@ export function createWarehouseConnector(key: string): Connector {
       scope: ExtractionScope,
       ctx: ConnectorContext,
     ): Promise<DerivedSignalSet> {
+      // This connector computes whole-table aggregates, which have no honest
+      // incremental form (an aggregate of only new rows is a different number,
+      // not a continuation). Its descriptor therefore declares incremental
+      // unsupported, and it does a full derive on every refresh, ignoring any
+      // scope.watermark. That is the honest fallback the runtime expects.
       const parsed = warehouseConfigSchema.safeParse(scope.config);
       if (!parsed.success) {
         throw new Error(

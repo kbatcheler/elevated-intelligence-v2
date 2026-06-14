@@ -1,13 +1,16 @@
-# Drift rollup: Phases A through N
+# Drift rollup: Phases A through Q
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase N (the first phase of Stage 3: cost and token observability,
-a real per-call `model_usage` ledger priced from real tokens at configured list-price
-rates, an owner-only Spend console, and env-backed monthly budget caps; a build phase,
-gated, not a milestone).
+Last updated after Phase Q (secrets vault: a zero-SDK GCP Secret Manager REST adapter behind
+the existing `SecretStore` seam that is "available, not connected" until `GCP_PROJECT_ID` is
+set, provider selection via `SECRET_STORE_PROVIDER`, every runtime secret resolved by name
+through the store rather than from `process.env` at the call site, the KMS key ref kept on
+its own separate boundary by design, and an acceptance test that sweeps every public text
+and jsonb column plus `.replit` for a resolved sentinel and finds none; a build phase, gated,
+the last of the autonomous O-P-Q run, so execution stops for owner review after it).
 
 ## Phase verdicts
 
@@ -27,6 +30,9 @@ gated, not a milestone).
 | L | Connected Portal Security Surfaces (Posture, Connections, Break-glass, Provenance) | Pass | no (gated, paused for owner review) |
 | M | Stage 2 Full Verification and the Build-Report Append | Pass | no (gated, paused for owner review) |
 | N | Cost and Token Observability | Pass | no (gated, paused for owner review) |
+| O | Connector Operational Reality | Pass | no (gated, autonomous O-P-Q run) |
+| P | Observability and Alerting | Pass | no (gated, autonomous O-P-Q run) |
+| Q | Secrets Vault | Pass | no (gated, autonomous O-P-Q run; owner review after Q) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -47,6 +53,12 @@ gated, not a milestone).
   horizontal scaling. Note: the SEED pipeline no longer uses an in-module limiter,
   it uses the Postgres-backed `pipeline_jobs` claim queue (F); this caveat is now
   scoped to the auth rate limiter only. Captured in `docs/deploy-readiness.md`.
+- Connector rate-limit token buckets are in-memory and per process (O). The
+  per-connection token bucket and the throttle-retry state live in process, like the
+  auth limiter; on more than one instance each keeps its own bucket, so the effective
+  quota multiplies by the instance count. Pin connector refresh to one worker or move
+  the bucket state to a shared store before scaling. Captured in
+  `docs/deploy-readiness.md`.
 - SESSION_SECRET coupling (D). PIN code hashes and session signatures both derive
   from it, so rotating it invalidates all sessions and all outstanding PINs at
   once. Operational caveat, captured in `docs/deploy-readiness.md`.
@@ -279,6 +291,46 @@ gated, not a milestone).
   the global ceiling only, never the per-tenant ceiling.
 
 ## No faked output, any phase
+
+Phase Q added no faked output and no faked telemetry, and where a real managed backend is not
+connected it ships an honest adapter rather than a fake. The GCP Secret Manager adapter
+constructs without validating anything and, with no `GCP_PROJECT_ID`, the first resolution
+throws a precise "available, not connected" error rather than returning an empty value or
+crashing the boot; with a project and token configured it performs real REST calls. The
+default env-backed store resolves secrets from the platform-injected environment, the
+legitimate durable home, and never invents a value. `EnvSecretStore.set`/`.delete` mutate the
+in-process environment only and say so (honest by design, not a silent durable write). The
+acceptance is proven, not asserted: a unique sentinel resolved through an injected store
+during a real refresh is swept for across every public text and jsonb column and the
+repo-root `.replit`, and the count is zero. Phase P below holds, and the earlier phases under
+it.
+
+Phase P added no faked output and no faked telemetry, and where a real external sink is not
+connected it ships an honest adapter rather than a fake. With no `SENTRY_DSN` the error
+reporter is a no-op ("available, not connected") and `captureError` invents no envelope;
+with no Slack or webhook env the notifier delivers to the log sink and never fabricates an
+alert (it only ever delivers a row an emitter actually recorded, claimed exactly once with
+`FOR UPDATE SKIP LOCKED`). The Operations route reads real run, queue, and alert tables with
+no synthesized metric, and the health route reports each dependency honestly: the database
+and secret store are really probed, the model providers report `configured` or
+`not_configured` from env and escalate to a live check only on an explicit deep probe, and a
+dependency that cannot be probed reads `unknown`, never a fabricated `ok`. Phase O below
+holds, and the earlier phases under it.
+
+Phase O added no faked output and no faked telemetry, and where a real runtime does not yet
+exist it ships an honest seam rather than a fake. There is no oauth2 connector runtime, so
+the default token refresher rejects with "available, not connected" and the scheduler is
+proven with an injected refresher; the failed-renewal path (error, re-authentication
+required, critical alert) is fully real. No connector honestly supports incremental
+extraction (the warehouse runtimes compute whole-table aggregates), so every descriptor
+keeps `incremental.supported = false` and the watermark plumbing stays dormant in
+production; the cursor seam is real and tested by temporarily enabling support on a
+descriptor, and any returned cursor is dropped on the full-derive path. Connector health is
+derived from real last-success and last-error timestamps at read time, never stored, so it
+cannot drift from reality, and a connection that has never run reads as degraded rather than
+healthy. The rate limiter retries only a typed throttle signal and never a genuine error,
+and an alert fires only on the transition into error, never on a steady-state failure.
+Phase N below holds, and the earlier phases under it.
 
 Phase N added no faked output and no faked telemetry: this is its defining constraint. The
 `model_usage` ledger holds a row only because a real provider call billed real tokens; the

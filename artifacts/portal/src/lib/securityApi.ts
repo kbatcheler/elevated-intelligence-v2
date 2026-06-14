@@ -1,4 +1,11 @@
-import type { AccessEvent, Grant, HumanSignal, KeyStatus, VerifyResult } from "../types";
+import type {
+  AccessEvent,
+  ConnectorHealthReport,
+  Grant,
+  HumanSignal,
+  KeyStatus,
+  VerifyResult,
+} from "../types";
 import type { ListOutcome, WriteOutcome } from "./adminApi";
 
 // The Tier 3 security data layer (Phase L over the Phase K backend). Same shape
@@ -130,5 +137,20 @@ export async function fetchHumanSignals(tenantId: string): Promise<SignalsOutcom
     return { state: signals.length > 0 ? "ready" : "empty", signals };
   } catch {
     return { state: "error" };
+  }
+}
+
+// -- Connector health (owner, Phase O) ----------------------------------------
+
+export async function fetchConnectorHealth(
+  tenantId: string,
+): Promise<ReadOutcome<ConnectorHealthReport>> {
+  try {
+    const res = await fetch(`/api/security/tenants/${tenantId}/connector-health`);
+    if (res.status === 401) return { unauthorized: true };
+    if (!res.ok) return { error: (await readBody(res)).error || "failed" };
+    return { ok: true, data: (await res.json()) as ConnectorHealthReport };
+  } catch {
+    return { error: "failed" };
   }
 }

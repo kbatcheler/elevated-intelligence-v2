@@ -4,6 +4,7 @@ import type {
   ConnectorFamily,
   DataPath,
   DeploymentMode,
+  QuotaProfile,
 } from "./contract";
 
 // The layers each family feeds, taken straight from the spec. These keys are the
@@ -111,6 +112,19 @@ const FAMILY_SIGNALS: Record<ConnectorFamily, string[]> = {
   ],
 };
 
+// Conservative operational defaults (Phase O). These are declared capabilities
+// an operator tunes per deployment, not measurements: a small steady
+// token-bucket quota, a one-day staleness window, no incremental cursor, and a
+// one-hour OAuth refresh lead. A connector overrides any of these in its entry.
+const DEFAULT_QUOTA: QuotaProfile = {
+  capacity: 5,
+  refillPerSecond: 1,
+  maxAttempts: 4,
+  maxRetryAfterSeconds: 45,
+};
+const DEFAULT_STALENESS_SECONDS = 24 * 60 * 60;
+const DEFAULT_OAUTH_REFRESH_LEAD_SECONDS = 60 * 60;
+
 function d(
   key: string,
   name: string,
@@ -131,6 +145,10 @@ function d(
     signalsProduced: FAMILY_SIGNALS[family],
     status: "available",
     implemented: false,
+    quotaProfile: DEFAULT_QUOTA,
+    stalenessThresholdSeconds: DEFAULT_STALENESS_SECONDS,
+    incremental: { supported: false },
+    oauthRefreshLeadSeconds: DEFAULT_OAUTH_REFRESH_LEAD_SECONDS,
     ...overrides,
   };
 }

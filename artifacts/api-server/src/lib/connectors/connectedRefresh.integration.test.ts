@@ -12,10 +12,12 @@ import {
   tenantConnectionsTable,
   tenantsTable,
 } from "@workspace/db";
+import type { AlertEvent } from "../alerts/alerter";
 import { EnvSecretStore } from "../secrets/secretStore";
 import { decryptSignalValue } from "../security/signalCrypto";
 import { getTenantKey } from "../security/tenantKeyService";
 import { refreshConnectedTenant } from "./connectedRefresh";
+import { ConnectorThrottleError, resetRateLimiter } from "./rateLimiter";
 
 // The boundary refresh persists real rows, so this runs against a real database.
 // Throwaway tenants own everything; deleting them cascades to connections, runs
@@ -36,12 +38,33 @@ const log = {
 } as unknown as Logger;
 
 const secretStore = new EnvSecretStore();
+const noopSleep = (): Promise<void> => Promise.resolve();
 
+function capturingAlerter(): {
+  events: AlertEvent[];
+  alerter: { emit: (e: AlertEvent) => Promise<void> };
+} {
+  const events: AlertEvent[] = [];
+  return {
+    events,
+    alerter: {
+      emit: (e: AlertEvent) => {
+        events.push(e);
+        return Promise.resolve();
+      },
+    },
+  };
+}
+
+const createdTenantIds: string[] = [];
 let tenantA = "";
 let tenantB = "";
 let connectionA = "";
 
-function stubConnector(key: string, set: unknown): Connector {
+// A stub boundary connector. With no cursor it returns the bare set form; with a
+// cursor it returns the wrapper form, so the runtime's incremental handling is
+// exercised through the real ExtractionResult union.
+function stubConnector(key: string, set: unknown, nextWatermark?: string): Connector {
   const descriptor = getDescriptor(key)!;
   return {
     key: descriptor.key,
@@ -51,8 +74,7 @@ function stubConnector(key: string, set: unknown): Connector {
     deployment: descriptor.deployment,
     signalsProduced: descriptor.signalsProduced,
     async extractSignals() {
-      // Return the provided payload verbatim, including a deliberately invalid
-      // one, so the caller's guard, not the connector, is what is under test.
+      if (nextWatermark !== undefined) return { set: set as DerivedSignalSet, nextWatermark };
       return set as DerivedSignalSet;
     },
   };
@@ -84,27 +106,22 @@ async function ensureConnectorRow(key: string): Promise<void> {
     .onConflictDoNothing();
 }
 
-beforeAll(async () => {
-  await ensureConnectorRow("redshift");
-  await ensureConnectorRow("salesforce");
-  await ensureConnectorRow("netsuite");
-
-  const a = await db
+async function newTenant(): Promise<string> {
+  const i = createdTenantIds.length;
+  const rows = await db
     .insert(tenantsTable)
-    .values({ name: `${RUN}-a`, url: `https://${RUN}-a.example.com`, status: "ready" })
+    .values({ name: `${RUN}-t${i}`, url: `https://${RUN}-t${i}.example.com`, status: "ready" })
     .returning({ id: tenantsTable.id });
-  tenantA = a[0]!.id;
+  const id = rows[0]!.id;
+  createdTenantIds.push(id);
+  return id;
+}
 
-  const b = await db
-    .insert(tenantsTable)
-    .values({ name: `${RUN}-b`, url: `https://${RUN}-b.example.com`, status: "ready" })
-    .returning({ id: tenantsTable.id });
-  tenantB = b[0]!.id;
-
-  const conn = await db
+async function newRedshiftConnection(tenantId: string): Promise<string> {
+  const rows = await db
     .insert(tenantConnectionsTable)
     .values({
-      tenantId: tenantA,
+      tenantId,
       connectorKey: "redshift",
       status: "connected",
       authRef: "TEST_WAREHOUSE_REF",
@@ -112,7 +129,17 @@ beforeAll(async () => {
       deploymentMode: "boundary",
     })
     .returning({ id: tenantConnectionsTable.id });
-  connectionA = conn[0]!.id;
+  return rows[0]!.id;
+}
+
+beforeAll(async () => {
+  await ensureConnectorRow("redshift");
+  await ensureConnectorRow("salesforce");
+  await ensureConnectorRow("netsuite");
+
+  tenantA = await newTenant();
+  tenantB = await newTenant();
+  connectionA = await newRedshiftConnection(tenantA);
 
   // Tenant B: one edge connection and one boundary-but-unimplemented connection,
   // to prove honest handling without ever reaching a real extraction.
@@ -135,7 +162,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  for (const id of [tenantA, tenantB]) {
+  for (const id of createdTenantIds) {
     if (id) await db.delete(tenantsTable).where(eq(tenantsTable.id, id));
   }
 });
@@ -195,10 +222,18 @@ describe("connected refresh: boundary runtime", () => {
     expect(await decryptSignalValue(dist.value, activeKeyRef)).toEqual([3, 5, 2]);
 
     const connection = await db
-      .select({ lastRunAt: tenantConnectionsTable.lastRunAt })
+      .select({
+        lastRunAt: tenantConnectionsTable.lastRunAt,
+        lastSuccessAt: tenantConnectionsTable.lastSuccessAt,
+        status: tenantConnectionsTable.status,
+      })
       .from(tenantConnectionsTable)
       .where(eq(tenantConnectionsTable.id, connectionA));
     expect(connection[0]!.lastRunAt).not.toBeNull();
+    // A success records lastSuccessAt (which drives read-time health) and keeps
+    // the connection connected.
+    expect(connection[0]!.lastSuccessAt).not.toBeNull();
+    expect(connection[0]!.status).toBe("connected");
   });
 
   it("supersedes the prior signals on the next refresh (ephemeral, latest only)", async () => {
@@ -276,5 +311,138 @@ describe("connected refresh: honest handling", () => {
       .from(derivedSignalsTable)
       .where(eq(derivedSignalsTable.tenantId, tenantB));
     expect(signals).toHaveLength(0);
+  });
+});
+
+describe("connected refresh: operational reality (Phase O)", () => {
+  it("retries a throttled source with capped backoff and recovers without failing the run", async () => {
+    resetRateLimiter();
+    const tenant = await newTenant();
+    await newRedshiftConnection(tenant);
+    const set = validSet(tenant, [{ key: "win_rate_pct", kind: "ratio", value: 0.5 }]);
+
+    // The source throttles once, then succeeds: the run must recover, not fail.
+    let calls = 0;
+    const flaky = (key: string): Connector => {
+      const base = stubConnector(key, set);
+      return {
+        ...base,
+        extractSignals() {
+          calls += 1;
+          if (calls < 2) throw new ConnectorThrottleError("429");
+          return Promise.resolve(set);
+        },
+      };
+    };
+
+    const { events, alerter } = capturingAlerter();
+    const results = await refreshConnectedTenant(tenant, log, {
+      getConnector: flaky,
+      secretStore,
+      alerter,
+      sleep: noopSleep,
+    });
+
+    expect(results[0]!.status).toBe("refreshed");
+    expect(calls).toBe(2); // threw once, then succeeded on retry
+    expect(events).toHaveLength(0); // a recovered run fires no alert
+  });
+
+  it("flips a dead connection to error and fires exactly one transition alert", async () => {
+    resetRateLimiter();
+    const tenant = await newTenant();
+    const connId = await newRedshiftConnection(tenant);
+    const set = validSet(tenant, [{ key: "win_rate_pct", kind: "ratio", value: 0.5 }]);
+
+    const dead = (key: string): Connector => {
+      const base = stubConnector(key, set);
+      return {
+        ...base,
+        extractSignals() {
+          throw new Error("warehouse connection refused");
+        },
+      };
+    };
+
+    const { events, alerter } = capturingAlerter();
+    const results = await refreshConnectedTenant(tenant, log, {
+      getConnector: dead,
+      secretStore,
+      alerter,
+      sleep: noopSleep,
+    });
+    expect(results[0]!.status).toBe("error");
+
+    const conn = await db
+      .select()
+      .from(tenantConnectionsTable)
+      .where(eq(tenantConnectionsTable.id, connId));
+    expect(conn[0]!.status).toBe("error");
+    expect(conn[0]!.lastErrorCode).toBe("extraction_failed");
+    expect(conn[0]!.lastErrorAt).not.toBeNull();
+
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe("connector_error_transition");
+    expect(events[0]!.entityId).toBe(connId);
+
+    // A second failing refresh does not re-alert: the connection is already error.
+    const second = capturingAlerter();
+    await refreshConnectedTenant(tenant, log, {
+      getConnector: dead,
+      secretStore,
+      alerter: second.alerter,
+      sleep: noopSleep,
+    });
+    expect(second.events).toHaveLength(0);
+  });
+
+  it("persists only the watermark for an incremental source, never the data behind it", async () => {
+    resetRateLimiter();
+    const tenant = await newTenant();
+    const connId = await newRedshiftConnection(tenant);
+
+    // Exercise the incremental seam by declaring the descriptor supports a cursor
+    // for the duration of this test, then restoring it. The runtime persists only
+    // the returned cursor, never any source data.
+    const descriptor = getDescriptor("redshift")!;
+    const savedIncremental = descriptor.incremental;
+    descriptor.incremental = { supported: true, mode: "watermark" };
+    try {
+      const set = validSet(tenant, [{ key: "win_rate_pct", kind: "ratio", value: 0.5 }]);
+      const results = await refreshConnectedTenant(tenant, log, {
+        getConnector: (key) => stubConnector(key, set, "2026-06-14T08:00:00.000Z"),
+        secretStore,
+        sleep: noopSleep,
+      });
+      expect(results[0]!.status).toBe("refreshed");
+
+      const conn = await db
+        .select({ cursorWatermark: tenantConnectionsTable.cursorWatermark })
+        .from(tenantConnectionsTable)
+        .where(eq(tenantConnectionsTable.id, connId));
+      expect(conn[0]!.cursorWatermark).toBe("2026-06-14T08:00:00.000Z");
+    } finally {
+      descriptor.incremental = savedIncremental;
+    }
+  });
+
+  it("ignores a returned cursor when the source does not declare incremental support", async () => {
+    resetRateLimiter();
+    const tenant = await newTenant();
+    const connId = await newRedshiftConnection(tenant);
+    // redshift declares incremental unsupported, so a returned cursor is dropped
+    // and the refresh stays a full derive.
+    const set = validSet(tenant, [{ key: "win_rate_pct", kind: "ratio", value: 0.5 }]);
+    await refreshConnectedTenant(tenant, log, {
+      getConnector: (key) => stubConnector(key, set, "2026-06-14T09:00:00.000Z"),
+      secretStore,
+      sleep: noopSleep,
+    });
+
+    const conn = await db
+      .select({ cursorWatermark: tenantConnectionsTable.cursorWatermark })
+      .from(tenantConnectionsTable)
+      .where(eq(tenantConnectionsTable.id, connId));
+    expect(conn[0]!.cursorWatermark).toBeNull();
   });
 });

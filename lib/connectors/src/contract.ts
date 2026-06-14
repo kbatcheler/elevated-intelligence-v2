@@ -52,6 +52,32 @@ export const DATA_PATH_NOTES: Record<DataPath, string> = {
 // A declared derived-signal key, for example "gross_margin_pct". Non identifying.
 export type SignalKey = string;
 
+// The per-connector quota profile (Phase O). A declared operational capability,
+// not a measurement: it sizes a token-bucket limiter the runtime enforces per
+// connection so we never exceed a client API's throttle. capacity is the burst
+// size, refillPerSecond the sustained rate, maxAttempts how many times a
+// throttled call is retried, and maxRetryAfterSeconds the ceiling on any single
+// honored Retry-After or backoff wait.
+export interface QuotaProfile {
+  capacity: number;
+  refillPerSecond: number;
+  maxAttempts: number;
+  maxRetryAfterSeconds: number;
+}
+
+// Whether a source supports incremental extraction. When supported is false the
+// runtime does a full derive on every refresh, which is the honest fallback.
+export interface IncrementalCapability {
+  supported: boolean;
+  mode?: "cursor" | "watermark";
+}
+
+// A cursor or watermark value. Deliberately scalar shaped and JSON serializable:
+// a timestamp, a sequence number, or a small map of those. It records HOW FAR a
+// refresh got, never WHAT it read. No source record is ever represented here, so
+// persisting it does not breach the derive-and-discard rule.
+export type WatermarkValue = string | number | Record<string, string | number>;
+
 // What to extract. It carries a pointer to the credential (authRef), never the
 // credential itself, plus a non-identifying extraction config. There is
 // deliberately no database handle and no filesystem path on this type.
@@ -61,6 +87,10 @@ export interface ExtractionScope {
   authRef: string;
   window?: { start: string; end: string };
   config?: Record<string, unknown>;
+  // The last persisted cursor for an incremental source, or undefined for a full
+  // derive. The connector reads from here to fetch only what changed; it never
+  // receives prior raw data, only the cursor that marks where it left off.
+  watermark?: WatermarkValue;
 }
 
 // The capabilities an extraction is given, and nothing more. There is no
@@ -74,6 +104,13 @@ export interface ConnectorContext {
   now(): Date;
   log(event: string, fields?: Record<string, number | string | boolean>): void;
 }
+
+// What an extraction returns. Either just the derived math, or the math plus the
+// next cursor for an incremental source. The wrapper form carries ONLY the
+// watermark alongside the set; the raw data behind the cursor never appears.
+export type ExtractionResult =
+  | DerivedSignalSet
+  | { set: DerivedSignalSet; nextWatermark?: WatermarkValue };
 
 // The catalogue metadata for one connector. The catalogue declares every
 // connector mapped to the 14 layers, even where the runtime is not implemented.
@@ -90,11 +127,22 @@ export interface ConnectorDescriptor {
   status: ConnectorStatus;
   path: DataPath;
   implemented: boolean;
+  // Operational profile (Phase O). Declared per connector in the registry, not
+  // measured: a conservative default an operator tunes per deployment.
+  quotaProfile: QuotaProfile;
+  // How long after its last success a connection is treated as stale (degraded).
+  stalenessThresholdSeconds: number;
+  // Whether the source supports incremental extraction via a cursor or
+  // watermark. false means a full derive on every refresh (the honest fallback).
+  incremental: IncrementalCapability;
+  // For oauth2 connectors: how long before token expiry the refresh scheduler
+  // renews. Ignored by connectors whose authMethod is not oauth2.
+  oauthRefreshLeadSeconds: number;
 }
 
 // The runtime contract every connector implements. extractSignals is the only
 // data path: it computes derived signals from raw client data and returns only
-// math.
+// math, optionally with a next cursor for an incremental source.
 export interface Connector {
   key: string;
   family: ConnectorFamily;
@@ -102,5 +150,5 @@ export interface Connector {
   authMethod: AuthMethod;
   deployment: DeploymentMode;
   signalsProduced: SignalKey[];
-  extractSignals(scope: ExtractionScope, ctx: ConnectorContext): Promise<DerivedSignalSet>;
+  extractSignals(scope: ExtractionScope, ctx: ConnectorContext): Promise<ExtractionResult>;
 }

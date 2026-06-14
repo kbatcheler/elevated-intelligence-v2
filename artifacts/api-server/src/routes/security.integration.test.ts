@@ -4,6 +4,7 @@ import { and, eq, inArray, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   accessGrantsTable,
+  alertEventsTable,
   db,
   derivedSignalsTable,
   orgsTable,
@@ -175,6 +176,12 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
+    // Clear the operational alert rows first: alert_events.tenantId nulls out
+    // (does not cascade) on a tenant delete, so deleting the tenant would orphan
+    // the break_glass_used rows out of this filter.
+    await db.delete(alertEventsTable).where(
+      inArray(alertEventsTable.tenantId, [ids.tenantKeyed, ids.tenantRevoke]),
+    );
     await db.delete(derivedSignalsTable).where(
       inArray(derivedSignalsTable.tenantId, [ids.tenantKeyed, ids.tenantRevoke]),
     );
@@ -276,6 +283,17 @@ describe("break-glass: no standing access", () => {
     expect(events.status).toBe(200);
     const list = (events.json as { events: { grantId: string; userId: string; action: string }[] }).events;
     expect(list.some((e) => e.grantId === grantId && e.userId === ids.member && e.action === "read_signals")).toBe(true);
+
+    // The break-glass read fires exactly one break_glass_used alert for the
+    // Phase P notifier, tied to the grant that authorised it.
+    const bg = await db
+      .select({ id: alertEventsTable.id, tenantId: alertEventsTable.tenantId })
+      .from(alertEventsTable)
+      .where(
+        and(eq(alertEventsTable.type, "break_glass_used"), eq(alertEventsTable.entityId, grantId)),
+      );
+    expect(bg).toHaveLength(1);
+    expect(bg[0]!.tenantId).toBe(ids.tenantKeyed);
 
     // Revoking the grant ends the access immediately.
     const revoke = await api("/api/security/grants/" + grantId + "/revoke", {

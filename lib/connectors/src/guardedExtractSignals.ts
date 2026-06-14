@@ -1,6 +1,12 @@
 import { createRequire } from "node:module";
 import { assertDerivedSignalSet } from "@workspace/db/contracts";
-import type { Connector, ConnectorContext, DerivedSignalSet, ExtractionScope } from "./contract";
+import type {
+  Connector,
+  ConnectorContext,
+  DerivedSignalSet,
+  ExtractionScope,
+  WatermarkValue,
+} from "./contract";
 
 // A connector's extractSignals is the one place raw client data is touched. The
 // contract already withholds any database or filesystem handle from the
@@ -133,15 +139,25 @@ function removeFsWriteGuard(): void {
   }
 }
 
+// The normalized result of a guarded extraction: the asserted derive-and-discard
+// math, plus an optional next cursor for an incremental source.
+export interface GuardedExtraction {
+  set: DerivedSignalSet;
+  nextWatermark?: WatermarkValue;
+}
+
 // Run a connector's extraction with the filesystem write guard installed, then
 // assert the result is a derive-and-discard DerivedSignalSet. Both the disk
 // tripwire and the raw-content assertion fail the extraction loudly; the caller
-// (never the connector) is what persists what this returns.
+// (never the connector) is what persists what this returns. A connector may
+// return just the math, or the math plus a next cursor; either way the set is
+// asserted here, and the watermark, if any, is a scalar cursor and never raw
+// source data.
 export async function guardedExtractSignals(
   connector: Connector,
   scope: ExtractionScope,
   ctx: ConnectorContext,
-): Promise<DerivedSignalSet> {
+): Promise<GuardedExtraction> {
   installFsWriteGuard();
   let raw: unknown;
   try {
@@ -149,5 +165,9 @@ export async function guardedExtractSignals(
   } finally {
     removeFsWriteGuard();
   }
-  return assertDerivedSignalSet(raw);
+  if (raw !== null && typeof raw === "object" && "set" in (raw as Record<string, unknown>)) {
+    const wrapped = raw as { set: unknown; nextWatermark?: WatermarkValue };
+    return { set: assertDerivedSignalSet(wrapped.set), nextWatermark: wrapped.nextWatermark };
+  }
+  return { set: assertDerivedSignalSet(raw) };
 }

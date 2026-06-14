@@ -1,7 +1,6 @@
 import {
   type Connector,
   type ConnectorContext,
-  type DerivedSignalSet,
   type ExtractionScope,
   getConnector as defaultGetConnector,
   guardedExtractSignals,
@@ -81,7 +80,9 @@ export async function runEdgeCycle(deps: RunnerDeps): Promise<EdgeCycleResult> {
       // returns only math. The raw records are discarded with the function frame.
       // The guard blocks any filesystem write during extraction and asserts the
       // result is derive-and-discard math before it leaves the client.
-      const set: DerivedSignalSet = await guardedExtractSignals(connector, scope, ctx);
+      // The edge agent never extracts incrementally, so it forwards only the
+      // asserted math and ignores any watermark.
+      const { set } = await guardedExtractSignals(connector, scope, ctx);
       const result = await deps.transport.postSignals(set);
       outcomes.push({
         connectorKey: entry.connectorKey,

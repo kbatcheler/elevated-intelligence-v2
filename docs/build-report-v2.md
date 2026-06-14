@@ -789,3 +789,315 @@ to them.
 
 Phase N is gated and opens Stage 3. Execution pauses here for owner review before the next
 phase. Do not auto-advance.
+
+## Phase O: connector operational reality
+
+The connector stage (Phases H through L) built the clean extraction path. Phase O builds
+the unhappy path that production actually is: OAuth tokens expire, client APIs throttle,
+connections go stale and die, and an operator must be told. It adds an OAuth refresh
+scheduler, a per-connection token-bucket rate limiter, a read-time connector health
+derivation surfaced in the Connections and Security posture views, incremental-extraction
+cursor plumbing that persists only the watermark, and an alert SEAM that records each
+operational event for the Phase P notifier to consume. Nothing is fabricated: there is no
+live OAuth runtime and no incremental-capable connector yet, so both are shipped as honest,
+tested seams that report "available, not connected" rather than faking a renewal or an
+incremental number. Zero new npm dependencies; no em-dash or en-dash.
+
+### The alert SEAM
+
+Every operational event an operator must know about is emitted through one `Alerter`
+interface with a single `emit(event)` method. The default `DbAlerter` records one pending
+row in the new `alert_events` table and then logs only the routing fields (type, severity,
+ids), never the message body or the details. The `AlertEvent` details payload is scalars
+only by construction, so an emitter cannot accidentally attach a secret object or a raw
+client record. Consumers depend on the interface, never on a sink, so the Phase P notifier
+that consumes the pending rows wires in without touching any emitter. The type enum already
+declares all six alert kinds (the two Phase O emits, `connector_error_transition` and
+`oauth_refresh_failed`, plus the four Phase P will fire), so the notifier needs no enum
+migration.
+
+### OAuth token refresh
+
+`runDueOAuthRefreshes` selects connected connections that carry a recorded token expiry,
+keeps only the oauth2 descriptors, and renews each one at or inside its per-connector
+`oauthRefreshLeadSeconds` window. A success writes the new expiry and clears any prior
+error, rotating the stored credential reference when the provider rotates it. A failure
+flips the connection to error with `last_error_code = reauthentication_required`, records
+the reason, and emits a critical `oauth_refresh_failed` alert. There is no oauth2 connector
+runtime in the system, so the default `NotImplementedTokenRefresher` rejects honestly and
+the scheduler is proven with an injected refresher, exactly as the edge agent and boundary
+runtime are proven with injected stubs. `startConnectorMaintenance` runs the loop from the
+server entrypoint only (never from app.ts, so importing the app in a test starts no timer),
+never overlaps ticks, swallows a tick failure, and unrefs its timer.
+
+### Per-connection rate limiting
+
+`takeToken` is an in-process token bucket sized from the descriptor's `quotaProfile`
+(capacity and refill rate), enforced before each extraction so we never exceed a client
+API's own throttle. `runWithThrottleRetry` retries ONLY a typed `ConnectorThrottleError` (a
+429 or equivalent) up to the profile's `maxAttempts`, honoring a server `Retry-After` hint
+when present and otherwise backing off exponentially, capped at `maxRetryAfterSeconds` so a
+hostile or oversized hint cannot stall the runtime. A genuine error propagates on the first
+throw and is never retried; that distinction is the heart of the acceptance set, and it
+mirrors the seed-runner 429 handling.
+
+### Connector health, derived not stored
+
+`deriveConnectionHealth` returns error when the connection is flipped to error, degraded
+when it is connected but not currently trustworthy (never succeeded, last success older
+than the staleness threshold, or an error newer than the last success), and healthy
+otherwise. It is derived from the real timestamps on every read and never stored, so it
+cannot drift from reality between writes, and a connection that has never run reads as
+degraded rather than healthy. The owner-only `GET /api/security/tenants/:id/connector-
+health` route returns it worst-first with a 24 hour staleness fallback, and a new
+`ConnectorHealthSection` renders it with honest loading, empty, error, and unauthorized
+states in both the Connections security panel and the Security posture panel.
+
+### Incremental extraction, plumbed but dormant
+
+Incremental is wired end to end: a `WatermarkValue` on the contract, a `nextWatermark`
+returned alongside the derived set, the cursor passed to a connector only when its
+descriptor declares support, and the watermark persisted (in the new
+`tenant_connections.cursor_watermark` jsonb) only when the descriptor supports it and a
+cursor came back, never the source data behind it. But every production descriptor keeps
+`incremental.supported = false`, because the only connector runtimes that exist are the
+bring-your-own-warehouse pair that compute whole-table aggregates, and treating a
+partial-new-rows aggregate as an incremental continuation would fabricate a number. So the
+cursor seam is real and tested by temporarily enabling support on a descriptor, and dormant
+in production, where every refresh does the honest full derive and any returned cursor is
+dropped.
+
+### The connected-refresh integration
+
+The Tier 1 boundary runtime now takes a bucket token before each extraction (waiting the
+reported time, capped, when the bucket is momentarily empty), wraps the guarded extraction
+in the throttle-retry so a throttled source backs off and recovers WITHOUT failing the run,
+records `last_success_at` and resets the status to connected on success, and on a failure
+flips the connection to error with a `rate_limited` or `extraction_failed` code and emits a
+`connector_error_transition` alert ONLY on the transition into error, so a persistently
+broken connection does not re-alert every cycle. Both alert emissions are best-effort, so a
+recording failure never masks the underlying refresh failure.
+
+### The new table, route, columns, and env
+
+- Table: `alert_events`, the alert SEAM ledger, decoupled from the tenant lifecycle
+  (tenantId nulls out on a tenant delete) with a `notification_status` the Phase P notifier
+  advances.
+- Route: owner-only `GET /api/security/tenants/:id/connector-health`.
+- Columns: `tenant_connections` gains `last_success_at`, `token_expires_at`,
+  `cursor_watermark`, `last_error_code`, `last_error_at`, and `last_error_message`.
+- Env: none. The refresh lead time, staleness threshold, and quota profile are
+  per-connector registry descriptor fields, not env; the maintenance interval is a code
+  default (15 minutes) with an options override.
+
+### Subprocessor note
+
+Phase O adds no new data subprocessor. The scheduler, the rate limiter, the health
+derivation, and the alert ledger all run inside the application and the Postgres the
+operator already controls. The Phase P notifier may later deliver alerts to an external
+sink (Slack or a generic webhook); Phase O only records them.
+
+### Verification
+
+- Typecheck and build are green across the workspace (exit 0 on both). The full suite is
+  green at 441 tests (api-server 161, portal 149, cortex 80, connectors 29, edge-agent 10,
+  db 8, scripts 4); new this phase are the rate-limiter unit tests, the connection-health
+  derivation tests, the OAuth refresh integration tests, the rewritten connected-refresh
+  integration tests, and the guarded-extract watermark and wrapper cases.
+- The connected-refresh tests prove the three acceptance cases: a throttled source recovers
+  without failing the run, a dead connection reads as error and fires exactly one
+  transition alert, and an already-error connection fires no new alert. The OAuth tests
+  prove a due token renews, a not-yet-due token is left alone, and a failed renewal flips
+  to error with re-authentication required and a critical alert.
+- Long-dash sweep zero on both sides: the source guard, and a per-row cast over every text
+  and jsonb column in every public table, now including `alert_events`.
+
+### Gate
+
+Phase O is a per-phase gated stop, but the owner authorized an autonomous run of Phases O,
+P, and Q back to back. Execution does not pause here; it proceeds to Phase P and stops for
+owner review only after Phase Q.
+
+## Phase P: observability and alerting
+
+Phase O recorded each operational event as a pending `alert_events` row behind a one-method
+alert SEAM. Phase P is the consuming half: it delivers those events to a human, aggregates
+errors to an external collector, gives the owner a live operations view, and turns the
+health endpoint into an honest per-dependency probe. Nothing is fabricated: there is no
+Sentry project and no Slack or webhook endpoint connected, so the error reporter and the
+notifier transports are honest adapters that report "available, not connected" (a no-op
+reporter, a log sink) until their env is set, mirroring the KMS pattern. This phase added
+zero npm dependencies and contains no em-dash or en-dash.
+
+### The Sentry-compatible error reporter
+
+`sentryReporter.ts` parses a standard Sentry DSN into its ingest origin, project id, and
+public key with no SDK, builds a Sentry envelope by hand (event id, timestamp, level,
+platform, and either a structured exception with a stack or a message), and POSTs it over
+the Node global fetch with a bounded timeout. With no `SENTRY_DSN` the default is a no-op
+reporter: "available, not connected", and `captureError` does nothing rather than crash at
+boot. The payload is an allowlist of scalar context only (subsystem, route, level, tenant
+id, run id); it never carries a request body, headers, raw connector records, or a secret.
+`captureError` never throws into its caller, so an observability outage can never alter or
+delay a real request.
+
+### The pluggable alert notifier
+
+`notifier.ts` drains pending `alert_events` rows with `FOR UPDATE SKIP LOCKED` inside a
+transaction (so two drain ticks, even across instances, never deliver the same row twice),
+formats each from routing fields and scalar details only, delivers it through the configured
+transport, and marks the row `sent` or, on a terminal failure, `failed`. The transport is
+selected from env: a Slack incoming webhook (`SLACK_WEBHOOK_URL`), a generic JSON webhook
+(`ALERT_WEBHOOK_URL`), or the honest default log sink when neither is set. The drain loop
+runs on an interval from the server entrypoint only (never app.ts), never overlaps ticks,
+swallows a tick failure, and unrefs its timer, exactly as the Phase O maintenance loop does.
+
+### The five emitters wired onto the seam
+
+Phase O already emitted `connector_error_transition`. Phase P adds the rest so the notifier
+delivers all required event classes: the orchestrator's `runLayer` catch emits
+`seed_run_failed` and calls `captureError`; `budget.ts` emits `budget_threshold` through a
+helper that dedupes by an entity id scoped to the cap kind and month, so a threshold alerts
+once per scope per month rather than on every priced call; the security route emits
+`break_glass_used` after the access is appended to the audit; and the provenance verify
+route emits `provenance_integrity_failed` only when `verifyChain` returns `ok === false`.
+
+### The owner Operations route
+
+An owner-only `GET /api/operations` (behind `requireAuth` and `requireOwner`) returns, all
+from real tables: the in-flight runs with their current stage, the recent failures with the
+stage that failed, the live seed-queue depth read from the `pipeline_jobs` claim queue as
+running and waiting counts, and the recent alert feed from `alert_events`. Every figure is a
+query against persisted state; there is no synthesized metric.
+
+### The structured health route
+
+The health route is rewritten to return a per-dependency status object rather than a bare
+"ok". The database is probed with a real round-trip, the secret store through its status
+seam, and the two model providers report `configured` or `not_configured` from their env,
+escalating to a live reachable check only when a deep probe is explicitly requested
+(`?deep=1` or `HEALTH_DEEP_CHECK=1`), because a health endpoint must not silently bill a
+model call on every poll. A dependency that cannot be probed reads `unknown`, never a
+fabricated `ok`; the overall status is the honest worst-of the per-dependency states.
+
+### The new route and env
+
+- Route: owner-only `GET /api/operations`. The health route is the existing `GET /health`,
+  rewritten to the structured per-dependency shape.
+- No new table and no new column: the notifier advances the `notification_status` on the
+  Phase O `alert_events` table, and Operations reads existing tables.
+- Env (all optional, all honest defaults): `SENTRY_DSN`, `SENTRY_RELEASE`,
+  `SENTRY_TIMEOUT_MS`; `SLACK_WEBHOOK_URL`, `ALERT_WEBHOOK_URL`, `ALERT_NOTIFIER_TIMEOUT_MS`,
+  `ALERT_DRAIN_INTERVAL_MS`; `HEALTH_DEEP_CHECK`. With none set the system runs fully: no
+  error aggregation, alerts to the log sink, and a configuration-based health report.
+
+### Subprocessor note
+
+Phase P adds no new data subprocessor by default. The error reporter and the notifier only
+contact an external sink (Sentry, Slack, or a generic webhook) when the operator sets that
+sink's env; the payloads carry routing metadata and scalar identifiers only, never client
+data or secrets. Until then everything stays inside the application and the operator's own
+Postgres.
+
+### Verification
+
+- Typecheck and build are green across the workspace (exit 0 on both). The full suite is
+  green at 464 tests (api-server 184 across 25 files, portal 149, cortex 80, connectors 29,
+  edge-agent 10, db 8, scripts 4); new this phase are the Sentry reporter unit tests, the
+  notifier integration tests, the health integration tests, the operations integration
+  tests, the budget threshold integration test, and a `break_glass_used` assertion added to
+  the security suite.
+- The acceptance cases are proven by test: a deliberately failed seed surfaces in
+  Operations with its failing stage and is delivered exactly once by the notifier (the row
+  flips to `sent` and a second drain delivers nothing), and the health route returns a
+  per-dependency structured status with honest unprobed states.
+- Long-dash sweep zero on both sides: the source guard, and a per-row cast over every text
+  and jsonb column in every public table.
+
+### Gate
+
+Phase P is a per-phase gated stop, but the owner authorized an autonomous run of Phases O,
+P, and Q back to back. Execution does not pause here; it proceeds to Phase Q and stops for
+owner review only after Phase Q.
+
+## Phase Q: secrets vault
+
+Phase Q put a real managed backend behind the existing `SecretStore` seam and proved that
+no resolved secret value is ever persisted to a table or to `.replit`. There is no managed
+secret manager connected, so the GCP adapter is an honest, tested REST adapter that reports
+"available, not connected" until its project is configured, exactly mirroring the KMS
+pattern. This phase added zero npm dependencies and contains no em-dash or en-dash.
+
+### The GCP Secret Manager adapter
+
+`gcpSecretStore.ts` is a full `SecretStore` over the Secret Manager REST API with the Node
+global fetch and zero SDK. Construction validates nothing, so an unset project never crashes
+the boot; the first `get`/`set`/`delete` resolves the project and a token lazily and throws
+a precise "available, not connected: set GCP_PROJECT_ID to connect it" error if the project
+is missing. `get` reads `versions/latest:access` (404 to `null`, base64 decode), `set`
+creates the container (tolerating a 409) then adds a base64 version, and `delete` tolerates
+a 404 so it is idempotent. The token comes from the GCP metadata server (cached until just
+before expiry) or, with `GCP_SECRET_MANAGER_TOKEN_SOURCE=env`, from
+`GCP_SECRET_MANAGER_ACCESS_TOKEN`. Every ref is validated against the Secret Manager id
+grammar before any network call, every request is bounded by an `AbortController` timeout
+(`GCP_SECRET_MANAGER_TIMEOUT_MS`, default 5000), and no value, token, or response body is
+ever logged or attached to an error (the access body is the secret itself).
+
+### Provider selection and resolution
+
+`getSecretStore` constructs the store `SECRET_STORE_PROVIDER` selects: unset or `env` uses
+the local env-backed store (the default), `gcp` selects the REST adapter. Every secret the
+application reads at runtime is resolved by name through the store, never from `process.env`
+at the call site: `SESSION_SECRET` (auth middleware, auth and admin routes, the PIN pepper,
+the connected-refresh token salt) through `requireSecret`, `OWNER_PASSWORD` through
+`store.get` at bootstrap (only the scrypt hash is then persisted), and connector credentials
+through `buildConnectorContext.resolveSecret`, which the warehouse connector uses to resolve
+its `scope.authRef`. `tenant_connections` stores only the `authRef` reference, never a value.
+
+### The KMS stays separate
+
+`tenant_keys.kmsKeyRef` is deliberately not routed through the `SecretStore`. The KEK
+material is the root of the per-tenant crypto-shred guarantee and has a different blast
+radius from an API credential; it keeps its own KMS boundary (`lib/security/kms.ts`) with
+its own swappable cloud/customer adapter that already reports "available, not connected".
+The two seams are siblings, not a hierarchy.
+
+### The honest adapter
+
+With the default env-backed store, secrets resolve from the platform-injected environment,
+which is the legitimate durable secret home (the platform owns durable storage). With
+`SECRET_STORE_PROVIDER=gcp` but no project, the adapter constructs cleanly and the first
+resolution throws the precise "available, not connected" error. `EnvSecretStore.set` and
+`.delete` mutate the in-process environment only and are not durable across a restart, which
+is honest by design: the durable write path is the GCP adapter, and the env store is the
+local-dev default and read path, not a durable writable vault.
+
+### The new env (no new table, no new column)
+
+- `SECRET_STORE_PROVIDER` (unset or `env`, or `gcp`).
+- GCP adapter env, all optional and lazy: `GCP_PROJECT_ID` (its absence is the
+  available-not-connected error), `GCP_SECRET_MANAGER_TOKEN_SOURCE` (`metadata` or `env`),
+  `GCP_SECRET_MANAGER_ACCESS_TOKEN` (only when the token source is `env`),
+  `GCP_SECRET_MANAGER_ENDPOINT`, and `GCP_SECRET_MANAGER_TIMEOUT_MS` (default 5000).
+- No schema change: `tenant_connections.authRef` and `tenant_keys.kmsKeyRef` are the
+  existing reference columns and no value column was added.
+
+### Verification
+
+- Typecheck and build are green across the workspace (exit 0 on both). The full suite is
+  green at 478 tests (api-server 198 across 26 files, portal 149, cortex 80, connectors 29,
+  edge-agent 10, db 8, scripts 4); new this phase are the GCP adapter and provider-selection
+  unit tests and the secret-resolution integration test.
+- The acceptance cases are proven by test: a connection authenticates by resolving its
+  `authRef` through the store, and no resolved secret value is persisted anywhere. The
+  integration test resolves a unique sentinel through an injected store during a real
+  refresh, then sweeps every public text and jsonb column (catalogue-driven `UNION ALL`
+  count, non-empty-list guarded) and the repo-root `.replit` for the sentinel and asserts a
+  total of zero.
+- Long-dash sweep zero on both sides: the source guard, and a per-row cast over every text
+  and jsonb column in every public table.
+
+### Gate
+
+Phase Q is the final phase of the owner-authorized autonomous run of O, P, and Q. Execution
+stops here for owner review of all three phases.

@@ -553,3 +553,28 @@ export interface HumanSignal {
   sourceConnectorKey: string | null;
   computedAt: string;
 }
+
+// Connector health (Phase O, GET /api/security/tenants/:id/connector-health).
+// Derived at read time from each connection's real last-success and last-error
+// timestamps and the connector's staleness threshold; never stored, never
+// fabricated. A connection that has never run reads as degraded, not healthy.
+export type ConnectionHealth = "healthy" | "degraded" | "error";
+
+export interface ConnectorHealthRow {
+  connectorKey: string;
+  name: string;
+  deployment: "edge" | "boundary" | null;
+  status: string;
+  health: ConnectionHealth;
+  lastSuccessAt: string | null;
+  lastRunAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  stalenessThresholdSeconds: number;
+}
+
+export interface ConnectorHealthReport {
+  tenantId: string;
+  connections: ConnectorHealthRow[];
+}

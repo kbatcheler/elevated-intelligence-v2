@@ -6,6 +6,7 @@ import { fetchKeyStatus, provisionTenantKey, revokeTenantKey } from "../../lib/s
 import { ErrorState, SectionHeading, SkeletonLines } from "../primitives";
 import { formatDateTime } from "../primitives/format";
 import { ConnectedPill, KeyStatusPill } from "./shared";
+import { ConnectorHealthSection } from "./ConnectorHealthSection";
 
 type State =
   | { kind: "loading" }
@@ -134,6 +135,8 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
           <KmsCard title="Customer-managed KMS" kms={key.customerKms} />
         </div>
       </div>
+
+      <ConnectorHealthSection tenantId={tenantId} />
     </div>
   );
 }

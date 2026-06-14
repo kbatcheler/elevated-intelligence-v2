@@ -5,8 +5,9 @@
 // budget.
 
 import type { Logger } from "@workspace/cortex";
-import { db, modelUsageTable } from "@workspace/db";
+import { alertEventsTable, db, modelUsageTable } from "@workspace/db";
 import { and, eq, gte, sql } from "drizzle-orm";
+import { getAlerter } from "../alerts/alerter";
 
 export interface BudgetCaps {
   globalMonthlyCapUsd: number;
@@ -82,11 +83,58 @@ export interface AssertBudgetOptions {
   log?: Logger;
 }
 
+// Emit a budget_threshold alert at most once per scope per calendar month. The
+// stable entityId (scope:tenantId|global:YYYY-MM) is checked against existing
+// alert_events first, so a threshold that stays crossed across many seeds in the
+// same month fires a single operator alert, not one per seed. Best-effort: a
+// dedupe-query or emit failure must never block the seed it is reporting on.
+async function emitBudgetThresholdOnce(
+  scope: BudgetScope,
+  tenantId: string | null,
+  spentUsd: number,
+  capUsd: number,
+  log?: Logger,
+): Promise<void> {
+  const monthKey = monthStart().toISOString().slice(0, 7);
+  const entityId = scope + ":" + (tenantId ?? "global") + ":" + monthKey;
+  try {
+    const existing = await db
+      .select({ id: alertEventsTable.id })
+      .from(alertEventsTable)
+      .where(
+        and(eq(alertEventsTable.type, "budget_threshold"), eq(alertEventsTable.entityId, entityId)),
+      )
+      .limit(1);
+    if (existing.length > 0) return;
+    await getAlerter().emit({
+      type: "budget_threshold",
+      severity: "warning",
+      tenantId,
+      entityType: "budget",
+      entityId,
+      message:
+        "model budget alert threshold crossed (" +
+        scope +
+        "): " +
+        spentUsd.toFixed(2) +
+        " of " +
+        capUsd.toFixed(2) +
+        " USD",
+      details: { scope, spentUsd, capUsd, month: monthKey },
+    });
+  } catch (err) {
+    log?.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      "budget_threshold alert emit failed",
+    );
+  }
+}
+
 // Gate a new seed against the monthly caps before any model spend is committed.
 // A non-priority seed is refused once the global ceiling is reached; the owner
 // may override that single refusal. A per-tenant ceiling is always enforced.
-// Crossing the alert threshold without yet reaching a ceiling logs a warning; the
-// Phase P notifier will consume the same signal from the spend API.
+// Crossing the alert threshold without yet reaching a ceiling logs a warning and
+// emits a once-per-month budget_threshold alert for the Phase P notifier.
 export async function assertSeedWithinBudget(opts: AssertBudgetOptions = {}): Promise<void> {
   const caps = budgetCaps();
   const since = monthStart();
@@ -109,6 +157,7 @@ export async function assertSeedWithinBudget(opts: AssertBudgetOptions = {}): Pr
         { scope: "global", spentUsd: globalSpend, capUsd: caps.globalMonthlyCapUsd },
         "model budget alert threshold crossed",
       );
+      await emitBudgetThresholdOnce("global", null, globalSpend, caps.globalMonthlyCapUsd, opts.log);
     }
   }
 
@@ -130,6 +179,13 @@ export async function assertSeedWithinBudget(opts: AssertBudgetOptions = {}): Pr
       opts.log?.warn(
         { scope: "tenant", tenantId, spentUsd: tenantSpend, capUsd: caps.tenantMonthlyCapUsd },
         "model budget alert threshold crossed",
+      );
+      await emitBudgetThresholdOnce(
+        "tenant",
+        tenantId,
+        tenantSpend,
+        caps.tenantMonthlyCapUsd,
+        opts.log,
       );
     }
   }

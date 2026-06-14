@@ -6,8 +6,10 @@ import { adminRouter } from "./routes/admin";
 import { architectureRouter } from "./routes/architecture";
 import { agentRouter } from "./routes/agent";
 import { authRouter } from "./routes/auth";
+import { captureError } from "./lib/observability/sentryReporter";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
+import { operationsRouter } from "./routes/operations";
 import { securityRouter } from "./routes/security";
 import { spendRouter } from "./routes/spend";
 import { tenantsRouter } from "./routes/tenants";
@@ -52,6 +54,11 @@ app.use("/api/admin", requireAuth, requireOwner, adminRouter);
 // owner concern, never visible to a client or portfolio seat.
 app.use("/api/spend", requireAuth, requireOwner, spendRouter);
 
+// Owner-only Operations console API (Phase P). Same owner gate as spend: queue
+// depth, in-flight runs, recent failures, and the alert feed are provider-owner
+// concerns, never visible to a client or portfolio seat.
+app.use("/api/operations", requireAuth, requireOwner, operationsRouter);
+
 // The in-client extraction agent surface. Gated by its own per-tenant agent
 // credential (inside agentRouter), not by a user session, so it is mounted ahead
 // of the session gate below. It never trusts a proxy-injected client certificate
@@ -71,9 +78,14 @@ app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
-app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   const message = err instanceof Error ? err.message : "Unknown error";
   logger.error({ err: message }, "Request failed");
+  // Phase P: capture the unhandled error to the aggregator. Fire-and-forget and
+  // best-effort (captureError never throws), so it never delays or alters the
+  // response. Only the request path is attached, never the body, query, or
+  // headers, so no secret or client data reaches the wire.
+  void captureError(err, { subsystem: "http", route: req.path, level: "error" });
   res.status(500).json({ error: "Internal server error" });
 });
 

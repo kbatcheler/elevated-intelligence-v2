@@ -1,7 +1,10 @@
 import { eq } from "drizzle-orm";
 import { Router, type Response } from "express";
 import { z } from "zod";
-import { db, tenantsTable, usersTable } from "@workspace/db";
+import { getDescriptor } from "@workspace/connectors";
+import { db, tenantConnectionsTable, tenantsTable, usersTable } from "@workspace/db";
+import { getAlerter } from "../lib/alerts/alerter";
+import { deriveConnectionHealth } from "../lib/connectors/connectionHealth";
 import { logger } from "../lib/logger";
 import {
   createBreakGlassGrant,
@@ -80,6 +83,62 @@ securityRouter.get("/security/tenants/:id/key", requireOwner, async (req, res, n
     next(err);
   }
 });
+
+// ── Connector health (owner only, Phase O) ───────────────────────────────────
+// Health is derived at read time from each connection's real last-success and
+// last-error timestamps and the connector's staleness threshold; it is never
+// stored, so it cannot drift from reality, and a connection that has never run
+// reads as degraded rather than healthy. Rows are ordered worst-first so an
+// operator sees errors before healthy connections.
+securityRouter.get(
+  "/security/tenants/:id/connector-health",
+  requireOwner,
+  async (req, res, next) => {
+    const tenantId = String(req.params.id);
+    try {
+      if (!(await tenantExists(tenantId))) {
+        res.status(404).json({ error: "tenant_not_found" });
+        return;
+      }
+      const rows = await db
+        .select()
+        .from(tenantConnectionsTable)
+        .where(eq(tenantConnectionsTable.tenantId, tenantId));
+      const now = new Date();
+      const connections = rows.map((c) => {
+        const descriptor = getDescriptor(c.connectorKey);
+        const stalenessThresholdSeconds =
+          descriptor?.stalenessThresholdSeconds ?? 24 * 60 * 60;
+        return {
+          connectorKey: c.connectorKey,
+          name: descriptor?.name ?? c.connectorKey,
+          deployment: descriptor?.deployment ?? null,
+          status: c.status,
+          health: deriveConnectionHealth({
+            status: c.status,
+            lastSuccessAt: c.lastSuccessAt,
+            lastErrorAt: c.lastErrorAt,
+            stalenessThresholdSeconds,
+            now,
+          }),
+          lastSuccessAt: c.lastSuccessAt,
+          lastRunAt: c.lastRunAt,
+          lastErrorAt: c.lastErrorAt,
+          lastErrorCode: c.lastErrorCode,
+          lastErrorMessage: c.lastErrorMessage,
+          stalenessThresholdSeconds,
+        };
+      });
+      const rank: Record<string, number> = { error: 0, degraded: 1, healthy: 2 };
+      connections.sort(
+        (a, b) => (rank[a.health] ?? 9) - (rank[b.health] ?? 9) || a.name.localeCompare(b.name),
+      );
+      res.json({ tenantId, connections });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 securityRouter.post(
   "/security/tenants/:id/key/provision",
@@ -211,7 +270,33 @@ securityRouter.get(
   requireOwner,
   async (req, res, next) => {
     try {
-      const result = await verifyChain(String(req.params.id));
+      const tenantId = String(req.params.id);
+      const result = await verifyChain(tenantId);
+      if (!result.ok) {
+        // Phase P: a broken provenance chain is a critical integrity event an
+        // operator must see. Best-effort emit; never let an alert failure mask
+        // the verify result the owner is asking for.
+        try {
+          await getAlerter().emit({
+            type: "provenance_integrity_failed",
+            severity: "critical",
+            tenantId,
+            entityType: "provenance_chain",
+            entityId: result.brokenAt === undefined ? null : String(result.brokenAt),
+            message: "provenance chain verification failed for tenant " + tenantId,
+            details: {
+              brokenAt: result.brokenAt === undefined ? null : result.brokenAt,
+              detail: result.detail ?? null,
+              length: result.length,
+            },
+          });
+        } catch (alertErr) {
+          logger.error(
+            { err: alertErr instanceof Error ? alertErr.message : String(alertErr) },
+            "provenance_integrity_failed alert emit failed",
+          );
+        }
+      }
       res.json(result);
     } catch (err) {
       next(err);
@@ -233,6 +318,24 @@ securityRouter.get(
       const grant = await requireActiveBreakGlassGrant(user.id, tenantId);
       const signals = await readDecryptedSignalsForHuman(tenantId);
       await logSignalAccess(grant.id, user.id, tenantId, "read_signals", "count=" + signals.length);
+      // Phase P: a human standing in a tenant's raw signal data is an event an
+      // operator must see. Best-effort emit; no signal values, only a count.
+      try {
+        await getAlerter().emit({
+          type: "break_glass_used",
+          severity: "warning",
+          tenantId,
+          entityType: "access_grant",
+          entityId: grant.id,
+          message: "break-glass signal read by user " + user.id + " on tenant " + tenantId,
+          details: { userId: user.id, action: "read_signals", count: signals.length },
+        });
+      } catch (alertErr) {
+        logger.error(
+          { err: alertErr instanceof Error ? alertErr.message : String(alertErr) },
+          "break_glass_used alert emit failed",
+        );
+      }
       res.json({ tenantId, signals });
     } catch (err) {
       if (!mapError(err, res)) next(err);

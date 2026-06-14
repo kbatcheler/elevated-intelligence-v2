@@ -7,6 +7,8 @@
 // "ANTHROPIC_API_KEY"). The env-backed implementation treats the ref as an
 // environment variable name. A future managed implementation maps the same ref
 // onto a secret-manager path; consumers do not change.
+import { GcpSecretManagerSecretStore } from "./gcpSecretStore";
+
 export interface SecretStore {
   get(ref: string): Promise<string | null>;
   set(ref: string, value: string): Promise<void>;
@@ -37,10 +39,25 @@ export class EnvSecretStore implements SecretStore {
 
 let activeStore: SecretStore | null = null;
 
+/**
+ * Construct the SecretStore the environment selects. The default is the local
+ * env-backed store; `SECRET_STORE_PROVIDER=gcp` selects the GCP Secret Manager
+ * REST adapter. The adapter is "available, not connected" until configured: it
+ * is constructed here without validating anything, so an unset project never
+ * crashes the boot and only surfaces on first use.
+ */
+function createSelectedStore(): SecretStore {
+  const provider = (process.env.SECRET_STORE_PROVIDER ?? "env").trim().toLowerCase();
+  if (provider === "gcp") {
+    return new GcpSecretManagerSecretStore();
+  }
+  return new EnvSecretStore();
+}
+
 /** Returns the process-wide SecretStore, constructing it on first use. */
 export function getSecretStore(): SecretStore {
   if (!activeStore) {
-    activeStore = new EnvSecretStore();
+    activeStore = createSelectedStore();
   }
   return activeStore;
 }

@@ -40,3 +40,6 @@ export * from "./accessGrantEvents";
 export * from "./edgeAgents";
 // Cost and token observability (Phase N): one measured row per real model call.
 export * from "./modelUsage";
+// Operational alert events (Phase O): the alert seam a connector error or a
+// failed OAuth token refresh records, which the Phase P notifier consumes.
+export * from "./alertEvents";

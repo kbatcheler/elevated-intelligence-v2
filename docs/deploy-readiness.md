@@ -15,6 +15,15 @@ on every restart and is not shared across instances.
   limiter to a shared store (for example a Postgres-backed or Redis counter) before
   scaling horizontally.
 
+## Connector rate-limit token buckets are in-memory and per process
+
+The per-connection token bucket and the throttle-retry state (Phase O) live in process,
+like the auth limiter. On a single instance they enforce the connector's declared quota
+correctly; across more than one instance each would keep its own bucket, so the effective
+quota multiplies by the instance count. Move the bucket state to a shared store before
+running the connected-refresh path on more than one instance, or pin connector refresh to a
+single worker.
+
 ## SESSION_SECRET is load bearing and should not be rotated casually
 
 Both the session cookie signature and the invite-PIN code hash derive from
