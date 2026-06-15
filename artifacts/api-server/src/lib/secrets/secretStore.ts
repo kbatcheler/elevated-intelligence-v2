@@ -7,6 +7,7 @@
 // "ANTHROPIC_API_KEY"). The env-backed implementation treats the ref as an
 // environment variable name. A future managed implementation maps the same ref
 // onto a secret-manager path; consumers do not change.
+import { AwsSecretsManagerSecretStore } from "./awsSecretsManagerSecretStore";
 import { GcpSecretManagerSecretStore } from "./gcpSecretStore";
 
 export interface SecretStore {
@@ -42,14 +43,18 @@ let activeStore: SecretStore | null = null;
 /**
  * Construct the SecretStore the environment selects. The default is the local
  * env-backed store; `SECRET_STORE_PROVIDER=gcp` selects the GCP Secret Manager
- * REST adapter. The adapter is "available, not connected" until configured: it
- * is constructed here without validating anything, so an unset project never
- * crashes the boot and only surfaces on first use.
+ * REST adapter and `SECRET_STORE_PROVIDER=aws` selects the AWS Secrets Manager
+ * REST adapter. Each managed adapter is "available, not connected" until
+ * configured: it is constructed here without validating anything, so an unset
+ * project or region never crashes the boot and only surfaces on first use.
  */
 function createSelectedStore(): SecretStore {
   const provider = (process.env.SECRET_STORE_PROVIDER ?? "env").trim().toLowerCase();
   if (provider === "gcp") {
     return new GcpSecretManagerSecretStore();
+  }
+  if (provider === "aws") {
+    return new AwsSecretsManagerSecretStore();
   }
   return new EnvSecretStore();
 }

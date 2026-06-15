@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { AwsSecretsManagerSecretStore } from "./awsSecretsManagerSecretStore";
 import { GcpSecretManagerSecretStore } from "./gcpSecretStore";
 import { EnvSecretStore, getSecretStore, requireSecret, setSecretStore } from "./secretStore";
 
@@ -13,6 +14,13 @@ const ENV_KEYS = [
   "GCP_SECRET_MANAGER_TOKEN_SOURCE",
   "GCP_SECRET_MANAGER_ENDPOINT",
   "GCP_SECRET_MANAGER_TIMEOUT_MS",
+  "AWS_SECRETS_MANAGER_REGION",
+  "AWS_REGION",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AWS_SECRETS_MANAGER_ENDPOINT",
+  "AWS_SECRETS_MANAGER_TIMEOUT_MS",
 ];
 const savedEnv: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) savedEnv[k] = process.env[k];
@@ -79,6 +87,15 @@ describe("getSecretStore provider selection", () => {
     // Construction must not throw even with no project: it is available, not
     // connected, and only surfaces on first use.
     expect(getSecretStore()).toBeInstanceOf(GcpSecretManagerSecretStore);
+  });
+
+  it("selects the AWS adapter when SECRET_STORE_PROVIDER=aws, without crashing the boot when unconfigured", () => {
+    process.env.SECRET_STORE_PROVIDER = "aws";
+    delete process.env.AWS_SECRETS_MANAGER_REGION;
+    delete process.env.AWS_REGION;
+    setSecretStore(null);
+    // Available, not connected: construction validates nothing.
+    expect(getSecretStore()).toBeInstanceOf(AwsSecretsManagerSecretStore);
   });
 });
 
@@ -279,5 +296,97 @@ describe("GcpSecretManagerSecretStore (metadata token source)", () => {
       fetchImpl,
     });
     await expect(store.get("REF")).rejects.toThrow(/ECONNREFUSED/);
+  });
+});
+
+describe("AwsSecretsManagerSecretStore over an injected fetch", () => {
+  const CREDS = { accessKeyId: "AKID", secretAccessKey: "SECRET" };
+
+  function targetOf(call: RecordedCall): string {
+    return (call.headers as Record<string, string>)["X-Amz-Target"] ?? "";
+  }
+
+  it("resolves a secret via GetSecretValue and signs the request", async () => {
+    const { calls, fetchImpl } = recorder(() => ({ status: 200, body: { SecretString: "resolved-value" } }));
+    const store = new AwsSecretsManagerSecretStore({ region: "us-east-1", credentials: CREDS, fetchImpl });
+    expect(await store.get("SESSION_SECRET")).toBe("resolved-value");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe("https://secretsmanager.us-east-1.amazonaws.com/");
+    expect(calls[0]!.headers["X-Amz-Target"]).toBe("secretsmanager.GetSecretValue");
+    expect(calls[0]!.headers.Authorization).toMatch(/^AWS4-HMAC-SHA256 /);
+    expect(calls[0]!.headers["X-Amz-Date"]).toBeDefined();
+  });
+
+  it("returns null when the secret does not exist", async () => {
+    const { fetchImpl } = recorder(() => ({ status: 400, body: { __type: "ResourceNotFoundException" } }));
+    const store = new AwsSecretsManagerSecretStore({ region: "r", credentials: CREDS, fetchImpl });
+    expect(await store.get("MISSING")).toBeNull();
+  });
+
+  it("throws on an unexpected status without leaking the response body", async () => {
+    const { fetchImpl } = recorder(() => ({
+      status: 500,
+      body: { __type: "InternalError", message: "leaked-secret-body" },
+    }));
+    const store = new AwsSecretsManagerSecretStore({ region: "r", credentials: CREDS, fetchImpl });
+    await expect(store.get("REF")).rejects.toThrow(/access failed with http 500/);
+    await expect(store.get("REF")).rejects.not.toThrow(/leaked-secret-body/);
+  });
+
+  it("creates the secret on set", async () => {
+    const { calls, fetchImpl } = recorder((_url, init) => {
+      const target = ((init?.headers ?? {}) as Record<string, string>)["X-Amz-Target"];
+      if (target === "secretsmanager.CreateSecret") return { status: 200, body: {} };
+      return { status: 500 };
+    });
+    const store = new AwsSecretsManagerSecretStore({ region: "r", credentials: CREDS, fetchImpl });
+    await store.set("REF", "the-value");
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0]!.body!) as { Name: string; SecretString: string };
+    expect(body).toEqual({ Name: "REF", SecretString: "the-value" });
+  });
+
+  it("falls back to PutSecretValue when the secret already exists", async () => {
+    const { calls, fetchImpl } = recorder((_url, init) => {
+      const target = ((init?.headers ?? {}) as Record<string, string>)["X-Amz-Target"];
+      if (target === "secretsmanager.CreateSecret") return { status: 400, body: { __type: "ResourceExistsException" } };
+      if (target === "secretsmanager.PutSecretValue") return { status: 200, body: {} };
+      return { status: 500 };
+    });
+    const store = new AwsSecretsManagerSecretStore({ region: "r", credentials: CREDS, fetchImpl });
+    await expect(store.set("REF", "v")).resolves.toBeUndefined();
+    expect(calls.map(targetOf)).toEqual(["secretsmanager.CreateSecret", "secretsmanager.PutSecretValue"]);
+  });
+
+  it("deletes idempotently, treating a missing secret as already gone", async () => {
+    const { calls, fetchImpl } = recorder(() => ({ status: 400, body: { __type: "ResourceNotFoundException" } }));
+    const store = new AwsSecretsManagerSecretStore({ region: "r", credentials: CREDS, fetchImpl });
+    await expect(store.delete("REF")).resolves.toBeUndefined();
+    expect(targetOf(calls[0]!)).toBe("secretsmanager.DeleteSecret");
+  });
+
+  it("rejects an invalid ref before any network call", async () => {
+    const { calls, fetchImpl } = recorder(() => ({ status: 200, body: {} }));
+    const store = new AwsSecretsManagerSecretStore({ region: "r", credentials: CREDS, fetchImpl });
+    await expect(store.get("bad/ref")).rejects.toThrow(/Invalid secret reference/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("is available, not connected until a region is configured", async () => {
+    delete process.env.AWS_SECRETS_MANAGER_REGION;
+    delete process.env.AWS_REGION;
+    const { calls, fetchImpl } = recorder(() => ({ status: 200, body: {} }));
+    const store = new AwsSecretsManagerSecretStore({ credentials: CREDS, fetchImpl });
+    await expect(store.get("REF")).rejects.toThrow(/available, not connected/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("requires credentials when a region is set but the keys are missing", async () => {
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+    const { calls, fetchImpl } = recorder(() => ({ status: 200, body: {} }));
+    const store = new AwsSecretsManagerSecretStore({ region: "r", fetchImpl });
+    await expect(store.get("REF")).rejects.toThrow(/AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY/);
+    expect(calls).toHaveLength(0);
   });
 });

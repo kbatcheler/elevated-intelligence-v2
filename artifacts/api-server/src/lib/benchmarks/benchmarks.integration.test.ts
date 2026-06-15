@@ -1,4 +1,4 @@
-import { and, eq, like, sql } from "drizzle-orm";
+import { and, eq, inArray, like, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   benchmarkCohortsTable,
@@ -6,9 +6,11 @@ import {
   benchmarkStatsTable,
   db,
   derivedSignalsTable,
+  layersTable,
   tenantsTable,
 } from "@workspace/db";
 import { encryptSignalValue } from "../security/signalCrypto";
+import type { DecryptedSignalRow } from "../security/signalRead";
 import { ensureActiveTenantKey, revokeTenantKey } from "../security/tenantKeyService";
 import { runBenchmarkRecompute, type BenchmarkLogger } from "./benchmarks";
 import { segmentKeyFor } from "./benchmarkMath";
@@ -241,5 +243,149 @@ describe("runBenchmarkRecompute", () => {
       .from(benchmarkCohortsTable)
       .where(like(benchmarkCohortsTable.segmentKey, `%${tenantsA[2]!}%`));
     expect(Number(leaked[0]!.n)).toBe(0);
+  });
+});
+
+// Phase AG: the custom-layer benchmark guardrail. A custom layer (isCanonical
+// false) contributes to a cohort only when an owner maps it to a canonical layer,
+// in which case its signals pool UNDER that canonical key; an unmapped custom
+// layer is excluded entirely. This injects a deterministic machine read so it can
+// assert the pooling decision directly, against real layer rows and real opted-in
+// tenants, without exercising the crypto path.
+describe("runBenchmarkRecompute custom-layer guardrail (Phase AG)", () => {
+  const G = `agbench-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const CANON = `${G}-canonical`;
+  const CUSTOM_UNMAPPED = `${G}-custom-unmapped`;
+  const CUSTOM_MAPPED = `${G}-custom-mapped`;
+  const SECTOR = `sector-${G}`;
+  const BAND = `band-${G}`;
+  const SEGMENT = segmentKeyFor(SECTOR, BAND)!.segmentKey;
+  const S_CANON = "g_canon";
+  const S_UNMAPPED = "g_unmapped";
+  const S_MAPPED = "g_mapped";
+  const myTenantIds: string[] = [];
+  const valueByTenant = new Map<string, number>();
+
+  async function insertGuardrailLayer(
+    key: string,
+    isCanonical: boolean,
+    benchmarkCanonicalKey: string | null,
+  ): Promise<void> {
+    await db.insert(layersTable).values({
+      key,
+      name: key,
+      description: "guardrail fixture",
+      archetype: "Performance scorecard",
+      heroDescription: "",
+      ownerPersona: "",
+      diagnosticQuestion: "fixture question",
+      metricDefinitions: { tiles: ["a", "b", "c", "d"] },
+      rootCauses: [],
+      actions: [],
+      gaps: { items: [], closedBy: "" },
+      feeds: ["fixture"],
+      moduleGroup: "Test",
+      isCanonical,
+      sortOrder: 9000,
+      benchmarkCanonicalKey,
+    });
+  }
+
+  // Every fixture tenant carries one scalar under each of the three layers, so the
+  // only thing deciding what reaches a stat is the guardrail, not the data. A
+  // tenant the recompute finds but we did not seed (a foreign opted-in row) reads
+  // empty, so it cannot pollute our unique segment.
+  const readSignals = async (tenantId: string): Promise<DecryptedSignalRow[]> => {
+    const v = valueByTenant.get(tenantId);
+    if (v === undefined) return [];
+    const base = {
+      window: null,
+      sourceConnectorKey: "test",
+      computedAt: new Date().toISOString(),
+    };
+    return [
+      { layerKey: CANON, signalKey: S_CANON, value: v, ...base },
+      { layerKey: CUSTOM_UNMAPPED, signalKey: S_UNMAPPED, value: v, ...base },
+      { layerKey: CUSTOM_MAPPED, signalKey: S_MAPPED, value: v, ...base },
+    ];
+  };
+
+  beforeAll(async () => {
+    await insertGuardrailLayer(CANON, true, null);
+    await insertGuardrailLayer(CUSTOM_UNMAPPED, false, null);
+    await insertGuardrailLayer(CUSTOM_MAPPED, false, CANON);
+    for (const v of [10, 20, 30, 40, 50, 60]) {
+      const inserted = await db
+        .insert(tenantsTable)
+        .values({
+          name: `${G}-${myTenantIds.length}`,
+          url: `https://${G}-${myTenantIds.length}.example.com`,
+          sector: SECTOR,
+          revenueBand: BAND,
+          benchmarkOptIn: true,
+        })
+        .returning({ id: tenantsTable.id });
+      const id = inserted[0]!.id;
+      myTenantIds.push(id);
+      valueByTenant.set(id, v);
+    }
+  });
+
+  afterAll(async () => {
+    for (const id of myTenantIds) {
+      await db.delete(tenantsTable).where(eq(tenantsTable.id, id));
+    }
+    await db
+      .delete(layersTable)
+      .where(inArray(layersTable.key, [CANON, CUSTOM_UNMAPPED, CUSTOM_MAPPED]));
+    // Supersede our fixtures out of the global stats now that they are gone.
+    await runBenchmarkRecompute({ now: new Date(), ...baseDeps });
+  });
+
+  const statFor = async (
+    layerKey: string,
+    signalKey: string,
+  ): Promise<typeof benchmarkStatsTable.$inferSelect | undefined> => {
+    const rows = await db
+      .select()
+      .from(benchmarkStatsTable)
+      .where(
+        and(
+          eq(benchmarkStatsTable.cohortSegmentKey, SEGMENT),
+          eq(benchmarkStatsTable.layerKey, layerKey),
+          eq(benchmarkStatsTable.signalKey, signalKey),
+        ),
+      );
+    return rows[0];
+  };
+
+  it("publishes the canonical layer, excludes the unmapped custom, and pools the mapped custom under the canonical key", async () => {
+    await runBenchmarkRecompute({ now: new Date(), ...baseDeps, readSignals });
+
+    // Canonical layer publishes its own distribution.
+    const canon = await statFor(CANON, S_CANON);
+    expect(canon).toBeDefined();
+    expect(canon!.sampleCount).toBe(6);
+
+    // Unmapped custom layer is excluded entirely: nothing under its key, and its
+    // signal never leaks into the segment under any key.
+    expect(await statFor(CUSTOM_UNMAPPED, S_UNMAPPED)).toBeUndefined();
+    const anyUnmapped = await db
+      .select()
+      .from(benchmarkStatsTable)
+      .where(
+        and(
+          eq(benchmarkStatsTable.cohortSegmentKey, SEGMENT),
+          eq(benchmarkStatsTable.signalKey, S_UNMAPPED),
+        ),
+      );
+    expect(anyUnmapped).toHaveLength(0);
+
+    // Mapped custom layer's signal pools UNDER the canonical key, never the custom
+    // key: a stat exists for (CANON, S_MAPPED) and none for (CUSTOM_MAPPED, *).
+    const mappedUnderCanon = await statFor(CANON, S_MAPPED);
+    expect(mappedUnderCanon).toBeDefined();
+    expect(mappedUnderCanon!.sampleCount).toBe(6);
+    expect(await statFor(CUSTOM_MAPPED, S_MAPPED)).toBeUndefined();
   });
 });

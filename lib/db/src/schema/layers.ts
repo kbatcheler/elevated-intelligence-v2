@@ -1,4 +1,14 @@
-import { boolean, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
+import { usersTable } from "./users";
 
 // The layer registry. This table is the single source of truth for layer
 // identity. There is no LAYER_KEYS constant anywhere in the system: the
@@ -43,6 +53,23 @@ export const layersTable = pgTable("layers", {
   promptFragments: jsonb("prompt_fragments").$type<Record<string, unknown> | null>(),
   isCanonical: boolean("is_canonical").notNull().default(true),
   sortOrder: integer("sort_order").notNull(),
+  // Phase AG: the owner-approval gate for custom layers. A custom layer
+  // (isCanonical false) does not enter the seed fan-out until an owner approves
+  // it, so quality stays curated. The canonical 14 are approved by definition
+  // (isCanonical true) and leave both columns null; loadRegistry includes a layer
+  // when it is canonical OR approvedAt is set. approvedBy records which owner
+  // authorized the first run.
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  approvedBy: uuid("approved_by").references(() => usersTable.id, { onDelete: "set null" }),
+  // Phase AG: a custom layer is excluded from cross-tenant benchmarking unless it
+  // is explicitly mapped to a canonical layer here, in which case its signals pool
+  // under that canonical key so the cohort stays comparable. Null means the layer
+  // contributes nothing to any benchmark. Self-references the registry; the create
+  // route additionally enforces that the target is a canonical layer.
+  benchmarkCanonicalKey: text("benchmark_canonical_key").references(
+    (): AnyPgColumn => layersTable.key,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

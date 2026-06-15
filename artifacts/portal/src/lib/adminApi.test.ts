@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  approveCustomLayer,
   bindTenant,
+  createCustomLayer,
   createOrg,
+  fetchCatalogLayers,
+  fetchCustomLayers,
   fetchOrgs,
   fetchPins,
   fetchTenants,
@@ -205,5 +209,80 @@ describe("adminApi.bindTenant", () => {
   it("returns a generic error when fetch throws", async () => {
     mockFetch(new Error("offline"));
     expect(await bindTenant("o1", "t1")).toEqual({ error: "failed" });
+  });
+});
+
+describe("adminApi custom-layer console", () => {
+  const sampleInput = {
+    name: "Churn watch",
+    diagnosticQuestion: "Why are accounts leaving?",
+    archetype: "Performance scorecard",
+    metricDefinitions: { tiles: ["a", "b", "c", "d"] },
+    feeds: ["billing"],
+  };
+
+  it("fetchCustomLayers reads the owner route and field", async () => {
+    const fn = mockFetch({ ok: true, status: 200, json: async () => ({ layers: [{ key: "k1" }] }) });
+    expect(await fetchCustomLayers()).toEqual({ state: "ready", items: [{ key: "k1" }] });
+    expect(fn).toHaveBeenCalledWith("/api/layers/custom");
+  });
+
+  it("fetchCatalogLayers reads the catalog route and field", async () => {
+    const fn = mockFetch({ ok: true, status: 200, json: async () => ({ layers: [] }) });
+    expect(await fetchCatalogLayers()).toEqual({ state: "empty", items: [] });
+    expect(fn).toHaveBeenCalledWith("/api/layers");
+  });
+
+  it("createCustomLayer posts the template and returns ok", async () => {
+    const fn = mockFetch({ ok: true, status: 201 });
+    expect(await createCustomLayer(sampleInput)).toEqual({ ok: true });
+    expect(fn).toHaveBeenCalledWith("/api/layers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sampleInput),
+    });
+  });
+
+  it("createCustomLayer surfaces the server guard code on a non-ok body", async () => {
+    mockFetch({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: "invalid_benchmark_canonical_key" }),
+    });
+    expect(
+      await createCustomLayer({ ...sampleInput, benchmarkCanonicalKey: "not-canonical" }),
+    ).toEqual({ error: "invalid_benchmark_canonical_key" });
+  });
+
+  it("createCustomLayer returns unauthorized on a 401", async () => {
+    mockFetch({ ok: false, status: 401 });
+    expect(await createCustomLayer(sampleInput)).toEqual({ unauthorized: true });
+  });
+
+  it("createCustomLayer returns a generic error when fetch throws", async () => {
+    mockFetch(new Error("offline"));
+    expect(await createCustomLayer(sampleInput)).toEqual({ error: "failed" });
+  });
+
+  it("approveCustomLayer posts to the approve route and returns ok", async () => {
+    const fn = mockFetch({ ok: true, status: 200 });
+    expect(await approveCustomLayer("custom-1")).toEqual({ ok: true });
+    expect(fn).toHaveBeenCalledWith("/api/layers/custom-1/approve", { method: "POST" });
+  });
+
+  it("approveCustomLayer surfaces the server guard code on a non-ok body", async () => {
+    mockFetch({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: "only_custom_layers_require_approval" }),
+    });
+    expect(await approveCustomLayer("revenue")).toEqual({
+      error: "only_custom_layers_require_approval",
+    });
+  });
+
+  it("approveCustomLayer returns unauthorized on a 401", async () => {
+    mockFetch({ ok: false, status: 401 });
+    expect(await approveCustomLayer("custom-1")).toEqual({ unauthorized: true });
   });
 });

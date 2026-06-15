@@ -4,6 +4,7 @@ import {
   benchmarkEventsTable,
   benchmarkStatsTable,
   db,
+  layersTable,
   tenantsTable,
 } from "@workspace/db";
 import { CryptoShreddedError, SignalEncryptionError } from "../security/errors";
@@ -131,6 +132,36 @@ export async function runBenchmarkRecompute(
     .from(tenantsTable)
     .where(eq(tenantsTable.benchmarkOptIn, true));
 
+  // Phase AG benchmark guardrail. A custom layer (isCanonical false) is a
+  // per-provider addition with no cross-tenant comparability, so it contributes
+  // nothing to a cohort unless an owner explicitly maps it to a canonical layer,
+  // in which case its signals pool UNDER that canonical key so the cohort stays
+  // comparable. benchmarkKeyFor resolves a signal's layerKey to the key it pools
+  // under, or null when it must be excluded:
+  //   - a canonical layer pools under its own key;
+  //   - a custom layer mapped to a canonical pools under the canonical key;
+  //   - a custom layer with no mapping (or one pointing at a non-canonical) is
+  //     excluded;
+  //   - a layerKey with no registry row keeps its own key, the exact pre-AG
+  //     behaviour, so a signal whose layer sits outside the registry is unchanged.
+  const layerRows = await db
+    .select({
+      key: layersTable.key,
+      isCanonical: layersTable.isCanonical,
+      benchmarkCanonicalKey: layersTable.benchmarkCanonicalKey,
+    })
+    .from(layersTable);
+  const canonicalKeys = new Set(layerRows.filter((l) => l.isCanonical).map((l) => l.key));
+  const layerByKey = new Map(layerRows.map((l) => [l.key, l] as const));
+  const benchmarkKeyFor = (layerKey: string): string | null => {
+    const layer = layerByKey.get(layerKey);
+    if (!layer) return layerKey; // outside the registry: unchanged from pre-AG
+    if (layer.isCanonical) return layerKey;
+    const mapped = layer.benchmarkCanonicalKey;
+    if (mapped && canonicalKeys.has(mapped)) return mapped;
+    return null; // custom and unmapped, or mapped to a non-canonical: excluded
+  };
+
   // Per segment: the normalized labels, the set of contributing tenant ids (for
   // the cohort member count), and the per-metric sample pools. The tenant id set
   // is in-memory bookkeeping only; it never reaches a persisted row.
@@ -185,13 +216,17 @@ export async function runBenchmarkRecompute(
     const latest = new Map<string, { value: number; computedAt: string; samples: MetricSamples }>();
     for (const row of rows) {
       if (typeof row.value !== "number" || !Number.isFinite(row.value)) continue;
-      const metricKey = row.layerKey + "\u0000" + row.signalKey + "\u0000" + (row.window ?? "");
+      // Resolve the key this signal pools under, dropping an excluded custom layer
+      // before it can influence any cohort or stat.
+      const poolLayerKey = benchmarkKeyFor(row.layerKey);
+      if (poolLayerKey === null) continue;
+      const metricKey = poolLayerKey + "\u0000" + row.signalKey + "\u0000" + (row.window ?? "");
       const prev = latest.get(metricKey);
       if (!prev || row.computedAt > prev.computedAt) {
         latest.set(metricKey, {
           value: row.value,
           computedAt: row.computedAt,
-          samples: { layerKey: row.layerKey, signalKey: row.signalKey, window: row.window, values: [] },
+          samples: { layerKey: poolLayerKey, signalKey: row.signalKey, window: row.window, values: [] },
         });
       }
     }

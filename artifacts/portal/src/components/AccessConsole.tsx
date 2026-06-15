@@ -3,13 +3,14 @@ import { PinsPanel } from "./admin/PinsPanel";
 import { UsersPanel } from "./admin/UsersPanel";
 import { OrgsPanel } from "./admin/OrgsPanel";
 import { IngestionPanel } from "./admin/IngestionPanel";
+import { CustomLayerPanel } from "./admin/CustomLayerPanel";
 import { Org, Tenant } from "../types";
 import { useAuth } from "../lib/AuthContext";
 import * as adminApi from "../lib/adminApi";
 
 export function AccessConsole() {
   const { logout } = useAuth();
-  const [tab, setTab] = useState<"pins" | "users" | "orgs" | "ingestion">("pins");
+  const [tab, setTab] = useState<"pins" | "users" | "orgs" | "ingestion" | "layers">("pins");
   
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgsState, setOrgsState] = useState<"loading" | "ready" | "empty" | "error">("loading");
@@ -41,7 +42,7 @@ export function AccessConsole() {
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", padding: "48px 32px 96px" }}>
       <div style={{ marginBottom: 32, display: "flex", gap: 16, borderBottom: "1px solid var(--border)" }}>
-        {(["pins", "users", "orgs", "ingestion"] as const).map(t => (
+        {(["pins", "users", "orgs", "ingestion", "layers"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -68,6 +69,7 @@ export function AccessConsole() {
         {tab === "users" && <UsersPanel />}
         {tab === "orgs" && <OrgsPanel orgs={orgs} refreshOrgs={fetchOrgs} />}
         {tab === "ingestion" && <IngestionPanel tenants={tenants} />}
+        {tab === "layers" && <CustomLayerPanel />}
       </div>
     </div>
   );

@@ -67,6 +67,7 @@ import { getAlerter } from "../alerts/alerter";
 import { captureError } from "../observability/sentryReporter";
 import { assertSeedWithinBudget } from "./budget";
 import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } from "./queue";
+import { runnableLayerCondition } from "../layers/customLayer";
 import { isReducedLayer } from "./reduceDecision";
 import { recordModelUsageSafe } from "./usage";
 
@@ -652,6 +653,12 @@ async function runLayer(
 }
 
 async function loadRegistry(): Promise<LayerDescriptor[]> {
+  // Phase AG approval gate. A layer enters the seed fan-out only when it is
+  // canonical (the default 14, approved by definition) OR a custom layer an owner
+  // has approved (approvedAt set). An unapproved custom layer never runs the
+  // nine-stage chain, so quality stays curated and "approved before first run" is
+  // enforced at the one place that decides what runs. The canonical 14 are all
+  // canonical, so this predicate leaves their seed byte-for-byte unchanged.
   const rows = await db
     .select({
       key: layersTable.key,
@@ -660,6 +667,7 @@ async function loadRegistry(): Promise<LayerDescriptor[]> {
       diagnosticQuestion: layersTable.diagnosticQuestion,
     })
     .from(layersTable)
+    .where(runnableLayerCondition())
     .orderBy(asc(layersTable.sortOrder));
   return rows;
 }

@@ -107,4 +107,50 @@ describe("pipeline_jobs seed queue", () => {
 
     await markSeedJob(b!.id, "done");
   });
+
+  it("never double-processes across two simultaneous instances", async () => {
+    const keys = Array.from({ length: 40 }, (_, i) => `layer-${i}`);
+    await enqueueSeedLayers(tenantId, keys, "full");
+
+    // Two distinct instances, each with its own pool of workers, drain the SAME
+    // tenant queue at once. FOR UPDATE SKIP LOCKED guarantees no job is handed to
+    // two workers even across instances. There is NO fleet-wide concurrency
+    // ceiling: each instance runs up to LAYER_CONCURRENCY claimers, so the global
+    // worker count is (instances * LAYER_CONCURRENCY). The cross-instance
+    // guarantee proven here is no-double-processing, not a global cap.
+    const claimedBy = new Map<string, string>();
+    async function worker(instanceId: string, slot: string): Promise<void> {
+      const who = `${instanceId}:${slot}`;
+      for (;;) {
+        const job = await claimNextSeedJob(tenantId, who);
+        if (!job) return;
+        if (claimedBy.has(job.payload.layerKey)) {
+          throw new Error(`layer ${job.payload.layerKey} was claimed twice`);
+        }
+        claimedBy.set(job.payload.layerKey, who);
+        await markSeedJob(job.id, "done");
+      }
+    }
+    function instance(instanceId: string): Promise<unknown> {
+      return Promise.all([worker(instanceId, "a"), worker(instanceId, "b"), worker(instanceId, "c")]);
+    }
+    await Promise.all([instance("instance-1"), instance("instance-2")]);
+
+    // Every layer was claimed exactly once and all keys are covered.
+    expect(claimedBy.size).toBe(keys.length);
+    expect([...claimedBy.keys()].sort()).toEqual([...keys].sort());
+
+    // The work spread across more than one worker (with 40 jobs and 6 workers a
+    // single-worker monopoly is vanishingly unlikely); this evidences genuine
+    // concurrent draining rather than a serial run.
+    expect(new Set([...claimedBy.values()]).size).toBeGreaterThan(1);
+
+    // The queue is fully drained and every job is terminal.
+    const remaining = await db
+      .select({ status: pipelineJobsTable.status })
+      .from(pipelineJobsTable)
+      .where(eq(pipelineJobsTable.tenantId, tenantId));
+    expect(remaining).toHaveLength(keys.length);
+    expect(remaining.every((r) => r.status === "done")).toBe(true);
+  });
 });

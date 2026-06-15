@@ -2202,3 +2202,70 @@ updated to "A through AF". Per the real-endpoint blocker, Phase AF PAUSES at its
 extraction quality, a local-only full seed with real latency and token/cost telemetry, plus the owner
 rerun steps and missing env), and the build does NOT auto-advance to Phase AG without an owner. The next
 protocol milestone hard stop is Phase AI at the end of Stage 5.
+
+## Phase AG: the curated custom-layer creation flow
+
+Phase AG is the fourth phase of Stage 5 (Platform completion), run under the owner-authorized
+AE-through-AI sequence whose only milestone hard stop is Phase AI. (Phase AF paused at its own gate on the
+real-endpoint blocker; the owner authorized proceeding, so AG resumes the sequence.) It makes the layer
+registry extensible by the provider owner. The `layers` table has always been the single source of truth
+for layer identity (there is no `LAYER_KEYS` constant anywhere; the pipeline, schemas, prompts, and portal
+all read identity from this table), and Phase AG turns "custom layers are added as more rows later" from a
+latent capability into a curated, owner-gated flow.
+
+### What it does
+
+A single predicate, `runnableLayerCondition()`, decides whether a layer is live: canonical OR an owner has
+set its `approvedAt`. BOTH the seed fan-out (`orchestrator.loadRegistry`) and the portal catalog
+(`GET /layers`) call this same predicate, so the set of layers that produce per-tenant output and the set
+the portal lists can never disagree, and an unapproved custom layer is withheld identically from both.
+
+The `layers` table gains an approval gate (`approvedAt` nullable timestamptz, `approvedBy` uuid
+referencing `users.id` on delete set null) and an optional `benchmarkCanonicalKey` (nullable text,
+self-referencing `layers.key` on delete set null); no new table, so the schema stays at 39 base tables and
+the one added text or jsonb column is `benchmarkCanonicalKey`. A custom layer is created from
+`customLayerTemplateSchema`, a `.strict()` Zod object that collects only the high-signal fields the
+pipeline and hero need (name, diagnostic question, an archetype from the renderable set, EXACTLY four
+metric tiles, at least one feed, plus optional honest extras) and therefore cannot be made to smuggle
+`isCanonical`, `approvedAt`, or `sortOrder`. `buildCustomLayerRow` fills every uncollected field with an
+honest, valid-but-empty default (description falls back to the diagnostic question, persona and hero
+strings empty, the cause, action, and gap collections empty, `moduleGroup` "Custom") and runs the whole
+row through `deepStripDashes` so no long dash reaches this new owner-supplied text sink; the row persists
+`isCanonical=false` and `approvedAt=null`, so it runs nowhere until approved. `allocateLayerKey` and
+`slugifyLayerKey` derive a stable, ASCII-only, hyphenated primary key, resolving any collision by
+suffixing `-2`, `-3`, and so on with a loud timestamped last resort rather than a silent duplicate.
+
+The routes are all owner-only (`requireOwner`): `POST /api/layers` (create; a supplied
+`benchmarkCanonicalKey` must reference an existing canonical layer), `POST /api/layers/:key/approve`
+(idempotent, sets `approvedAt` and `approvedBy`, returns `alreadyApproved`, refuses a canonical or a
+missing key with distinct errors), `GET /api/layers/custom` (the owner console list), and the shared
+`GET /api/layers` runnable catalog. The benchmark recompute (`benchmarks.ts`) honors the mapping honestly:
+an unmapped custom layer is excluded from every cohort, and a mapped one pools under its canonical key, so
+cohort membership is never fabricated. The renderable archetypes live in the portal hero `REGISTRY`
+(exported as `ARCHETYPE_KEYS`) and the server validates against `ALLOWED_ARCHETYPES`; with no shareable
+package, `customLayer.archetypeSync.test.ts` reads the portal registry SOURCE and asserts the two lists
+are the same set, so they can never silently drift (currently nine renderable archetypes). The owner-only
+Access console gains a "layers" tab (`CustomLayerPanel`) with a create form and a per-row approve action
+and distinct honest loading, empty, and error states; the `adminApi` client gains the typed loaders and
+writes.
+
+### The honesty boundaries
+
+A custom layer that has not run shows no per-tenant output; an unmapped custom layer claims no benchmark
+membership; and the catalog lists a custom layer only once it is approved. The portal `CustomLayerPanel`
+and the "layers" tab are the one accepted LOW, source-reviewed rather than test-proven, but the client
+functions behind them ARE unit-tested and the routes ARE integration-tested; only the React rendering is
+source-reviewed, mirroring the AE ingestion-panel and AF sovereign-surface items.
+
+### Verification
+
+Typecheck and build green across the workspace. The full suite is green at 853 tests (api-server 458
+across 56 files, portal 234 across 18, cortex 110 across 13, connectors 29 across 5, edge-agent 10 across
+3, db 8, scripts 4), up 34 from Phase AF's 819: api-server `customLayer` 15, `customLayer.archetypeSync` 1,
+`layers.integration` 8, the `benchmarks.integration` guardrail (+1), and portal `adminApi` (+9). The
+long-dash sweep is zero on both sides: the source guard is green over authored source including this Phase
+AG Markdown, and a fresh database-wide cast over all 144 public text and jsonb columns across 39 base
+tables reports zero hits. Zero new npm dependencies. The architect `evaluate_task` returned PASS on the
+first pass with no findings. The drift index, the rollup, and this build report are updated to "A through
+AG". Per the owner-authorized AE-through-AI sequence Phase AG does NOT pause at its own gate; execution
+continues to Phase AH. The next protocol milestone hard stop is Phase AI at the end of Stage 5.

@@ -9,6 +9,7 @@ import { mkdir, readFile, readdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { GcsArchiveStore } from "./gcsArchiveStore";
+import { S3ArchiveStore } from "./s3ArchiveStore";
 
 export interface ArchivePutOptions {
   // When true, fail loudly rather than overwrite an existing object, so an
@@ -148,6 +149,9 @@ function createSelectedStore(): ArchiveStore {
   const provider = (process.env.ARCHIVE_STORE_PROVIDER ?? "local").trim().toLowerCase();
   if (provider === "gcs") {
     return new GcsArchiveStore();
+  }
+  if (provider === "s3") {
+    return new S3ArchiveStore();
   }
   return new LocalFsArchiveStore();
 }

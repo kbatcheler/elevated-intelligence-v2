@@ -30,6 +30,12 @@ const REGISTRY: Record<string, HeroComponent> = {
   "Aging and collection": AgingCollectionHero,
 };
 
+// The archetype display strings a custom layer may pick, sourced from the same
+// REGISTRY the heroes render with, so the owner console dropdown can never offer
+// an archetype that would fall through to the generic hero. The server's
+// ALLOWED_ARCHETYPES is sync-tested against these same keys.
+export const ARCHETYPE_KEYS: string[] = Object.keys(REGISTRY);
+
 export function heroFor(archetype: string | null | undefined): HeroComponent {
   if (archetype && Object.prototype.hasOwnProperty.call(REGISTRY, archetype)) {
     return REGISTRY[archetype];

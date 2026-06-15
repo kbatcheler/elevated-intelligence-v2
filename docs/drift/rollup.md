@@ -1,10 +1,37 @@
-# Drift rollup: Phases A through AF
+# Drift rollup: Phases A through AG
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase AF (the local LLM seat and sovereign-mode phase, the third phase of Stage 5,
+Last updated after Phase AG (the curated custom-layer creation flow, the fourth phase of Stage 5,
+Platform completion, run under the owner-authorized AE-through-AI sequence; Phase AF paused at its own
+gate on the real-endpoint blocker and the owner authorized proceeding). Phase AG turns the always-latent
+"custom layers are more rows" capability of the `layers` registry (the single source of layer identity,
+no `LAYER_KEYS` constant anywhere) into an owner-gated flow. A new `runnableLayerCondition()` predicate
+(canonical OR `approvedAt` set) is the SINGLE gate consulted by BOTH `orchestrator.loadRegistry` (the seed
+fan-out) and `GET /layers` (the portal catalog), so an unapproved custom layer is withheld identically
+from per-tenant output and the catalog and the two can never disagree. The `layers` table gains an
+approval gate (`approvedAt`, `approvedBy`) and an optional `benchmarkCanonicalKey` self-reference (no new
+table). An owner creates a custom layer from a `.strict()` guarded template (exactly four metric tiles, an
+archetype the hero registry can render, at least one feed) that cannot smuggle `isCanonical`,
+`approvedAt`, or `sortOrder`, with honest valid-but-empty defaults and `deepStripDashes` at the new text
+sink; it persists UNAPPROVED and runs nowhere until the owner approves it (owner-only, idempotent, records
+`approvedBy`). A benchmark mapping must reference an existing canonical layer, and the cohort recompute
+excludes an unmapped custom layer and pools a mapped one UNDER its canonical key, so cohort membership is
+never fabricated. `ALLOWED_ARCHETYPES` (api-server) and the portal hero `REGISTRY` keys (`ARCHETYPE_KEYS`)
+are kept in lockstep by a source-reading guard test (no shared package), currently nine renderable
+archetypes. The portal Access console gains an owner-only "layers" tab (`CustomLayerPanel`) with distinct
+honest loading, empty, and error states. The global gates were re-run fresh: typecheck and build green,
+the full suite green at 853 tests (api-server 458, portal 234, cortex 110, connectors 29, edge-agent 10,
+db 8, scripts 4; +34 from AF, in api-server and portal), and the long-dash sweep zero on both sides over
+all 144 public text and jsonb columns across 39 base tables (one text column added,
+`benchmarkCanonicalKey`; no table added). Zero new npm dependencies. The architect `evaluate_task`
+returned PASS on the first pass with no findings. The new still-live item (the source-reviewed portal
+panel) is added below. Per the owner-authorized sequence Phase AG does NOT pause at its own gate; execution
+continues to Phase AH. The next protocol milestone hard stop is Phase AI at the end of Stage 5.
+
+Earlier, updated after Phase AF (the local LLM seat and sovereign-mode phase, the third phase of Stage 5,
 Platform completion, run under the owner-authorized AE-through-AI sequence). Phase AF adds one local
 OpenAI-compatible seat and a single sovereign data mode that runs EVERY cortex stage in-boundary. Config
 gains a "sovereign" `CortexDataMode` resolved by a single `resolveCortexDataMode(env)` switch
@@ -166,6 +193,7 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 | AD | Experience Audit and Drift Fix (opens Stage 5) | Pass | no (gated, Stage 5; single owner-authorized phase, pauses at its own gate before AE) |
 | AE | Ingestion Suite | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
 | AF | Local LLM Seat and Sovereign Mode | Pass | no (gated, Stage 5; PAUSED at the AF gate on the real-endpoint blocker, does not auto-advance to AG) |
+| AG | Curated Custom-Layer Creation Flow | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -284,6 +312,12 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   source-reviewed; the markers they read ARE asserted at their source by the cortex `sovereign-pipeline`
   test, so the portal total stays at 225. Accepted as logged drift, mirroring the AE portal item; a future
   lightweight portal test can close it.
+- No dedicated portal unit test for the custom-layer panel (AG). `CustomLayerPanel.tsx` and the owner-only
+  "layers" tab in `AccessConsole.tsx` are source-reviewed; the `adminApi` client functions behind them
+  (`fetchCustomLayers`, `fetchCatalogLayers`, `createCustomLayer`, `approveCustomLayer`) ARE unit-tested
+  and the `/layers` routes ARE integration-tested, but there is no portal-side rendering test. Accepted as
+  logged drift, mirroring the AE ingestion-panel and AF sovereign-surface items; a future lightweight
+  portal test can close it.
 
 ## Live but runtime-only or cosmetic
 

@@ -117,3 +117,70 @@ export async function bindTenant(orgId: string, tenantId: string): Promise<Write
     return { error: "failed" };
   }
 }
+
+// ── Phase AG: curated custom-layer console (owner-only) ──
+
+// A custom layer as the owner console lists it (GET /layers/custom). The server
+// returns the full catalog projection plus the approval lifecycle and benchmark
+// mapping; the panel reads this subset.
+export interface CustomLayer {
+  key: string;
+  name: string;
+  archetype: string;
+  isCanonical: boolean;
+  approvedAt: string | null;
+  approvedBy: string | null;
+  benchmarkCanonicalKey: string | null;
+  createdAt: string;
+  diagnosticQuestion: string;
+  moduleGroup: string;
+}
+
+// The runnable catalog projection (GET /layers). The console reads it only to
+// derive the canonical keys (catalog minus custom) for the benchmark mapping.
+export interface CatalogLayer {
+  key: string;
+  name: string;
+  archetype: string;
+}
+
+// The guarded creation template the panel submits. Mirrors the server's
+// customLayerTemplateSchema high-signal fields; the server fills honest defaults
+// for everything else and creates the layer UNAPPROVED.
+export interface CustomLayerInput {
+  name: string;
+  diagnosticQuestion: string;
+  archetype: string;
+  metricDefinitions: { tiles: string[] };
+  feeds: string[];
+  benchmarkCanonicalKey?: string;
+}
+
+export const fetchCustomLayers = () => getList<CustomLayer>("/api/layers/custom", "layers");
+export const fetchCatalogLayers = () => getList<CatalogLayer>("/api/layers", "layers");
+
+export async function createCustomLayer(input: CustomLayerInput): Promise<WriteOutcome> {
+  try {
+    const res = await fetch("/api/layers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    if (res.status === 401) return { unauthorized: true };
+    if (!res.ok) return { error: await readError(res) };
+    return { ok: true };
+  } catch {
+    return { error: "failed" };
+  }
+}
+
+export async function approveCustomLayer(key: string): Promise<WriteOutcome> {
+  try {
+    const res = await fetch(`/api/layers/${encodeURIComponent(key)}/approve`, { method: "POST" });
+    if (res.status === 401) return { unauthorized: true };
+    if (!res.ok) return { error: await readError(res) };
+    return { ok: true };
+  } catch {
+    return { error: "failed" };
+  }
+}
