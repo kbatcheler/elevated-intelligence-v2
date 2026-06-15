@@ -52,7 +52,7 @@ export function BenchmarkHero({ entry, detail }: ArchetypeHeroProps) {
                   padding: "8px 12px",
                   borderRadius: 999,
                   background: p.is_self ? "var(--navy)" : "var(--cream-dark)",
-                  color: p.is_self ? "#fff" : "var(--slate)",
+                  color: p.is_self ? "var(--cream-light)" : "var(--slate)",
                 }}
               >
                 <span style={{ fontSize: 12, fontWeight: p.is_self ? 700 : 500 }}>{p.name}</span>
@@ -101,9 +101,9 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: "verified" 
         fontSize: 11,
         fontWeight: 600,
         letterSpacing: 0.2,
-        color: isVerified ? "var(--teal)" : "var(--slate-light)",
-        background: isVerified ? "rgba(0, 128, 128, 0.10)" : "var(--cream-dark)",
-        border: isVerified ? "1px solid rgba(0, 128, 128, 0.30)" : "1px solid transparent",
+        color: isVerified ? "var(--teal-ink)" : "var(--slate-light)",
+        background: isVerified ? "var(--teal-faint)" : "var(--cream-dark)",
+        border: isVerified ? "1px solid var(--teal)" : "1px solid transparent",
       }}
     >
       {children}
@@ -184,7 +184,7 @@ function DistributionBand({ metric }: { metric: CohortMetric }) {
             left: `${left}%`,
             width: `${Math.max(0, right - left)}%`,
             height: 6,
-            background: "rgba(0, 128, 128, 0.25)",
+            background: "var(--teal-faint)",
             borderRadius: 4,
           }}
         />
@@ -204,8 +204,7 @@ function DistributionBand({ metric }: { metric: CohortMetric }) {
               height: 16,
               borderRadius: 3,
               background: "var(--navy)",
-              border: "2px solid #fff",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+              border: "2px solid var(--paper)",
             }}
             title="Your value"
           />

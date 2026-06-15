@@ -353,7 +353,7 @@ function Benchmark({ peer }: { peer: PeerBenchmark | null }) {
               >
                 {p.name}
                 {p.is_self && (
-                  <span className="eyebrow" style={{ color: "var(--gold)", fontSize: 10, marginLeft: 8 }}>
+                  <span className="eyebrow" style={{ color: "var(--gold-ink)", fontSize: 10, marginLeft: 8 }}>
                     You
                   </span>
                 )}

@@ -195,7 +195,7 @@ function BoardEntry({ layer }: { layer: OverviewLayer }) {
 
       {layer.topGap && layer.topGap.description && (
         <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-          <span className="eyebrow" style={{ color: "var(--amber)" }}>
+          <span className="eyebrow" style={{ color: "var(--amber-ink)" }}>
             Still unknown
           </span>
           <span style={{ fontSize: 13, color: "var(--slate)" }}>
@@ -313,7 +313,7 @@ function ShareLinks({ tenantId }: { tenantId: string }) {
       </p>
 
       {actionError && (
-        <div style={{ marginTop: 12, fontSize: 13, color: "var(--coral)" }}>
+        <div style={{ marginTop: 12, fontSize: 13, color: "var(--coral-ink)" }}>
           The link action did not complete ({actionError}).
         </div>
       )}
@@ -328,7 +328,7 @@ function ShareLinks({ tenantId }: { tenantId: string }) {
             background: "var(--cream-light)",
           }}
         >
-          <div className="eyebrow" style={{ color: "var(--teal)", marginBottom: 6 }}>
+          <div className="eyebrow" style={{ color: "var(--teal-ink)", marginBottom: 6 }}>
             New link, copy it now
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -363,7 +363,7 @@ function ShareLinks({ tenantId }: { tenantId: string }) {
 
       <div style={{ marginTop: 16 }}>
         {loadError && (
-          <div style={{ fontSize: 13, color: "var(--coral)" }}>
+          <div style={{ fontSize: 13, color: "var(--coral-ink)" }}>
             The existing links could not be loaded.
           </div>
         )}

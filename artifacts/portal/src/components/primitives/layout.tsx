@@ -1,9 +1,9 @@
 import React from "react";
 
-// Shared page chrome. The eyebrow is gold, headings are serif, and the page
+// Shared page chrome. The eyebrow is gold ink, headings are serif, and the page
 // width is constrained to the same measure as the rest of the product.
 
-export function Eyebrow({ children, color = "var(--gold)" }: { children: React.ReactNode; color?: string }) {
+export function Eyebrow({ children, color = "var(--gold-ink)" }: { children: React.ReactNode; color?: string }) {
   return (
     <div className="eyebrow" style={{ color }}>
       {children}
@@ -12,7 +12,7 @@ export function Eyebrow({ children, color = "var(--gold)" }: { children: React.R
 }
 
 export function PageWidth({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 24px", ...style }}>{children}</div>;
+  return <div className="page-width" style={style}>{children}</div>;
 }
 
 export function PageHeader({

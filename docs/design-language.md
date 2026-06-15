@@ -20,7 +20,7 @@ Brand:
 - Navy `#1B2A4E`: primary authority color for titles, primary actions, accents.
 - Navy Deep `#0F1A33`: headers and dark surfaces.
 - Navy Soft `#4A5878`: secondary navy for supporting marks.
-- Gold `#C8A24A`: elevated accents and eyebrows. Used sparingly.
+- Gold `#C8A24A`: elevated accents, borders, and dividers. Used sparingly.
 - Gold Light `#E5C97B`: gold on dark surfaces.
 - Cream `#F4F1EA`: the page background, the paper.
 - Cream Light `#FAF8F2`: raised hover and inset fills.
@@ -36,6 +36,22 @@ Provenance and status:
 - Coral `#D85A30` on faint `#FBE8DF`: attention, gaps, model output.
 - Blue `#185FA5` on faint `#E6F1FB`: data.
 - Purple `#534AB7` on faint `#EEEDFE`: integrations.
+
+Accessible text shades. The brand hues above are tuned for marks, three-pixel
+accent bars, borders, icons, and large display figures, where they read at
+AA-large or serve a decorative role. Small body text that needs a brand hue uses a
+darkened, hue-preserving ink variant that meets WCAG AA on cream and paper:
+
+- Gold ink `#826930`: small gold text, including eyebrows on light surfaces. The
+  gold base stays for large figures and decorative accents; on dark surfaces
+  eyebrows use gold light.
+- Teal ink `#177B5B`: small verified text. The teal base stays for pills and large
+  figures.
+- Amber ink `#975F13`: small modelled text.
+- Coral ink `#B04927`: small attention and error text.
+
+Slate is the secondary text color; slate light `#666D7A` is the muted variant,
+darkened so it clears AA on cream.
 
 ## Typography
 
@@ -76,6 +92,19 @@ placeholder or fabricated values to fill a gap.
   it.
 - Error: a coral-accented card stating what failed. The product fails loudly.
 
+## Accessibility and responsiveness
+
+- Contrast: text meets WCAG AA. Small text in a brand hue uses the ink shade above;
+  the brand bases are reserved for large figures, accent bars, borders, and icons.
+- Keyboard: every interactive element shows a visible focus ring on
+  `:focus-visible` (a navy-soft outline), so the interface is fully operable from
+  the keyboard.
+- Responsive: the core read surfaces (Morning Brief, layer pages, Board Pack) are
+  usable down to a 375px viewport with no horizontal overflow. Shared chrome (the
+  page width, the top navigation rows) is styled by class with a narrow-viewport
+  media query rather than fixed inline widths; the bottom navigation scrolls
+  horizontally rather than wrapping.
+
 ## Motion
 
 Motion is functional and brief. Transitions are around 120ms. A gold underline
@@ -87,4 +116,5 @@ sweep can mark a freshly updated value. Avoid decorative or looping motion.
 - Gradients as surfaces or fills.
 - Drop shadows for elevation.
 - Emoji in product UI.
-- The long em-dash (U+2014) anywhere. Use a period, a colon, or a hyphen.
+- The long em-dash (U+2014) or en-dash (U+2013) anywhere. Use a period, a colon,
+  or an ASCII hyphen.

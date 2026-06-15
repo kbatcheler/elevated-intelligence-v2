@@ -170,7 +170,7 @@ function Notice({
     <div className={`card card-accent-${tone}`} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
       <div style={{ flexShrink: 0, marginTop: 2 }}>{icon}</div>
       <div>
-        <div style={{ fontWeight: 600, color: tone === "coral" ? "var(--coral)" : "var(--navy)", marginBottom: 4 }}>
+        <div style={{ fontWeight: 600, color: tone === "coral" ? "var(--coral-ink)" : "var(--navy)", marginBottom: 4 }}>
           {title}
         </div>
         <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{body}</div>

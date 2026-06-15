@@ -15,7 +15,7 @@ export function Gate() {
           </div>
         </div>
         <div className="font-serif" style={{ fontSize: 28, fontWeight: 700, color: "var(--navy)" }}>Different Day</div>
-        <div className="eyebrow" style={{ color: "var(--gold)", marginTop: 8 }}>Elevated Intelligence</div>
+        <div className="eyebrow" style={{ color: "var(--gold-ink)", marginTop: 8 }}>Elevated Intelligence</div>
       </div>
       
       {view === "login" ? (

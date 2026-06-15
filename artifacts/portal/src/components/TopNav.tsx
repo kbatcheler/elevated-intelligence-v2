@@ -68,18 +68,7 @@ export function TopNav() {
   return (
     <header style={{ background: "var(--paper)", borderBottom: "1px solid var(--border)" }}>
       {/* Top row: identity, tenant switcher, perspective, user */}
-      <div
-        style={{
-          maxWidth: 1080,
-          margin: "0 auto",
-          padding: "12px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="top-nav-row">
         <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
           <Link to="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <div
@@ -117,16 +106,7 @@ export function TopNav() {
       </div>
 
       {/* Bottom row: primary navigation */}
-      <nav
-        style={{
-          maxWidth: 1080,
-          margin: "0 auto",
-          padding: "0 24px",
-          display: "flex",
-          gap: 4,
-          overflowX: "auto",
-        }}
-      >
+      <nav className="top-nav-bar">
         {items.map((it) => {
           const active = isActive(path, it.to);
           return (

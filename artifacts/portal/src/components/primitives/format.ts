@@ -9,6 +9,16 @@ export const toneColorVar: Record<Tone, string> = {
   neutral: "var(--navy)",
 };
 
+// The AA-passing ink variants for the same tones. Used for normal-sized text
+// (below the WCAG large threshold); the base toneColorVar stays for large
+// display figures, chart strokes, and accent bars.
+export const toneInkVar: Record<Tone, string> = {
+  good: "var(--teal-ink)",
+  warn: "var(--amber-ink)",
+  bad: "var(--coral-ink)",
+  neutral: "var(--navy)",
+};
+
 export type AccentName = "teal" | "amber" | "coral" | "navy" | "gold";
 
 export const toneAccent: Record<Tone, AccentName> = {

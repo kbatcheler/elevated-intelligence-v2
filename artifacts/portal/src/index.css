@@ -12,14 +12,18 @@
   --color-navy-soft: #4A5878;
   --color-gold: #C8A24A;
   --color-gold-light: #E5C97B;
+  --color-gold-ink: #826930;
   --color-slate-base: #3F4858;
-  --color-slate-light: #6B7280;
+  --color-slate-light: #666D7A;
   --color-ink: #1F1F1F;
   --color-coral: #D85A30;
+  --color-coral-ink: #B04927;
   --color-coral-faint: #FBE8DF;
   --color-teal: #1D9E75;
+  --color-teal-ink: #177B5B;
   --color-teal-faint: #E1F5EE;
   --color-amber-base: #BA7517;
+  --color-amber-ink: #975F13;
   --color-amber-faint: #FAEEDA;
   --color-red-base: #A32D2D;
   --color-red-faint: #FCEBEB;
@@ -43,14 +47,21 @@
   --navy-soft: #4A5878;
   --gold: #C8A24A;
   --gold-light: #E5C97B;
+  /* gold-ink: the AA-passing gold for text on light surfaces. Brand gold stays
+     for accents, fills, and gold on dark. */
+  --gold-ink: #826930;
   --slate: #3F4858;
-  --slate-light: #6B7280;
+  /* slate-light darkened to clear AA (4.5:1) for captions on the cream page. */
+  --slate-light: #666D7A;
   --ink: #1F1F1F;
   --coral: #D85A30;
+  --coral-ink: #B04927;
   --coral-faint: #FBE8DF;
   --teal: #1D9E75;
+  --teal-ink: #177B5B;
   --teal-faint: #E1F5EE;
   --amber: #BA7517;
+  --amber-ink: #975F13;
   --amber-faint: #FAEEDA;
   --red: #A32D2D;
   --red-faint: #FCEBEB;
@@ -164,15 +175,17 @@ body {
   font-weight: 600;
   letter-spacing: 0.02em;
 }
-.pill-coral { background: var(--coral-faint); color: var(--coral); }
-.pill-teal  { background: var(--teal-faint);  color: var(--teal); }
-.pill-amber { background: var(--amber-faint); color: var(--amber); }
+/* Pill text uses the AA-passing ink shades on their faint backgrounds; the
+   faint background keeps the hue, the ink text keeps it legible. */
+.pill-coral { background: var(--coral-faint); color: var(--coral-ink); }
+.pill-teal  { background: var(--teal-faint);  color: var(--teal-ink); }
+.pill-amber { background: var(--amber-faint); color: var(--amber-ink); }
 .pill-navy  { background: #E8ECF4; color: var(--navy); }
 .pill-blue  { background: var(--blue-faint);  color: var(--blue); }
 .pill-purple{ background: var(--purple-faint); color: var(--purple); }
 
-.pill-verified { background: var(--teal-faint); color: var(--teal); }
-.pill-modelled { background: var(--amber-faint); color: var(--amber); }
+.pill-verified { background: var(--teal-faint); color: var(--teal-ink); }
+.pill-modelled { background: var(--amber-faint); color: var(--amber-ink); }
 .pill-gray { background: var(--cream-dark); color: var(--slate); }
 .pill-red { background: var(--red-faint); color: var(--red); }
 
@@ -190,9 +203,9 @@ body {
 }
 .tag-data     { background: var(--blue-faint);   color: var(--blue); }
 .tag-integ    { background: var(--purple-faint); color: var(--purple); }
-.tag-model    { background: var(--coral-faint);  color: var(--coral); }
-.tag-workflow { background: var(--teal-faint);   color: var(--teal); }
-.tag-signal   { background: var(--amber-faint);  color: var(--amber); }
+.tag-model    { background: var(--coral-faint);  color: var(--coral-ink); }
+.tag-workflow { background: var(--teal-faint);   color: var(--teal-ink); }
+.tag-signal   { background: var(--amber-faint);  color: var(--amber-ink); }
 
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
@@ -227,6 +240,11 @@ body {
   outline: none;
 }
 .input-base:focus {
+  border-color: var(--navy-soft);
+}
+.input-base:focus-visible {
+  outline: 2px solid var(--navy-soft);
+  outline-offset: 1px;
   border-color: var(--navy-soft);
 }
 .input-base:disabled {
@@ -285,4 +303,56 @@ select.input-base {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Accessibility: a visible keyboard focus ring on every interactive surface.
+   :focus-visible only fires for keyboard navigation, so a mouse click does not
+   draw the ring. This replaces the input outline that was suppressed for the
+   resting state. */
+:focus-visible {
+  outline: 2px solid var(--navy-soft);
+  outline-offset: 2px;
+}
+
+/* Shared layout chrome as classes (not inline styles) so a media query can
+   adjust them: an inline style object outranks a class on specificity, so the
+   responsive measure has to live on a class to be overridable at small widths. */
+.page-width {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.top-nav-row {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.top-nav-bar {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+/* A horizontal-scroll guard so a wide table never forces the whole page
+   sideways on a narrow screen. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 480px) {
+  body { font-size: 14px; }
+  .page-width { padding: 0 16px; }
+  .top-nav-row { padding: 10px 16px; gap: 10px; }
+  .top-nav-bar { padding: 0 10px; }
 }

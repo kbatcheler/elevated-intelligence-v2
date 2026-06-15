@@ -218,7 +218,7 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
                 <Td align="right">
                   <span
                     className="font-mono"
-                    style={{ color: t.unrealizedValueUsd == null ? "var(--slate-light)" : "var(--coral)" }}
+                    style={{ color: t.unrealizedValueUsd == null ? "var(--slate-light)" : "var(--coral-ink)" }}
                   >
                     {formatUsd(t.unrealizedValueUsd)}
                   </span>
@@ -229,7 +229,7 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
                   </span>
                 </Td>
                 <Td align="right">
-                  <span className="font-mono" style={{ color: "var(--teal)" }}>
+                  <span className="font-mono" style={{ color: "var(--teal-ink)" }}>
                     {formatUsd(t.valueRealizedUsd)}
                   </span>
                 </Td>

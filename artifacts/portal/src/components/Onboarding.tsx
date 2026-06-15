@@ -172,7 +172,7 @@ export function Onboarding() {
                 textAlign: "center",
               }}
             >
-              <div className="eyebrow" style={{ color: "var(--coral)", marginBottom: 8 }}>
+              <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 8 }}>
                 Copy it now, it will not be shown again
               </div>
               <div

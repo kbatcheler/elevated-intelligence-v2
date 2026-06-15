@@ -19,3 +19,12 @@ export function heroToneVar(tone: string): string {
   if (tone === "bad") return "coral";
   return "navy";
 }
+
+// The AA-passing ink variant of the tone color, for normal-sized hero text.
+// The base heroToneVar stays for large display figures and accent bars.
+export function heroToneInkVar(tone: string): string {
+  if (tone === "good") return "teal-ink";
+  if (tone === "warn") return "amber-ink";
+  if (tone === "bad") return "coral-ink";
+  return "navy";
+}

@@ -72,7 +72,7 @@ export function BootSplash({ onDone }: { onDone: () => void }) {
               width: 34,
               height: 34,
               borderRadius: 17,
-              background: "rgba(229,201,123,0.14)",
+              background: "rgba(229, 201, 123, 0.14)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -80,7 +80,7 @@ export function BootSplash({ onDone }: { onDone: () => void }) {
           >
             <ShieldCheck size={17} color="var(--gold-light)" />
           </div>
-          <span className="font-serif" style={{ fontSize: 20, fontWeight: 700, color: "#fff" }}>
+          <span className="font-serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--cream-light)" }}>
             Different Day
           </span>
         </div>
@@ -88,7 +88,7 @@ export function BootSplash({ onDone }: { onDone: () => void }) {
         <div className="eyebrow" style={{ color: "var(--gold-light)" }}>
           {isLive ? "Generating intelligence" : "Intelligence ready"}
         </div>
-        <h1 className="font-serif" style={{ fontSize: 26, fontWeight: 700, color: "#fff", margin: "8px 0 0", lineHeight: 1.2 }}>
+        <h1 className="font-serif" style={{ fontSize: 26, fontWeight: 700, color: "var(--cream-light)", margin: "8px 0 0", lineHeight: 1.2 }}>
           {current ? current.name : "Loading"}
         </h1>
 
@@ -178,7 +178,7 @@ function LiveRow({ layerKey, stage }: { layerKey: string; stage: SubStage | null
         borderRadius: 6,
       }}
     >
-      <span className="font-mono" style={{ fontSize: 13, color: "#fff" }}>
+      <span className="font-mono" style={{ fontSize: 13, color: "var(--cream-light)" }}>
         {layerKey}
       </span>
       <span style={{ fontSize: 12, color: "var(--gold-light)" }}>{stage ? stage.name : "finishing"}</span>
@@ -201,7 +201,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "co
     <div style={{ background: "var(--navy-deep)", padding: "14px 12px" }}>
       <div
         className="font-mono"
-        style={{ fontSize: 20, fontWeight: 500, color: tone === "coral" ? "var(--coral)" : "#fff", lineHeight: 1 }}
+        style={{ fontSize: 20, fontWeight: 500, color: tone === "coral" ? "var(--coral)" : "var(--cream-light)", lineHeight: 1 }}
       >
         {value}
       </div>

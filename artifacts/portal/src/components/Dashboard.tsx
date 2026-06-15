@@ -15,6 +15,10 @@ const palette: Swatch[] = [
   { name: "Coral", varName: "--coral", hex: "#D85A30" },
   { name: "Teal", varName: "--teal", hex: "#1D9E75" },
   { name: "Amber", varName: "--amber", hex: "#BA7517" },
+  { name: "Coral Ink", varName: "--coral-ink", hex: "#B04927" },
+  { name: "Teal Ink", varName: "--teal-ink", hex: "#177B5B" },
+  { name: "Amber Ink", varName: "--amber-ink", hex: "#975F13" },
+  { name: "Gold Ink", varName: "--gold-ink", hex: "#826930" },
   { name: "Ink", varName: "--ink", hex: "#1F1F1F", onDark: true },
 ];
 
@@ -23,7 +27,7 @@ type LayerSummary = { key: string; name: string; archetype: string; moduleGroup:
 function Section({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
   return (
     <section style={{ marginBottom: 48 }}>
-      <div className="eyebrow" style={{ color: "var(--coral)", marginBottom: 6 }}>
+      <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 6 }}>
         {eyebrow}
       </div>
       <h2 className="font-serif" style={{ fontSize: 26, color: "var(--navy)", fontWeight: 600, marginBottom: 20 }}>
@@ -98,7 +102,7 @@ function RegistryProof() {
             {layer.name}
           </div>
           <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 4 }}>{layer.archetype}</div>
-          <div className="eyebrow" style={{ color: "var(--gold)", marginTop: 10 }}>
+          <div className="eyebrow" style={{ color: "var(--gold-ink)", marginTop: 10 }}>
             {layer.moduleGroup}
           </div>
         </div>

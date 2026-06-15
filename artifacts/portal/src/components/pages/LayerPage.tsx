@@ -187,8 +187,8 @@ function LayerBody({
             fontSize: 12,
             fontWeight: 600,
             color: "var(--navy)",
-            background: "rgba(193, 122, 0, 0.10)",
-            border: "1px solid rgba(193, 122, 0, 0.35)",
+            background: "var(--amber-faint)",
+            border: "1px solid var(--amber)",
           }}
         >
           Express build (reduced)

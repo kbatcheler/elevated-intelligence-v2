@@ -49,7 +49,7 @@ function StageRow({ stage }: { stage: SubStage }) {
             {t?.searchCalls != null && t.searchCalls > 0 && (
               <span className="font-mono">search: {formatInt(t.searchCalls)}</span>
             )}
-            {stage.error && <span style={{ color: "var(--coral)" }}>{stage.error}</span>}
+            {stage.error && <span style={{ color: "var(--coral-ink)" }}>{stage.error}</span>}
           </>
         )}
       </div>

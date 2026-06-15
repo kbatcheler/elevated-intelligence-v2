@@ -186,7 +186,7 @@ function TelemetryNote({
 }) {
   if (runsError) {
     return (
-      <div style={{ fontSize: 13, color: "var(--coral)", marginTop: 2 }}>
+      <div style={{ fontSize: 13, color: "var(--coral-ink)", marginTop: 2 }}>
         Per-seat telemetry is temporarily unavailable; the architecture below is still accurate.
       </div>
     );

@@ -11,14 +11,14 @@ type State =
   | { kind: "error" };
 
 const HEALTH_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-  healthy: { label: "Healthy", color: "#0f766e", bg: "rgba(15,118,110,0.12)" },
-  degraded: { label: "Degraded", color: "#b45309", bg: "rgba(180,83,9,0.12)" },
-  error: { label: "Error", color: "var(--coral)", bg: "rgba(220,80,80,0.12)" },
+  healthy: { label: "Healthy", color: "var(--teal-ink)", bg: "var(--teal-faint)" },
+  degraded: { label: "Degraded", color: "var(--amber-ink)", bg: "var(--amber-faint)" },
+  error: { label: "Error", color: "var(--coral-ink)", bg: "var(--coral-faint)" },
 };
 
 function HealthPill({ health }: { health: string }) {
   const s =
-    HEALTH_STYLE[health] ?? { label: health, color: "var(--slate)", bg: "rgba(100,116,139,0.12)" };
+    HEALTH_STYLE[health] ?? { label: health, color: "var(--slate)", bg: "var(--cream-dark)" };
   return (
     <span
       style={{

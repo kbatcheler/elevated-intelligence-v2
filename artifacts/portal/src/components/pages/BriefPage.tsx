@@ -16,6 +16,7 @@ import {
   Tag,
   formatDate,
   toneColorVar,
+  toneInkVar,
 } from "../primitives";
 
 type State =
@@ -224,7 +225,7 @@ function LayerRow({ layer }: { layer: OverviewLayer }) {
           </div>
         </div>
         {fig.value ? (
-          <div className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: toneColorVar[fig.tone], flexShrink: 0 }}>
+          <div className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: toneInkVar[fig.tone], flexShrink: 0 }}>
             {fig.value}
           </div>
         ) : (

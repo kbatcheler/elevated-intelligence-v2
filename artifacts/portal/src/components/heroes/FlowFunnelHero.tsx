@@ -2,7 +2,7 @@ import React from "react";
 import type { ArchetypeHeroProps } from "./types";
 import { GenericHero } from "./GenericHero";
 import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend } from "./shared";
-import { heroToneVar } from "./types";
+import { heroToneInkVar } from "./types";
 
 // Flow and funnel: the headline metric and trend, then the leading metrics
 // stacked as ordered stages with downward connectors. The stages are the real
@@ -44,7 +44,7 @@ export function FlowFunnelHero({ entry, detail }: ArchetypeHeroProps) {
                 }}
               >
                 <span style={{ fontSize: 13, color: "var(--slate)" }}>{m.label}</span>
-                <span className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: `var(--${heroToneVar(m.tone)})` }}>
+                <span className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: `var(--${heroToneInkVar(m.tone)})` }}>
                   {m.value}
                 </span>
               </div>

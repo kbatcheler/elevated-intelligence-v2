@@ -2,7 +2,7 @@ import React from "react";
 import type { ArchetypeHeroProps } from "./types";
 import { GenericHero } from "./GenericHero";
 import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend } from "./shared";
-import { heroToneVar } from "./types";
+import { heroToneVar, heroToneInkVar } from "./types";
 
 // Aging and collection: the headline metric and trend, then the leading metrics
 // as aging buckets, each topped by its tone color. The buckets are the real
@@ -40,7 +40,7 @@ export function AgingCollectionHero({ entry, detail }: ArchetypeHeroProps) {
               <div className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10 }}>
                 {m.label}
               </div>
-              <div className="font-mono" style={{ fontSize: 18, fontWeight: 500, color: `var(--${heroToneVar(m.tone)})` }}>
+              <div className="font-mono" style={{ fontSize: 18, fontWeight: 500, color: `var(--${heroToneInkVar(m.tone)})` }}>
                 {m.value}
               </div>
               {m.sub && <div style={{ fontSize: 11, color: "var(--slate)", marginTop: 2 }}>{m.sub}</div>}

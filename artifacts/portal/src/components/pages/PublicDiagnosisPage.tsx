@@ -169,7 +169,7 @@ function PublicLayerCard({ layer }: { layer: PublicDiagnosisLayer }) {
 
       {layer.topGap && layer.topGap.description && (
         <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-          <span className="eyebrow" style={{ color: "var(--amber)" }}>
+          <span className="eyebrow" style={{ color: "var(--amber-ink)" }}>
             Still unknown
           </span>
           <span style={{ fontSize: 13, color: "var(--slate)" }}>

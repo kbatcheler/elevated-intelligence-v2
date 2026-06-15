@@ -2,7 +2,7 @@ import React from "react";
 import type { ArchetypeHeroProps } from "./types";
 import { GenericHero } from "./GenericHero";
 import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend } from "./shared";
-import { heroToneVar } from "./types";
+import { heroToneInkVar } from "./types";
 
 // Cohort and people: the headline metric and trend, then the leading metrics as
 // value-first cohort tiles with their descriptor underneath. Every value and
@@ -34,7 +34,7 @@ export function CohortPeopleHero({ entry, detail }: ArchetypeHeroProps) {
         >
           {cohorts.map((m, i) => (
             <div key={i} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: "12px 14px" }}>
-              <div className="font-mono" style={{ fontSize: 22, fontWeight: 500, color: `var(--${heroToneVar(m.tone)})`, lineHeight: 1.1 }}>
+              <div className="font-mono" style={{ fontSize: 22, fontWeight: 500, color: `var(--${heroToneInkVar(m.tone)})`, lineHeight: 1.1 }}>
                 {m.value}
               </div>
               <div style={{ fontSize: 13, color: "var(--navy)", marginTop: 4 }}>{m.label}</div>

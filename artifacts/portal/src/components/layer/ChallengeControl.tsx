@@ -108,7 +108,7 @@ export function ChallengeControl({
               borderRadius: 8,
               border: "1px solid var(--border)",
               color: "var(--navy)",
-              background: "var(--cream, #fff)",
+              background: "var(--cream)",
               fontFamily: "inherit",
             }}
           />
@@ -137,7 +137,7 @@ export function ChallengeControl({
               Routing to the Confounder and Synthesist seats. This makes two live model calls and can take a moment.
             </span>
           )}
-          {error && <span style={{ fontSize: 12.5, color: "var(--coral, #b3261e)" }}>{error}</span>}
+          {error && <span style={{ fontSize: 12.5, color: "var(--coral-ink)" }}>{error}</span>}
         </div>
       )}
     </div>
@@ -156,7 +156,7 @@ function ChallengeRecord({ c }: { c: FindingChallenge }) {
         border: "1px solid var(--border)",
         borderRadius: 8,
         padding: "10px 12px",
-        background: "var(--cream-dark, rgba(0,0,0,0.02))",
+        background: "var(--cream-dark)",
         display: "grid",
         gap: 6,
       }}
@@ -186,7 +186,7 @@ function ChallengeRecord({ c }: { c: FindingChallenge }) {
 
       {failed ? (
         c.error && (
-          <div style={{ fontSize: 12.5, color: "var(--coral, #b3261e)", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12.5, color: "var(--coral-ink)", lineHeight: 1.5 }}>
             The re-reasoning did not complete ({c.error}). Nothing about the finding changed.
           </div>
         )

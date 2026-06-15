@@ -1,10 +1,37 @@
-# Drift rollup: Phases A through AC
+# Drift rollup: Phases A through AD
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase AC (verification and the build-report append, the closing phase of Stage 4,
+Last updated after Phase AD (the full-application experience audit, the opening phase of Stage 5,
+Platform completion, run as a single owner-authorized phase). Per the binding Adaptation Guide, Phase
+AD was RETIRED AS AN OVERHAUL and run instead as a SHORT audit of the existing portal against the
+design language (`docs/design-language.md`) and the AD acceptance set, FIXING DRIFT rather than
+redesigning. Phase AD is presentation-only: it changed CSS, shared page-chrome classes, and text-color
+token USAGE, and it reconciled the design-language doc to the implementation; it added no product
+feature and changed no route, schema, contract, or product logic, added and changed no test, and added
+zero npm dependencies, so the full suite stays at 758 tests unchanged. Two of the seven acceptance
+items carried real drift, both fixed at the SHARED level because inline styles outrank classes on
+specificity: the CRITICAL 375px usability drift (new `.page-width`, `.top-nav-row`, `.top-nav-bar`, and
+`.table-scroll` classes plus an `@media (max-width: 480px)` block, the three core read pages wrapping
+wide tables in `.table-scroll`, desktop visually equivalent) and the WCAG AA contrast drift (a tone-INK
+mapping routes every normal-sized under-24px tone text off the base brand hues to ink shades that clear
+4.5:1 on paper, cream, and faint fills, with base hue kept only for large figures, strokes, borders,
+icons, fills, dots, and dark surfaces, plus a global navy-soft `:focus-visible` ring). The other five
+needed no code fix: two-click diagnosis and sub-five-minute first insight confirmed by source review,
+distinct loading/empty/error states audited across every async surface through the shared `DataState`
+with no fabricated data, the design-language doc reconciled in three places with no unstyled default
+component found, and the regression contract held by the unchanged green suite. The global gates were
+re-run fresh: typecheck and build green, the full suite green at 758 tests, and the long-dash sweep zero
+on both sides over all 138 public text and jsonb columns across 37 tables. The architect `evaluate_task`
+returned PASS after two remediation rounds. The accepted LOWs are the source-reviewed 375px proof and
+the operator and admin tables outside the core-read scope not being retrofitted (both added to "Still
+live" below). Phase AD opens Stage 5; per the owner authorization for this single phase the build now
+PAUSES at the AD gate for owner review before Phase AE and does not auto-advance, and the next protocol
+milestone hard stop is Phase AI at the end of Stage 5.
+
+Earlier, updated after Phase AC (verification and the build-report append, the closing phase of Stage 4,
 Differentiation and Moat, run back to back with Y, Z, AA, and AB under owner authorization). Phase AC
 built no product feature and changed no product code; like Phase M closed Stage 2 and Phase V closed
 Stage 3, its only artifacts are the Stage 4 evidence matrix (`phase-AC.md`), the build-report append, and
@@ -69,6 +96,7 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 | AA | Interactive Challenge | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
 | AB | Sellability Pack | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
 | AC | Verification and Build Report (closes Stage 4) | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
+| AD | Experience Audit and Drift Fix (opens Stage 5) | Pass | no (gated, Stage 5; single owner-authorized phase, pauses at its own gate before AE) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -147,6 +175,18 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   rejection cases, and the portal clients ARE tested. The architect marked the gap non-blocking; a
   future phase can close it with an injected-model challenge test and a public-route integration test.
   Accepted as logged drift.
+- The 375px usability proof is source-reviewed, not a live-viewport screenshot (AD). The responsive
+  classes (`.page-width`, `.top-nav-row`, `.top-nav-bar`, `.table-scroll`) and the
+  `@media (max-width: 480px)` layer plus the three core-read page markup were read to confirm no
+  overflow at 375px; a live capture at that width was not run. The fix is at the shared-chrome level so
+  it applies uniformly, but the honest proof type is source review. A future pass can attach
+  screenshots. Accepted as logged drift.
+- Operator and admin tables outside the core-read scope are not retrofitted for 375px (AD). The Phase
+  AD acceptance scope is the three core read surfaces (Morning Brief, a layer page, Board Pack); the
+  operator and admin tables (Portfolio, Spend, Break-glass, the admin console, Onboarding) were left
+  as-is. The `.table-scroll` helper is available for them but was not applied, since they are operator
+  surfaces outside the core-read 375px requirement. Accepted as logged drift; a future pass can wrap
+  them.
 
 ## Live but runtime-only or cosmetic
 

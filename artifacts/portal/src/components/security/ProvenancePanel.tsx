@@ -68,7 +68,7 @@ function VerifyResultCard({ result }: { result: VerifyResult }) {
     <div className="card card-accent-coral" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
       <AlertTriangle size={18} color="var(--coral)" style={{ flexShrink: 0, marginTop: 2 }} />
       <div>
-        <div style={{ fontWeight: 600, color: "var(--coral)", marginBottom: 4 }}>
+        <div style={{ fontWeight: 600, color: "var(--coral-ink)", marginBottom: 4 }}>
           Chain broken{typeof result.brokenAt === "number" ? ` at entry #${result.brokenAt}` : ""}
         </div>
         <div style={{ fontSize: 13, color: "var(--slate)" }}>

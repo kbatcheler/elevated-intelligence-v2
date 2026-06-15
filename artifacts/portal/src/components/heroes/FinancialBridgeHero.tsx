@@ -36,7 +36,7 @@ export function FinancialBridgeHero({ entry, detail }: ArchetypeHeroProps) {
 
       {detail.content.headline_lever && (
         <div style={{ marginTop: 14, fontSize: 13, color: "var(--slate)" }}>
-          <span className="eyebrow" style={{ color: "var(--teal)", marginRight: 8 }}>
+          <span className="eyebrow" style={{ color: "var(--teal-ink)", marginRight: 8 }}>
             Lever
           </span>
           {detail.content.headline_lever}

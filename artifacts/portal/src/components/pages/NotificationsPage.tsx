@@ -289,7 +289,7 @@ function Figure({
   mono?: boolean;
   accent?: "coral" | "muted";
 }) {
-  const color = accent === "coral" ? "var(--coral)" : accent === "muted" ? "var(--slate-light)" : "var(--navy)";
+  const color = accent === "coral" ? "var(--coral-ink)" : accent === "muted" ? "var(--slate-light)" : "var(--navy)";
   return (
     <span style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
       <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 11 }}>

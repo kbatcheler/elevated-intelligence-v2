@@ -1,7 +1,7 @@
 import React from "react";
 import type { HeroPanel, Tone } from "../../types";
 import { Sparkline, Eyebrow } from "../primitives";
-import { heroToneVar } from "./types";
+import { heroToneVar, heroToneInkVar } from "./types";
 
 // Shared, presentational hero pieces. Every archetype hero composes these over
 // real persisted fields. None of them compute or invent a figure: they only
@@ -100,13 +100,13 @@ export function MiniStat({ label, value, sub, tone = "neutral" }: { label: strin
         border: "1px solid var(--cream-dark)",
         borderRadius: 10,
         padding: "10px 12px",
-        background: "var(--paper, #fff)",
+        background: "var(--paper)",
       }}
     >
       <div className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10 }}>
         {label}
       </div>
-      <div className="font-mono" style={{ fontSize: 19, fontWeight: 500, color: `var(--${heroToneVar(tone)})`, lineHeight: 1.2 }}>
+      <div className="font-mono" style={{ fontSize: 19, fontWeight: 500, color: `var(--${heroToneInkVar(tone)})`, lineHeight: 1.2 }}>
         {value}
       </div>
       {sub && <div style={{ fontSize: 11, color: "var(--slate)", marginTop: 2 }}>{sub}</div>}
@@ -118,6 +118,7 @@ export function MiniStat({ label, value, sub, tone = "neutral" }: { label: strin
 // distribution and sentiment morph to show the spread of signal tones.
 export function ToneChip({ label, value, tone }: { label: string; value: string; tone: Tone }) {
   const v = heroToneVar(tone);
+  const ink = heroToneInkVar(tone);
   return (
     <div
       style={{
@@ -131,7 +132,7 @@ export function ToneChip({ label, value, tone }: { label: string; value: string;
       }}
     >
       <span style={{ fontSize: 11, color: "var(--slate)", whiteSpace: "nowrap" }}>{label}</span>
-      <span className="font-mono" style={{ fontSize: 15, fontWeight: 600, color: `var(--${v})` }}>
+      <span className="font-mono" style={{ fontSize: 15, fontWeight: 600, color: `var(--${ink})` }}>
         {value}
       </span>
     </div>

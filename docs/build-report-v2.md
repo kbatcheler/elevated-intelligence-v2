@@ -2006,3 +2006,64 @@ is `phase-AC.md`; the drift index and the rollup are updated to "A through AC". 
 4 (Differentiation and Moat); per the owner-authorized Y-Z-AA-AB-AC run, the build now PAUSES at the
 Stage 4/5 boundary for owner review before Phase AD and does not auto-advance. The next protocol
 milestone hard stop is Phase AI at the end of Stage 5.
+
+## Phase AD: full-application experience audit (opens Stage 5)
+
+Phase AD opens Stage 5 (Platform completion). Per the binding Adaptation Guide it was RETIRED AS AN
+OVERHAUL and run instead as a SHORT full-application experience AUDIT of the existing portal against
+the design language (`docs/design-language.md`) and the AD acceptance set, FIXING DRIFT rather than
+redesigning. The phase is presentation-only: it changed CSS, shared page-chrome classes, and
+text-color token USAGE, and it reconciled the design-language document to the implementation. It added
+no product feature and changed no route, schema, contract, or product logic, added and changed no
+test, and added zero npm dependencies. The full suite stays at 758 tests, unchanged, which is the
+regression proof for a presentation-only phase. There is no em-dash or en-dash in source or in data.
+
+### What the audit fixed
+
+Two of the seven acceptance items carried real drift. The CRITICAL one was 375px usability: the chrome
+used inline padding and fixed widths that overflow a narrow phone viewport. Because inline style
+objects outrank CSS classes on specificity, the fix converts the SHARED chrome to classes plus one
+responsive layer rather than fighting hundreds of inline styles: `.page-width` (the shared measure),
+`.top-nav-row` and `.top-nav-bar` (the top navigation), and `.table-scroll` (a horizontal-scroll
+wrapper for wide tables), with an `@media (max-width: 480px)` block that reduces the chrome padding and
+keeps the bottom navigation horizontally scrollable; the three core read pages (Morning Brief, a layer
+page, Board Pack) wrap their wide tables in `.table-scroll`. Desktop rendering is visually equivalent.
+The second was WCAG AA contrast: normal-sized tone text (good, warn, bad, neutral) rendered on the
+base brand hues, which do not clear the 4.5:1 floor on the paper, cream, and faint-fill backgrounds at
+normal size. The fix adds a tone-INK mapping (`toneInkVar`, `heroToneInkVar`) and routes every
+normal-sized (under 24px) tone text through it, while the base hue is kept only where it is allowed:
+large display figures at 24px and up (which clear the AA large-text floor), chart strokes, accent bars
+and borders, icons, fills and backgrounds, status dots, and dark-surface text. Every ink shade was
+verified against the actual background tokens with a deterministic Node contrast calculation (built-ins
+only) and clears 4.5:1. A global `:focus-visible` ring (navy-soft) was added for keyboard visibility.
+
+### What the audit confirmed and reconciled
+
+The remaining items needed no code fix. Any diagnosis is two clicks from the portal entry and the first
+insight is above the fold on the Morning Brief (both confirmed by source review). Every audited async
+surface (Anomalies, War Room, Actions, Heartbeat, Notifications, Connections, Reasoning, Spend, and the
+security child panels) already branches into distinct loading, empty, and error states through the
+shared `DataState` primitive, with no fabricated data in any state, so the honest result is "audited,
+no fix". The design-language doc was reconciled to the implementation in three places (the ink shades
+and accessibility/responsive guidance added, the gold/eyebrow guidance corrected so base gold is for
+accents and borders while small gold text including light-surface eyebrows uses gold ink and
+dark-surface eyebrows use gold light, and the focus ring documented as navy-soft), and a stale code
+comment was corrected. No unstyled default component was found.
+
+### Verification
+
+The global gates were re-run fresh for this phase. Typecheck and build are green across the workspace
+(exit 0 on both; portal 1753 modules, api-server bundled). The full suite is green at 758 tests
+(api-server 393 across 46 files, portal 225 across 18 files, cortex 89, connectors 29, edge-agent 10,
+db 8, scripts 4), unchanged from Phase AC; this phase added no tests and changed no product code. The
+long-dash sweep is zero on both sides: the source guard is green over authored source including the
+Phase AD Markdown, and a fresh database-wide cast over all 138 public text and jsonb columns across 37
+tables reports zero hits. Zero new npm dependencies. The architect `evaluate_task` returned PASS after
+two remediation rounds. The drift report is `phase-AD.md`; the drift index and the rollup are updated
+to "A through AD". The 375px usability proof is honestly source-reviewed (the responsive class and
+media-query source plus the page markup), not a live-viewport capture, and the operator and admin
+tables outside the core-read scope are not retrofitted; both are logged as accepted LOWs in the drift
+report and the rollup. Phase AD opens Stage 5 (Platform completion) as the retired-overhaul experience
+audit; per the owner authorization for this single phase, the build now PAUSES at the AD gate for owner
+review before Phase AE and does not auto-advance. The next protocol milestone hard stop is Phase AI at
+the end of Stage 5.

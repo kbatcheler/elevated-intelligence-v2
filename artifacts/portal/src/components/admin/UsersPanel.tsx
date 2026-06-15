@@ -90,7 +90,7 @@ export function UsersPanel() {
                     <td>{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}</td>
                     <td>
                       {u.status === "active" ? (
-                        <button onClick={() => handleAction(u.id, "disable")} className="btn-ghost" style={{ height: 24, padding: "0 8px", fontSize: 11, borderColor: "var(--coral)", color: "var(--coral)" }}>
+                        <button onClick={() => handleAction(u.id, "disable")} className="btn-ghost" style={{ height: 24, padding: "0 8px", fontSize: 11, borderColor: "var(--coral)", color: "var(--coral-ink)" }}>
                           Disable
                         </button>
                       ) : (

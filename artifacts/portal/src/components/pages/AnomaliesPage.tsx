@@ -17,8 +17,8 @@ type State =
 
 const KIND_META: Record<AnomalyKind, { label: string; pill: string; color: string; Icon: typeof AlertTriangle }> = {
   "errored-run": { label: "Failed run", pill: "pill-red", color: "var(--red)", Icon: AlertTriangle },
-  "unresolved-confounder": { label: "Open question", pill: "pill-coral", color: "var(--coral)", Icon: HelpCircle },
-  "low-confidence-action": { label: "Low-confidence move", pill: "pill-amber", color: "var(--amber)", Icon: TrendingDown },
+  "unresolved-confounder": { label: "Open question", pill: "pill-coral", color: "var(--coral-ink)", Icon: HelpCircle },
+  "low-confidence-action": { label: "Low-confidence move", pill: "pill-amber", color: "var(--amber-ink)", Icon: TrendingDown },
   "open-gap": { label: "Blind spot", pill: "pill-blue", color: "var(--blue)", Icon: Crosshair },
 };
 

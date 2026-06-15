@@ -149,7 +149,7 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
 
         {mintedCode && (
           <div style={{ marginTop: 24, padding: 24, background: "var(--cream-light)", border: "1px dashed var(--gold)", borderRadius: 4, textAlign: "center" }}>
-            <div className="eyebrow" style={{ color: "var(--coral)", marginBottom: 8 }}>Copy it now, it will not be shown again</div>
+            <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 8 }}>Copy it now, it will not be shown again</div>
             <div className="font-mono" style={{ fontSize: 32, color: "var(--navy)", fontWeight: 500, marginBottom: 16, letterSpacing: "0.1em" }}>
               {mintedCode}
             </div>

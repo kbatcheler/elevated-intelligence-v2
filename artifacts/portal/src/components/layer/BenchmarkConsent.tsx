@@ -68,17 +68,17 @@ export function BenchmarkConsent({ tenantId }: { tenantId: string }) {
           default and can be withdrawn at any time.
         </div>
         {state.kind === "ready" && (
-          <div style={{ fontSize: 13, marginTop: 8, fontWeight: 600, color: optIn ? "var(--teal)" : "var(--slate-light)" }}>
+          <div style={{ fontSize: 13, marginTop: 8, fontWeight: 600, color: optIn ? "var(--teal-ink)" : "var(--slate-light)" }}>
             {optIn ? "Participating in the verified cohort" : "Not participating"}
           </div>
         )}
         {state.kind === "error" && (
-          <div style={{ fontSize: 13, marginTop: 8, color: "var(--coral)" }}>
+          <div style={{ fontSize: 13, marginTop: 8, color: "var(--coral-ink)" }}>
             Participation status is unavailable right now.
           </div>
         )}
         {error && (
-          <div style={{ fontSize: 13, marginTop: 8, color: "var(--coral)" }}>{error}</div>
+          <div style={{ fontSize: 13, marginTop: 8, color: "var(--coral-ink)" }}>{error}</div>
         )}
         {readOnly && state.kind === "ready" && (
           <div style={{ fontSize: 12, marginTop: 8, color: "var(--slate-light)" }}>
@@ -103,7 +103,7 @@ export function BenchmarkConsent({ tenantId }: { tenantId: string }) {
               fontWeight: 600,
               cursor: saving ? "default" : "pointer",
               opacity: saving ? 0.6 : 1,
-              color: optIn ? "var(--slate)" : "#fff",
+              color: optIn ? "var(--slate)" : "var(--cream-light)",
               background: optIn ? "var(--cream-dark)" : "var(--navy)",
               border: optIn ? "1px solid var(--cream-dark)" : "1px solid var(--navy)",
             }}

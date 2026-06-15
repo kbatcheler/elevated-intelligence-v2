@@ -114,7 +114,7 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
           )}
           {key.status === "active" && confirmRevoke && (
             <>
-              <span style={{ fontSize: 13, color: "var(--coral)", fontWeight: 600 }}>
+              <span style={{ fontSize: 13, color: "var(--coral-ink)", fontWeight: 600 }}>
                 This permanently shreds this tenant's signals. Continue?
               </span>
               <button className="btn-primary" onClick={revoke} disabled={busy} style={{ background: "var(--coral)" }}>
@@ -144,7 +144,7 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
 function KmsCard({ title, kms }: { title: string; kms: KmsStatus }) {
   return (
     <div className="card" style={{ display: "grid", gap: 10 }}>
-      <div className="eyebrow" style={{ color: "var(--gold)" }}>
+      <div className="eyebrow" style={{ color: "var(--gold-ink)" }}>
         {title}
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>

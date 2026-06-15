@@ -76,7 +76,7 @@ export function ErrorState({
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <AlertTriangle size={18} color="var(--coral)" style={{ flexShrink: 0, marginTop: 2 }} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, color: "var(--coral)", marginBottom: 4 }}>{title}</div>
+          <div style={{ fontWeight: 600, color: "var(--coral-ink)", marginBottom: 4 }}>{title}</div>
           {message && <div style={{ fontSize: 13, color: "var(--slate)" }}>{message}</div>}
           {onRetry && (
             <button className="btn-ghost" style={{ marginTop: 12 }} onClick={onRetry}>

@@ -1,6 +1,6 @@
 import React from "react";
 import type { Basis, Tone } from "../../types";
-import { toneColorVar } from "./format";
+import { toneInkVar } from "./format";
 import { ConfidencePill } from "./Pills";
 
 // A single metric: an eyebrow label, the value in mono at its tone color, an
@@ -38,7 +38,7 @@ export function MetricTile({
       </div>
       <div
         className="font-mono"
-        style={{ fontSize: 22, fontWeight: 500, color: toneColorVar[tone], lineHeight: 1.1, wordBreak: "break-word" }}
+        style={{ fontSize: 22, fontWeight: 500, color: toneInkVar[tone], lineHeight: 1.1, wordBreak: "break-word" }}
       >
         {value}
       </div>
