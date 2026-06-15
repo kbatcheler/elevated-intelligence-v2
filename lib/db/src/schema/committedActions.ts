@@ -1,4 +1,4 @@
-import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { integer, numeric, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { tenantsTable } from "./tenants";
 import { usersTable } from "./users";
 
@@ -30,6 +30,18 @@ export const committedActionsTable = pgTable("committed_actions", {
   // The predicted recovery captured from the action at commit time. A
   // prediction, never a realized outcome.
   predictedImpact: text("predicted_impact"),
+  // The numeric dollar value parsed out of predictedImpact at commit time, when
+  // the action names a real currency figure (for example "$2.4M recovery" stores
+  // 2400000.00). Null when the impact carries no parseable dollar amount: a bare
+  // percentage, a margin-point figure, or prose. The platform never invents a
+  // number, so an unparseable impact simply has no numeric prediction.
+  predictedValueUsd: numeric("predicted_value_usd", { precision: 14, scale: 2 }),
+  // The metric the action set out to move, snapshotted at commit time from a
+  // single real derived signal when the tenant is connected and a signal was
+  // named on commit. Null in outside-in mode, where no measured baseline exists.
+  // Honest absence, never a fabricated starting point.
+  baselineMetric: numeric("baseline_metric"),
+  baselineAt: timestamp("baseline_at", { withTimezone: true }),
   timing: text("timing"),
   // The business owner the action names (for example "CFO"), distinct from the
   // user who committed it.

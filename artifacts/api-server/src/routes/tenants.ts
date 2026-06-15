@@ -3,9 +3,11 @@ import { Router } from "express";
 import {
   committedActionsTable,
   db,
+  derivedSignalsTable,
   edgeAgentsTable,
   layersTable,
   orgTenantsTable,
+  outcomeMeasurementsTable,
   tenantLayersTable,
   tenantPipelineRunsTable,
   tenantProfileTable,
@@ -15,6 +17,13 @@ import { z } from "zod";
 import { createAgentCredential } from "../lib/agent/agentCredential";
 import { isOwner, isProvider } from "../lib/auth/access";
 import { logger } from "../lib/logger";
+import {
+  computeOutcomeSummary,
+  computeVariance,
+  deriveMeasurementStatus,
+  toNum,
+} from "../lib/outcomes/outcomeMath";
+import { parsePredictedValueUsd } from "../lib/outcomes/predictedValue";
 import { assertSeedWithinBudget, BudgetExceededError } from "../lib/pipeline/budget";
 import { seedTenant } from "../lib/pipeline/orchestrator";
 import { requireTenantAccess } from "../middleware/auth";
@@ -597,6 +606,11 @@ const commitActionSchema = z.object({
   owner: z.string().max(200).optional(),
   basis: z.enum(["verified", "modelled"]),
   confidence: z.number().int().min(0).max(100),
+  // Optional, connected-mode only: name a derived signal to snapshot as the
+  // baseline this action sets out to move. The route only snapshots it when a
+  // real scalar signal exists; outside-in commits leave the baseline null.
+  baselineSignalKey: z.string().min(1).max(200).optional(),
+  baselineWindow: z.string().min(1).max(200).optional(),
 });
 
 const updateActionStatusSchema = z.object({
@@ -627,14 +641,49 @@ tenantsRouter.post("/tenants/:id/actions", requireTenantAccess, async (req, res,
   }
   try {
     const d = parsed.data;
+    const tenantId = String(req.params.id);
+    // Snapshot the numeric prediction from the real impact string. Null when the
+    // impact carries no parseable dollar figure; the platform never invents one.
+    const predicted = parsePredictedValueUsd(d.predictedImpact);
+    // Snapshot the baseline metric only when a real scalar derived signal is
+    // named and present (connected mode). Otherwise the baseline stays null,
+    // which is the honest state for an outside-in tenant.
+    let baselineMetric: string | null = null;
+    let baselineAt: Date | null = null;
+    if (d.baselineSignalKey) {
+      const signalRows = await db
+        .select()
+        .from(derivedSignalsTable)
+        .where(
+          and(
+            eq(derivedSignalsTable.tenantId, tenantId),
+            eq(derivedSignalsTable.layerKey, d.layerKey),
+            eq(derivedSignalsTable.signalKey, d.baselineSignalKey),
+            ...(d.baselineWindow ? [eq(derivedSignalsTable.window, d.baselineWindow)] : []),
+          ),
+        )
+        .orderBy(desc(derivedSignalsTable.computedAt))
+        .limit(1);
+      const row = signalRows[0];
+      // A baseline must be a single finite number. An encrypted envelope or a
+      // numeric vector is not a scalar baseline, so it is left null rather than
+      // coerced.
+      if (row && typeof row.value === "number" && Number.isFinite(row.value)) {
+        baselineMetric = String(row.value);
+        baselineAt = row.computedAt;
+      }
+    }
     const inserted = await db
       .insert(committedActionsTable)
       .values({
-        tenantId: String(req.params.id),
+        tenantId,
         layerKey: d.layerKey,
         title: d.title,
         detail: d.detail ?? null,
         predictedImpact: d.predictedImpact ?? null,
+        predictedValueUsd: predicted === null ? null : predicted.toFixed(2),
+        baselineMetric,
+        baselineAt,
         timing: d.timing ?? null,
         actionOwner: d.owner ?? null,
         basis: d.basis,
@@ -706,6 +755,219 @@ tenantsRouter.post(
     }
   },
 );
+
+// The body of a measurement: what an action actually realized. At least one of a
+// realized dollar value, an observed metric, or a signal to read must be present;
+// an empty measurement records nothing. "final" marks the closing measurement,
+// the only one that can grade an action as a miss.
+const recordMeasurementSchema = z
+  .object({
+    realizedValueUsd: z.number().finite().optional(),
+    actualMetric: z.number().finite().optional(),
+    signalKey: z.string().min(1).max(200).optional(),
+    window: z.string().min(1).max(200).optional(),
+    note: z.string().max(2000).optional(),
+    final: z.boolean().optional(),
+  })
+  .refine(
+    (b) =>
+      b.realizedValueUsd !== undefined || b.actualMetric !== undefined || b.signalKey !== undefined,
+    { message: "empty_measurement" },
+  );
+
+// Record a measurement against a committed action. This is a provider action:
+// only a provider seat grades the track record. The basis is "measured" only
+// when a real scalar derived signal backs the metric; an operator estimate is
+// "modelled" and is never presented as measured fact. The status and variance
+// are derived from the numbers here, never accepted from the client.
+tenantsRouter.post(
+  "/tenants/:id/actions/:actionId/measurements",
+  requireTenantAccess,
+  async (req, res, next) => {
+    const parsed = recordMeasurementSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_input" });
+      return;
+    }
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    if (!isProvider(user.role)) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    try {
+      const tenantId = String(req.params.id);
+      const actionId = String(req.params.actionId);
+      const actionRows = await db
+        .select()
+        .from(committedActionsTable)
+        .where(
+          and(
+            eq(committedActionsTable.id, actionId),
+            eq(committedActionsTable.tenantId, tenantId),
+          ),
+        )
+        .limit(1);
+      const action = actionRows[0];
+      if (!action) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+
+      const d = parsed.data;
+      let basis: "measured" | "modelled" = "modelled";
+      let actualMetric: number | null = d.actualMetric ?? null;
+      if (d.signalKey) {
+        const signalRows = await db
+          .select()
+          .from(derivedSignalsTable)
+          .where(
+            and(
+              eq(derivedSignalsTable.tenantId, tenantId),
+              eq(derivedSignalsTable.layerKey, action.layerKey),
+              eq(derivedSignalsTable.signalKey, d.signalKey),
+              ...(d.window ? [eq(derivedSignalsTable.window, d.window)] : []),
+            ),
+          )
+          .orderBy(desc(derivedSignalsTable.computedAt))
+          .limit(1);
+        const sig = signalRows[0];
+        // A measured basis is only honest when a real scalar signal backs it. A
+        // missing signal, an encrypted envelope, or a vector is rejected rather
+        // than silently downgraded to a modelled estimate the caller did not ask
+        // for.
+        if (!sig || typeof sig.value !== "number" || !Number.isFinite(sig.value)) {
+          res.status(400).json({ error: "signal_not_found" });
+          return;
+        }
+        actualMetric = sig.value;
+        basis = "measured";
+      }
+
+      const predicted = toNum(action.predictedValueUsd);
+      const realized = d.realizedValueUsd ?? null;
+      const final = d.final ?? false;
+      const status = deriveMeasurementStatus({
+        predictedValueUsd: predicted,
+        realizedValueUsd: realized,
+        final,
+      });
+      const variance = computeVariance(realized, predicted);
+
+      const inserted = await db
+        .insert(outcomeMeasurementsTable)
+        .values({
+          actionId,
+          actualMetric: actualMetric === null ? null : String(actualMetric),
+          realizedValueUsd: realized === null ? null : realized.toFixed(2),
+          varianceVsPrediction: variance === null ? null : variance.toFixed(2),
+          basis,
+          status,
+          note: d.note ?? null,
+          recordedBy: user.id,
+        })
+        .returning();
+      res.status(201).json({ measurement: inserted[0] });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// The measurements recorded against one action, newest first. A read scoped to
+// the tenant; the action must belong to it.
+tenantsRouter.get(
+  "/tenants/:id/actions/:actionId/measurements",
+  requireTenantAccess,
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.params.id);
+      const actionId = String(req.params.actionId);
+      const actionRows = await db
+        .select({ id: committedActionsTable.id })
+        .from(committedActionsTable)
+        .where(
+          and(
+            eq(committedActionsTable.id, actionId),
+            eq(committedActionsTable.tenantId, tenantId),
+          ),
+        )
+        .limit(1);
+      if (!actionRows[0]) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      const rows = await db
+        .select()
+        .from(outcomeMeasurementsTable)
+        .where(eq(outcomeMeasurementsTable.actionId, actionId))
+        .orderBy(desc(outcomeMeasurementsTable.measuredAt));
+      res.json({ measurements: rows });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// The tenant's outcome summary: cumulative value identified versus value
+// realized, plus the simple calibration grade, and the measurements behind them.
+// Every figure is computed from persisted rows, so it reconciles exactly to a
+// direct database sum.
+tenantsRouter.get("/tenants/:id/outcomes", requireTenantAccess, async (req, res, next) => {
+  try {
+    const tenantId = String(req.params.id);
+    const actionRows = await db
+      .select({
+        id: committedActionsTable.id,
+        predictedValueUsd: committedActionsTable.predictedValueUsd,
+        status: committedActionsTable.status,
+      })
+      .from(committedActionsTable)
+      .where(eq(committedActionsTable.tenantId, tenantId));
+
+    const measurementRows = await db
+      .select({
+        id: outcomeMeasurementsTable.id,
+        actionId: outcomeMeasurementsTable.actionId,
+        actualMetric: outcomeMeasurementsTable.actualMetric,
+        realizedValueUsd: outcomeMeasurementsTable.realizedValueUsd,
+        varianceVsPrediction: outcomeMeasurementsTable.varianceVsPrediction,
+        basis: outcomeMeasurementsTable.basis,
+        status: outcomeMeasurementsTable.status,
+        note: outcomeMeasurementsTable.note,
+        measuredAt: outcomeMeasurementsTable.measuredAt,
+        createdAt: outcomeMeasurementsTable.createdAt,
+      })
+      .from(outcomeMeasurementsTable)
+      .innerJoin(
+        committedActionsTable,
+        eq(outcomeMeasurementsTable.actionId, committedActionsTable.id),
+      )
+      .where(eq(committedActionsTable.tenantId, tenantId))
+      .orderBy(desc(outcomeMeasurementsTable.measuredAt));
+
+    const summary = computeOutcomeSummary(
+      actionRows.map((a) => ({
+        id: a.id,
+        predictedValueUsd: toNum(a.predictedValueUsd),
+        status: a.status,
+      })),
+      measurementRows.map((m) => ({
+        actionId: m.actionId,
+        realizedValueUsd: toNum(m.realizedValueUsd),
+        status: m.status,
+        measuredAt: m.measuredAt.getTime(),
+        createdAt: m.createdAt.getTime(),
+      })),
+    );
+    res.json({ outcomes: { summary, measurements: measurementRows } });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // A tenant summary plus its stored profile, handy for confirming the profile
 // stage populated the shell from real homepage ground truth.

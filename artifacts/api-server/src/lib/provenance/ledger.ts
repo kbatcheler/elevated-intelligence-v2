@@ -112,15 +112,27 @@ export interface VerifyResult {
   detail?: string;
 }
 
-// Re-walk a tenant's chain from its genesis (prevHash null), recomputing each
+// A structural subset of a ledger row sufficient to re-verify the chain, so the
+// same walk serves a live tenant (verifyChain), an exported ledger archive, and
+// a restored backup bundle, which carry the rows but not the live table type.
+export interface LedgerVerifyRow {
+  id: string;
+  claimPath: string | null;
+  sourceRef: string | null;
+  contentHash: string;
+  prevHash: string | null;
+}
+
+// Re-walk one tenant's chain from its genesis (prevHash null), recomputing each
 // contentHash from its stored fields and confirming each link. A flipped byte in
 // any field changes the recomputed hash; a reorder or deletion breaks a link;
 // either is reported with the first failing index. An empty chain verifies true.
-export async function verifyChain(tenantId: string): Promise<VerifyResult> {
-  const rows = await db
-    .select()
-    .from(provenanceLedgerTable)
-    .where(eq(provenanceLedgerTable.tenantId, tenantId));
+// Pure: it takes the rows, so it is exercised directly in tests and reused to
+// verify an exported ledger archive and a restored backup bundle.
+export function verifyLedgerEntries(
+  tenantId: string,
+  rows: ReadonlyArray<LedgerVerifyRow>,
+): VerifyResult {
   const total = rows.length;
   if (total === 0) {
     return { ok: true, length: 0 };
@@ -137,7 +149,7 @@ export async function verifyChain(tenantId: string): Promise<VerifyResult> {
 
   // Index successors by the prevHash they chain from; a fork (two entries from
   // the same prevHash) is itself a corruption.
-  const byPrevHash = new Map<string, ProvenanceLedgerEntry>();
+  const byPrevHash = new Map<string, LedgerVerifyRow>();
   for (const r of rows) {
     if (r.prevHash !== null) {
       if (byPrevHash.has(r.prevHash)) {
@@ -147,7 +159,7 @@ export async function verifyChain(tenantId: string): Promise<VerifyResult> {
     }
   }
 
-  let current: ProvenanceLedgerEntry | undefined = genesis[0];
+  let current: LedgerVerifyRow | undefined = genesis[0];
   let prevHash: string | null = null;
   let index = 0;
   const seen = new Set<string>();
@@ -186,4 +198,14 @@ export async function verifyChain(tenantId: string): Promise<VerifyResult> {
     };
   }
   return { ok: true, length: total };
+}
+
+// Re-walk a tenant's chain as stored in the database. Thin wrapper over
+// verifyLedgerEntries that fetches the tenant's rows first.
+export async function verifyChain(tenantId: string): Promise<VerifyResult> {
+  const rows = await db
+    .select()
+    .from(provenanceLedgerTable)
+    .where(eq(provenanceLedgerTable.tenantId, tenantId));
+  return verifyLedgerEntries(tenantId, rows);
 }

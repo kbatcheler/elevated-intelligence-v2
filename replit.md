@@ -105,6 +105,61 @@ the audit is readable at `GET /api/retention/tenants/:id/events`. Every purge an
 recorded in `retention_events` with what, when, and on whose authority (a scheduled purge's
 authority is the system itself; an erasure records the authorizing owner).
 
+## Backups and disaster recovery (Phase U)
+
+The platform owns durable Postgres storage and point-in-time recovery; the application
+documents those targets and the operator responsibility (the same honesty boundary the
+SecretStore draws around durable secret storage) and builds the parts it can make real. The
+full runbook, with RPO/RTO and the logical-restore-vs-PITR distinction, is
+`docs/backup-and-dr-runbook.md`.
+
+Two application paths live in `artifacts/api-server/src/lib/backups/`:
+
+- The crown-jewel logical backup and a PROVEN scratch restore (`crownJewels.ts`). The crown
+  jewels are the five tables whose loss could not be recomputed: `derived_signals`,
+  `provenance_ledger`, `users`, `invite_pins`, and `tenant_keys` (the `kmsKeyRef` REFERENCE
+  only, never key material). `exportCrownJewels` serialises each table with `row_to_json`;
+  `restoreCrownJewelsIntoScratch` rebuilds them into an isolated `scratch_restore_*` schema in
+  the same database (`CREATE TABLE ... LIKE ... INCLUDING DEFAULTS INCLUDING CONSTRAINTS`, no
+  FKs or indexes, so it can never collide with live data); `runRestoreDrill` exports, restores,
+  verifies the row counts and re-walks every restored tenant chain, then always drops the
+  scratch schema even on failure. The bundle never holds a secret value, only ciphertext,
+  one-way hashes, and references.
+- The provenance ledger archive (`ledgerArchive.ts`). `exportLedgerArchive` writes a canonical,
+  stable-order serialisation of the whole ledger plus a per-tenant chain manifest to durable
+  object storage, with a `sha256` over the content-only canonical bytes (no wall-clock field,
+  so an unchanged ledger is skipped rather than re-archived). It re-verifies every tenant chain
+  at export, writes write-once where supported, and records exactly one `backup_events` audit
+  row per archive run (action, object key, digest, entry and tenant counts, chain-verify
+  result, authority). `verifyLedgerArchiveObject` reads an object back and re-confirms the
+  digest over the actual bytes and re-walks each chain. An empty or unchanged ledger writes no
+  object and no row, returning `skipped`.
+
+The archive store is "available, not connected" by default, mirroring `gcpSecretStore`
+(`archiveStore.ts`, `gcsArchiveStore.ts`): `ARCHIVE_STORE_PROVIDER` unset or `local` uses a
+local-filesystem store (so the archive and restore cycle are provable on a laptop); `gcs`
+selects the zero-SDK GCS JSON-API adapter over the Node global fetch, which validates nothing
+at construction and throws a precise "set GCS_ARCHIVE_BUCKET to connect it" error on first use.
+
+The scheduled archive loop (`backupLoop.ts`, `startBackupArchive`) is started ONLY from the
+server entrypoint (`index.ts`), mirroring the retention and notifier loops: no overlap, swallow
+a tick failure, unref'd timer. The owner-only routes (`/api/backups`, behind `requireAuth` and
+`requireOwner`) are `POST /ledger-archive` (trigger), `GET /events` (audit history), and
+`GET /status` (store provider and connection state, cadence, last archive; never a credential,
+bucket, or path).
+
+Backup/DR env (all optional):
+
+- `ARCHIVE_STORE_PROVIDER` is `local` (default) or `gcs`.
+- `ARCHIVE_LOCAL_DIR` pins the local-fs archive directory (defaults to a temp dir).
+- `BACKUP_ARCHIVE_INTERVAL_MS` sets the scheduled archive cadence (default 12 hours).
+- `GCS_ARCHIVE_BUCKET` is required to connect the GCS adapter; its absence is the
+  available-not-connected error.
+- `GCS_ARCHIVE_ENDPOINT` overrides the GCS JSON API endpoint (defaults to the public one).
+- `GCS_ARCHIVE_TIMEOUT_MS` bounds every GCS request (default 10000).
+- `GCS_ARCHIVE_TOKEN_SOURCE` is `metadata` (default) or `env`.
+- `GCS_ARCHIVE_ACCESS_TOKEN` is required only when the token source is `env`.
+
 ## Working with this repo
 
 - Run checks through the configured workflows (`typecheck`, `build`, `test`), not a direct

@@ -1,21 +1,21 @@
-# Drift rollup: Phases A through T
+# Drift rollup: Phases A through W
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase T (client onboarding experience, the milestone close of the
-owner-authorized autonomous R-S-T run: a client-admin self-serves client-viewer onboarding
-through a new session-gated `/api/client` router that mints, lists, and revokes client-viewer
-PINs whose scope is forced server-side to the caller's own org and the `client-viewer` role, a
-widening attempt rejected loudly with `scope_org_forbidden` / `scope_role_forbidden`; the
-client-viewer is made strictly read-only, with both action mutation routes and the break-glass
-raw-signal read now refusing the seat at the server and the portal hiding the controls it would
-be refused; a client first-run surface and a rollout runbook are added. Logged milestone
-decision: a client-viewer sees diagnosis plus reasoning plus provenance for their own tenant and
-nothing that crosses the client boundary (not cost or spend, not connector internals, not
-another tenant, not break-glass, not action writes). This is the milestone hard stop, so
-execution pauses for owner review after Phase T).
+Last updated after Phase W (the outcome loop and value realized, the opening phase of Stage 4,
+Differentiation and Moat, the last phase of the owner-authorized U-V-W run: the track record becomes a
+graded history. A numeric prediction is snapshotted at commit time, real measured outcomes are recorded
+against it with an honest measured-versus-modelled basis, value identified is summed against value
+realized, and a simple hits-over-resolved calibration grades the system, kept loose because milestone
+AJ supersedes it with a Brier-scored ledger. The platform never invents a number: a predicted dollar
+value is parsed only from a currency-anchored impact, a baseline is snapshotted only from a real scalar
+derived signal, a measurement is `basis=measured` only when a real signal backs it, and an empty record
+returns a null calibration score. Typecheck and build are green, the full suite is green at 593 tests,
+and the long-dash sweep is zero on both sides over all 108 public text and jsonb columns. Phase W is the
+last phase before milestone X (benchmarking), so the U-V-W run STOPS here for owner review; do not
+auto-advance into Phase X.)
 
 ## Phase verdicts
 
@@ -41,6 +41,9 @@ execution pauses for owner review after Phase T).
 | R | Expand Test Coverage and Confirm CI | Pass | no (gated, autonomous R-S-T run) |
 | S | Retention and Deletion | Pass | no (gated, autonomous R-S-T run) |
 | T | Client Onboarding Experience | Pass | yes (milestone hard-stop, paused for owner review) |
+| U | Backups and Disaster Recovery | Pass | no (gated, Stage 3; autonomous U-V-W run) |
+| V | Verification and the Build-Report Append (closes Stage 3) | Pass | no (gated, Stage 3; autonomous U-V-W run) |
+| W | Outcome Loop and Value Realized (opens Stage 4) | Pass | no (gated, Stage 4; autonomous U-V-W run; hard stop after W before milestone X) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -270,6 +273,11 @@ execution pauses for owner review after Phase T).
   (application-layer append-only plus the hash chain plus the UI verify, with
   database-role write blocking deferred to deployment), and the connected-refresh time
   was measured on the real warehouse path, not a stub or an invented number.
+- Phase V is verification and reporting only (V). Stage 3 (Operations and Hardening, N through U) was
+  verified against the twelve points of section 9 with no product code change; every point is met or
+  honestly accounted for, and the integration-versus-live boundaries (live paid seeds in C and F, the
+  injected OAuth-refresh seam, the available-not-connected external sinks and cloud backends, and the
+  operator-level full PITR restore) are marked in the matrix rather than overclaimed as live runs.
 - Cost priced by seat, never by a model literal (N). The Phase N pricing module resolves
   a reported model string back to one of the three cortex seats through `SEATS` and prices
   from `SEAT_RATES`, so the no-model-literal config invariant is preserved; a self-hosted
@@ -323,8 +331,73 @@ execution pauses for owner review after Phase T).
   `scopeOrgId` or `scopeRole` in the body exists only so a widening attempt is rejected loudly
   (`scope_org_forbidden`, `scope_role_forbidden`) rather than silently overridden. A shared
   `mintInvitePin` helper backs both this route and the owner admin route so they cannot drift.
+- Restore drill restores into a scratch SCHEMA, not a separate instance (U). The crown-jewel
+  restore proves a logical export round-trips and the ledger chain survives, into an isolated
+  `scratch_restore_*` schema in the same database (no FKs or indexes, always dropped). This is the
+  strongest restore proof the application can make on its own; a full PITR-to-new-instance drill
+  is the operator's platform-level procedure, documented in `docs/backup-and-dr-runbook.md`. Like
+  Phase Q's durable-secret boundary, durable Postgres storage and PITR are a platform
+  responsibility the application documents rather than reimplements.
+- Skip-unchanged archive guard is not globally serialised across processes (U, LOW, accepted).
+  The scheduled archive loop runs from one entrypoint and never overlaps itself, so only a manual
+  trigger racing the scheduled tick could duplicate. Because each object key embeds a compact
+  timestamp plus a `sha256` prefix, a concurrent duplicate writes a DIFFERENT, content-identical
+  key under write-once protection plus a second honest, content-identical audit row, so integrity
+  is never compromised, only a redundant object and row can appear. A database advisory lock or a
+  unique-digest constraint would be an operational refinement, logged here rather than built.
+- No business-performance hero surface in V2 (W). The value counter and the calibration badge elevate
+  the existing Track Record (the actions page) rather than minting a new hero, satisfying the "elevate,
+  do not replace" instruction directly instead of inventing a surface the V1 reference did not have.
+- Calibration kept loose, not Brier-scored (W). The accuracy is hits over resolved (realized or
+  missed), returning a null score on an empty record rather than a fabricated 100 percent. This is
+  intentional: milestone AJ supersedes it with a Brier-scored ledger, so W only has to be honest.
+- predictedValueUsd derived from a currency-anchored impact only (W). A dollar prediction is parsed
+  only when anchored by a `$` or `USD` token; a percentage, a margin-point figure, or prose yields
+  null. The baseline is snapshotted only from a single real scalar derived signal in connected mode,
+  null otherwise. The platform never coerces a non-currency figure into an invented dollar value.
+- basis=measured requires a real signal; status=missed only on a final measurement (W). A measurement
+  is `measured` only when a real finite scalar derived signal backs it; a missing or non-scalar signal
+  is a loud `400 signal_not_found`, never a silent downgrade to `modelled`. `missed` is set only on a
+  final measurement, so an in-flight action below its prediction reads `on_track`, never a spurious miss.
 
 ## No faked output, any phase
+
+Phase W added no faked output and no faked telemetry. Every figure the value counter and the calibration
+badge show is computed in the pure `outcomeMath` module from already-persisted numbers, so the summary
+reconciles against a direct database sum, the latest measurement per action is used so a re-measured
+action is never double-counted, and an empty record returns a null calibration score rather than a
+fabricated 100 percent. A measurement is `basis=measured` only when a real finite scalar derived signal
+backs it; a missing or non-scalar signal is a loud `400` rather than a silent modelled estimate, and a
+predicted dollar value is parsed only from a currency-anchored impact, never invented from a percentage
+or prose. The 593-test suite and the two-sided long-dash sweep are reported at their real current
+totals. Phase V below holds, and the earlier phases under it.
+
+Phase V added no faked output and no faked telemetry: it is verification and documentation only and
+changed no product code. The evidence matrix cites only checks that actually run, and where a check
+could not be run live it is marked as such rather than claimed as a live result (the live paid model
+seeds were Phases C and F, the OAuth refresh is proven against an injected seam, the external sinks and
+the durable cloud backends are available-not-connected, and the full PITR restore is operator-level).
+No test was made to pass by weakening an assertion, and no invariant test was broken to "demonstrate"
+it; the existing in-phase red-on-break proofs are cited instead. The 557-test suite and the two-sided
+long-dash sweep are reported at their real current totals. Phase U below holds, and the earlier phases
+under it.
+
+Phase U added no faked output and no faked telemetry, and where a real managed backend is not
+connected it ships an honest adapter rather than a fake. The GCS archive adapter constructs
+without validating anything and, with no `GCS_ARCHIVE_BUCKET`, the first call throws a precise
+"available, not connected" error rather than fabricating a write; the local-fs default makes the
+archive and restore cycle genuinely provable. The status route reports only the real provider and
+its connected state, never a bucket, path, or credential. A skipped archive (empty or unchanged
+ledger) writes no object and no audit row, so a reader never sees an archive that did not happen,
+and the digest is over the content-only canonical bytes so an unchanged ledger is genuinely
+skipped rather than re-written under a new timestamp. The restore drill verifies the per-table
+counts and re-walks the chain from the RESTORED scratch rows, so a green result is earned by real
+round-tripped data, and the scratch schema is always dropped even on failure. The crown-jewel
+bundle and the ledger archive carry only ciphertext, one-way hashes, and references, never a
+secret value. No test was made to pass by weakening an assertion; the global restore-drill test
+deliberately does not assert a global `chainVerified === true` because a concurrent test file
+intentionally tampers its own ledger rows, so the deterministic restored-row proof is the
+owned-sub-chain read instead. Phase T below holds, and the earlier phases under it.
 
 Phase T added no faked output and no faked telemetry. The onboarding surface shows only
 persisted invite rows, and a one-time PIN code is shown once at mint and never stored or

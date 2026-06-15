@@ -6,6 +6,7 @@ import { adminRouter } from "./routes/admin";
 import { architectureRouter } from "./routes/architecture";
 import { agentRouter } from "./routes/agent";
 import { authRouter } from "./routes/auth";
+import { backupsRouter } from "./routes/backups";
 import { clientRouter } from "./routes/client";
 import { captureError } from "./lib/observability/sentryReporter";
 import { healthRouter } from "./routes/health";
@@ -60,6 +61,11 @@ app.use("/api/spend", requireAuth, requireOwner, spendRouter);
 // depth, in-flight runs, recent failures, and the alert feed are provider-owner
 // concerns, never visible to a client or portfolio seat.
 app.use("/api/operations", requireAuth, requireOwner, operationsRouter);
+
+// Owner-only backups and disaster recovery API (Phase U). Same owner gate:
+// triggering a ledger archive and reading the backup audit are provider-owner
+// concerns, never visible to a client or portfolio seat.
+app.use("/api/backups", requireAuth, requireOwner, backupsRouter);
 
 // The client-admin onboarding surface. requireAuth runs here; the router itself
 // restricts every route to the client-admin role and forces the invite scope to

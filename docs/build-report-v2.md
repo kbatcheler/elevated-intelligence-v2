@@ -1327,3 +1327,220 @@ review's HIGH on a writable client-viewer was fixed and re-verified). The drift 
 `phase-T.md`; the drift index and the rollup are updated to "A through T". Phase T is the
 milestone hard stop and the end of the R-S-T run: execution PAUSES for owner review and does not
 auto-advance.
+
+## Phase U: backups and disaster recovery
+
+Phase U is the second-to-last phase of Stage 3 (Operations and Hardening), run back to back with
+V and W under owner authorization; the hard stop is after W, before milestone X. The platform
+owns durable Postgres storage and point-in-time recovery, so Phase U mirrors the honesty
+boundary Phase Q drew around durable secret storage: it documents the targets and the operator
+responsibility (RPO, RTO, the retention window, the logical-restore versus PITR distinction, the
+restore procedure) in `docs/backup-and-dr-runbook.md`, and builds the application-real parts on
+that base: a crown-jewel logical export with a proven scratch restore, a provenance-ledger
+archive to durable object storage with a verifiable chain copy, a scheduled archive loop, an
+audit table, and owner-only routes.
+
+### The crown-jewel logical backup and the proven scratch restore
+
+The crown jewels are the five tables whose loss could not be recomputed: `derived_signals`,
+`provenance_ledger`, `users`, `invite_pins`, and `tenant_keys` (the `kmsKeyRef` REFERENCE only,
+never key material). `crownJewels.ts` exports each table with `row_to_json`,
+`restoreCrownJewelsIntoScratch` rebuilds each into an isolated `scratch_restore_*` schema in the
+same database (`CREATE TABLE ... LIKE ... INCLUDING DEFAULTS INCLUDING CONSTRAINTS`, no FKs or
+indexes, so it can never collide with live data), and `runRestoreDrill` exports, restores,
+verifies the per-table row counts, re-walks every restored tenant chain, then always drops the
+scratch schema even on failure. The chain check reads back the RESTORED `provenance_ledger` rows
+out of the scratch schema and re-walks them with `verifyLedgerEntries`, so a green
+`chainVerified` is earned by the round-tripped data, not restated from the in-memory export
+bundle. The bundle never holds a secret value, only ciphertext, one-way hashes, and references.
+
+### The provenance-ledger archive
+
+`ledgerArchive.ts` exports a canonical, stable-order serialisation of the whole ledger plus a
+per-tenant chain manifest to durable object storage, with a `sha256` over the content-only
+canonical bytes (no wall-clock field, so an unchanged ledger is skipped rather than
+re-archived). It re-verifies every tenant chain at export, writes write-once where the store
+supports it, and records exactly one `backup_events` row per archive run.
+`verifyLedgerArchiveObject` reads an object back and re-confirms the digest over the actual bytes
+and re-walks each chain. An empty or unchanged ledger writes no object and no row, returning
+`skipped`, so the archive doubles as a tamper-evidence record that survives database loss.
+
+### The "available, not connected" archive store
+
+The archive store mirrors `gcpSecretStore`. `ARCHIVE_STORE_PROVIDER` unset or `local` uses a
+local-filesystem store (`archiveStore.ts`), so the archive and restore cycle are provable on a
+laptop; `gcs` selects the zero-SDK GCS JSON-API adapter (`gcsArchiveStore.ts`) over the Node
+global fetch, which validates nothing at construction and throws a precise "set
+GCS_ARCHIVE_BUCKET to connect it" error on first use. Every object key is validated against a
+traversal-safe grammar before any call, the token is the cached GCP metadata token or an env
+token, and every request is bounded by `GCS_ARCHIVE_TIMEOUT_MS` (default 10000).
+
+### The scheduled loop, the audit, and the owner routes
+
+`backupLoop.ts` runs the archive loop from the server entrypoint only (`index.ts`), mirroring
+the retention and notifier loops: no overlap, swallow a tick failure, unref'd timer, cadence via
+`BACKUP_ARCHIVE_INTERVAL_MS` (default 12 hours). The new `backup_events` table mirrors
+`retention_events` (a `backup_action` enum, set-null `tenantId` and `authorityUserId`, the
+object key, digest, entry and tenant counts, chain-verify result, scope, and `createdAt`), one
+row per archive run and none on a skipped run. The owner-only routes (`backups.ts`, behind
+`requireAuth` and `requireOwner`) are `POST /api/backups/ledger-archive` (trigger),
+`GET /api/backups/events` (audit history), and `GET /api/backups/status` (store provider and
+connection state, cadence, last archive; never a credential, bucket, or path).
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both).
+- Full suite green at 557 tests (api-server 258 across 32 files, portal 164, cortex 84,
+  connectors 29, edge-agent 10, db 8, scripts 4); the 31 new api-server tests are the
+  `archiveStore` local-store unit suite, the crown-jewel restore-drill integration suite (4
+  tests), and the combined ledger-archive plus owner-route integration suite (combined so the
+  `backup_events` writes stay sequential and clean up by collected digest).
+- Long-dash sweep zero on both sides (the source guard and a database-wide row cast over every
+  text and jsonb column in every public table, now including `backup_events`).
+- Zero new npm dependencies.
+
+### Logged drift
+
+- Backups and PITR are a documented platform responsibility, not application code; Phase U
+  documents the targets and the operator restore procedure and builds the application-real parts
+  on that base (mirrors the Phase Q framing).
+- The restore drill restores into a scratch SCHEMA in the same database, the strongest restore
+  proof the application can make on its own; a full PITR-to-new-instance drill is the operator's
+  platform-level procedure, documented in the runbook.
+- The skip-unchanged archive guard is not globally serialised across processes (LOW, accepted).
+  The loop runs from one entrypoint and never overlaps itself; only a manual trigger racing the
+  scheduled tick could write a redundant, content-identical object under a distinct timestamped
+  write-once key and a second honest, content-identical audit row, so integrity is never
+  weakened. A database advisory lock or unique-digest constraint is an operational refinement,
+  logged rather than built.
+
+The architect `evaluate_task` returned PASS after the first review's one MEDIUM was fixed and
+re-verified (the restore drill now verifies the chain from the restored scratch rows, not the
+in-memory bundle). The drift report is `phase-U.md`; the drift index and the rollup are updated
+to "A through U". Per the owner-authorized U-V-W run this does not pause; it proceeds to Phase V.
+
+## Phase V: Verification and the build-report append (closes Stage 3)
+
+Phase V is the closing verification of Stage 3 (Operations and Hardening, Phases N through U),
+mirroring how Phase M closed Stage 2. It built no product feature and changed no product code; its
+artifacts are the `phase-V.md` evidence matrix, this consolidated append, and the drift updates. Zero
+new npm dependencies; no em-dash or en-dash in source or data.
+
+### The section 9 verification (12 points)
+
+All twelve points of section 9 of the Operations prompt are met or honestly accounted for; the full
+matrix with the proof type per point is in `docs/drift/phase-V.md`. In brief: typecheck, build, and
+the full 557-test suite pass (hosted CI is a standing environmental drift, run locally); the cost rows
+and the Spend reconciliation, the capped-tenant block, the OAuth-expiry and throttle recovery with the
+dead-connector alert, the failed-seed-fires-exactly-one-notification drain, the no-secret-value sweep
+over every table and `.replit`, every Phase R invariant's red-on-break test, the TTL purge and the
+chain-preserving erasure, the client-viewer fencing, and the scratch-schema restore drill are each
+proven by the integration suite against live Postgres; the em-dash sweep is zero on both sides. The
+honest integration-versus-live boundaries (live paid model seeds were Phases C and F; OAuth refresh is
+proven against an injected seam; the external sinks and the durable cloud backends are
+available-not-connected; a full PITR-to-new-instance restore is operator-level) are marked as such in
+the matrix.
+
+### Consolidated Stage 3 reference
+
+New tables (Stage 3): `model_usage` (N, one row per real billed model call), `alert_events` (O, the
+alert seam the Phase P notifier drains), `retention_events` (S, the purge and erasure audit), and
+`backup_events` (U, one row per archive run). The `pipeline_jobs` claim queue predates Stage 3 (F).
+
+New routes (Stage 3), all behind `requireAuth`: owner-only `GET /api/spend` (N cost console),
+`/api/operations` (O and P operations screen), and `/api/backups` (U trigger, events, status); the
+owner-only `GET /api/security/tenants/:id/connector-health` (O); the owner-only retention routes under
+`/api/retention` (S erasure and events); and the client-admin self-serve `/api/client` (T). The health
+router is mounted at `/` with an env-gated deep probe (P).
+
+Secret store choice: every runtime secret is resolved by name through the `SecretStore` seam (Q), never
+read from `process.env` at the call site. `SECRET_STORE_PROVIDER` unset or `env` uses the local
+env-backed read store (the platform owns durable secret storage); `gcp` selects the zero-SDK GCP Secret
+Manager REST adapter, available-not-connected until `GCP_PROJECT_ID` is set. `tenant_keys.kmsKeyRef`
+deliberately stays on the separate KMS boundary, not in the secret store.
+
+Test and CI setup: Vitest across seven workspace packages (api-server 258, portal 164, cortex 84,
+connectors 29, edge-agent 10, db 8, scripts 4 = 557), with `.github/workflows/ci.yml` running
+typecheck, build, and test as separate required steps that block the merge on any nonzero exit.
+
+Retention and operational defaults (all env-overridable): retention TTL `RETENTION_TTL_DAYS` 90 days
+and purge cadence `RETENTION_PURGE_INTERVAL_MS` 6 hours; budget caps `SPEND_GLOBAL_MONTHLY_CAP_USD`
+1000, `SPEND_TENANT_MONTHLY_CAP_USD` 50, `SPEND_ALERT_THRESHOLD` 0.8; backup archive cadence
+`BACKUP_ARCHIVE_INTERVAL_MS` 12 hours.
+
+Org and role model (D, extended in T): one provider org plus per-client orgs, four roles, namely
+`provider-owner`, `provider-member`, `client-admin`, and `client-viewer`. The provider-owner is the
+sole owner-gated authority (spend, operations, backups, retention erasure, break-glass
+administration); the client-admin self-serves client-viewer onboarding for its own org only; the
+client-viewer is a strictly read-only seat fenced to its own tenant.
+
+Backup and DR targets: the RPO, RTO, retention window, and the logical-restore-versus-PITR distinction
+are documented in `docs/backup-and-dr-runbook.md`; the application proves a crown-jewel logical export
+and a scratch-schema restore with a re-walked ledger chain, plus a scheduled ledger archive to durable
+object storage (local-fs default, zero-SDK GCS adapter) carrying a verifiable chain copy.
+
+### Verification
+
+Typecheck and build green (exit 0); full suite green at 557 tests; long-dash sweep zero on both sides
+(the source guard and a database-wide cast over all 107 public text and jsonb columns); zero new npm
+dependencies. The architect `evaluate_task` returned PASS. The drift report is `phase-V.md`; the drift
+index and the rollup are updated to "A through V". Per the owner-authorized U-V-W run this does not
+pause; it proceeds to Phase W, the opening of Stage 4. The hard stop is after Phase W, before
+milestone X.
+
+## Phase W: the outcome loop and value realized (opens Stage 4)
+
+Phase W opens Stage 4 (Differentiation and Moat). It turns the track record from a list of intentions
+into a graded history: a numeric prediction is snapshotted at commit time, real measured outcomes are
+recorded against it, value identified is summed against value realized, and the system grades its own
+accuracy with a simple, honest calibration score. Zero new npm dependencies; no em-dash or en-dash in
+source or data. Per the adaptation guide the calibration is kept deliberately loose because milestone
+AJ later supersedes it with a Brier-scored ledger.
+
+### New schema
+
+`committed_actions` gains three commit-time snapshot columns: `predicted_value_usd` (`numeric(14,2)`),
+`baseline_metric` (`numeric`), and `baseline_at` (`timestamptz`), all nullable so an action with no
+parseable dollar figure has no numeric prediction and an outside-in action has no measured baseline.
+A new `outcome_measurements` table records one row per real measurement against an action (`actionId`
+FK cascade, `measuredAt`, `actualMetric`, `realizedValueUsd` `numeric(14,2)`, `varianceVsPrediction`
+`numeric(14,2)`, `basis`, `status`, `note`, `recordedBy` FK set-null, `createdAt`), with two new enums
+`outcome_measurement_basis` (`measured`, `modelled`) and `outcome_measurement_status` (`pending`,
+`on_track`, `realized`, `missed`).
+
+### New routes
+
+All under the existing tenant router behind `requireAuth` and the tenant access fence:
+`POST /api/tenants/:id/actions/:actionId/measurements` (provider-only; records a measurement, basis
+derived from whether a real scalar derived signal backs it, status and variance derived server-side),
+`GET /api/tenants/:id/actions/:actionId/measurements` (the measurements for an action), and
+`GET /api/tenants/:id/outcomes` (the computed value-identified-versus-realized summary and the
+calibration). The action-commit route is extended to snapshot the prediction and, in connected mode,
+the named-signal baseline.
+
+### The honesty boundaries
+
+`predictedValueUsd` is parsed from a currency-anchored impact only (a `$` or `USD` token); a
+percentage, a margin-point figure, or prose yields null rather than an invented dollar value. The
+baseline is snapshotted only from a single real scalar derived signal in connected mode, null
+otherwise. `basis=measured` is reserved for an outcome grounded in a real derived signal reading; a
+missing or non-scalar signal is a loud `400 signal_not_found`, never a silent downgrade to `modelled`.
+`status=missed` is set only on a final measurement, so an in-flight action below its prediction reads
+`on_track`. The value counter and the calibration badge are computed entirely in the pure
+`outcomeMath` module from already-persisted numbers, so the summary reconciles against a direct
+database sum, the latest measurement per action is used so a re-measured action is never
+double-counted, and an empty record returns a null calibration score rather than a fabricated 100
+percent. The Track Record (actions) surface is elevated with the counter, the badge, and per-action
+realized/variance/basis rather than a new hero, because V2 has no business-performance hero surface.
+
+### Verification
+
+Typecheck and build green (exit 0; portal 1743 modules, api-server bundled); full suite green at 593
+tests (api-server 286 across 34 files including the new `predictedValue` and `outcomeMath` unit tests
+and the outcome-loop integration tests, portal 172 across 14 files including the new `outcomeApi`
+tests, cortex 84, connectors 29, edge-agent 10, db 8, scripts 4); long-dash sweep zero on both sides
+(the source guard and a database-wide cast over all 108 public text and jsonb columns, including the
+new `outcome_measurements.note`); zero new npm dependencies. The architect `evaluate_task` returned
+PASS. The drift report is `phase-W.md`; the drift index and the rollup are updated to "A through W".
+Phase W is the last phase before milestone X (benchmarking), so this is a HARD STOP for owner review;
+execution does not auto-advance into Phase X.

@@ -1,6 +1,7 @@
 import app from "./app";
 import { startAlertNotifier } from "./lib/alerts/notifier";
 import { ensureProviderOrgAndOwner } from "./lib/auth/bootstrap";
+import { startBackupArchive } from "./lib/backups/backupLoop";
 import { startConnectorMaintenance } from "./lib/connectors/oauthRefresh";
 import { logger } from "./lib/logger";
 import { startRetentionPurge } from "./lib/retention/retention";
@@ -41,6 +42,11 @@ async function start(): Promise<void> {
   // derived signals past the configured TTL and audits what it removed. Started
   // only here so importing the app in tests never starts a timer.
   startRetentionPurge(logger);
+
+  // Start the in-process backup archive loop (Phase U). Each tick exports the
+  // provenance ledger to durable object storage, skipping honestly when nothing
+  // changed. Started only here so importing the app in tests never starts a timer.
+  startBackupArchive(logger);
 }
 
 void start();

@@ -19,6 +19,9 @@ export * from "./tenantPipelineRuns";
 // the Platform phase so concurrency is database-correct, never module memory).
 export * from "./pipelineJobs";
 export * from "./committedActions";
+// The outcome loop (Phase W): one measurement row per committed action grading
+// what it actually realized against the prediction snapshotted at commit time.
+export * from "./outcomeMeasurements";
 export * from "./claimBrokenReports";
 // Connectors and SOC 2 (V2). The catalogue, per-tenant connections and runs, the
 // "math, not records" derived signal store, the append-only provenance ledger,
@@ -46,3 +49,6 @@ export * from "./alertEvents";
 // Retention and deletion audit (Phase S): one row per scheduled TTL purge or
 // operator-authorized tenant erasure of derived signals.
 export * from "./retentionEvents";
+// Backups and disaster recovery audit (Phase U): one row per real provenance
+// ledger archive written to durable object storage.
+export * from "./backupEvents";

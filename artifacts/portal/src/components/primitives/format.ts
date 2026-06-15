@@ -73,3 +73,15 @@ export function formatInt(n?: number | null): string {
   if (n == null || !Number.isFinite(n)) return "-";
   return n.toLocaleString("en-US");
 }
+
+// A whole-dollar USD figure. Returns a plain dash for null or non-finite input,
+// never a fabricated $0. Postgres numeric arrives as a string, so the caller
+// parses it before formatting; this only formats a real number.
+export function formatUsd(n?: number | null): string {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}

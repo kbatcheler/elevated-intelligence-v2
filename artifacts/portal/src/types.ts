@@ -270,6 +270,12 @@ export interface CommittedAction {
   title: string;
   detail: string | null;
   predictedImpact: string | null;
+  // The numeric dollar prediction snapshotted at commit, or null when the impact
+  // string carried no parseable dollar figure. Postgres numeric arrives as a
+  // string over the wire; the portal parses it for display only.
+  predictedValueUsd: string | null;
+  baselineMetric: string | null;
+  baselineAt: string | null;
   timing: string | null;
   actionOwner: string | null;
   basis: Basis;
@@ -279,6 +285,45 @@ export interface CommittedAction {
   committedBy: string;
   committedAt: string;
   updatedAt: string;
+}
+
+// ── Outcome loop / value realized ──
+export type OutcomeMeasurementBasis = "measured" | "modelled";
+export type OutcomeMeasurementStatus = "pending" | "on_track" | "realized" | "missed";
+
+export interface OutcomeMeasurement {
+  id: string;
+  actionId: string;
+  actualMetric: string | null;
+  realizedValueUsd: string | null;
+  varianceVsPrediction: string | null;
+  basis: OutcomeMeasurementBasis;
+  status: OutcomeMeasurementStatus;
+  note: string | null;
+  measuredAt: string;
+  createdAt: string;
+}
+
+// The simple calibration grade. score is hits over resolved, or null when
+// nothing has resolved yet (an honest "not enough signal", never a fabricated 0).
+export interface OutcomeCalibration {
+  score: number | null;
+  hits: number;
+  misses: number;
+  resolved: number;
+}
+
+export interface OutcomeSummary {
+  valueIdentifiedUsd: number;
+  valueRealizedUsd: number;
+  actionsWithPrediction: number;
+  actionsMeasured: number;
+  calibration: OutcomeCalibration;
+}
+
+export interface TenantOutcomes {
+  summary: OutcomeSummary;
+  measurements: OutcomeMeasurement[];
 }
 
 // The stored tenant profile blob (homepage ground truth). Loosely typed: the

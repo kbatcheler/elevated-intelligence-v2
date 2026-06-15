@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   committedActionsTable,
   db,
+  derivedSignalsTable,
   orgsTable,
   orgTenantsTable,
   tenantsTable,
@@ -368,6 +369,231 @@ describe("committed actions", () => {
         .limit(1)
     )[0];
     expect(row.tenantId).toBe(ids.tenantB);
+  });
+});
+
+// The outcome loop (W): the prediction snapshot at commit, the provider-only
+// measurement, and the value counter that reconciles against a direct sum. Each
+// reconciliation test uses its own throwaway tenant so a shared tenant's actions
+// from other tests cannot inflate the totals.
+describe("outcome loop", () => {
+  const createdTenants: string[] = [];
+  async function makeTenant(label: string): Promise<string> {
+    const [t] = await db
+      .insert(tenantsTable)
+      .values({ name: `${RUN} ${label}`, url: `https://${label}.example.com`, status: "ready" })
+      .returning({ id: tenantsTable.id });
+    createdTenants.push(t.id);
+    return t.id;
+  }
+
+  afterAll(async () => {
+    if (createdTenants.length === 0) return;
+    // Deleting the committed actions cascades to their measurements.
+    await db
+      .delete(committedActionsTable)
+      .where(inArray(committedActionsTable.tenantId, createdTenants));
+    await db.delete(derivedSignalsTable).where(inArray(derivedSignalsTable.tenantId, createdTenants));
+    await db.delete(tenantsTable).where(inArray(tenantsTable.id, createdTenants));
+  });
+
+  const dollarBody = {
+    layerKey: "business-performance",
+    title: "Collect the aged enterprise receivables",
+    detail: "Chase the receivables past 90 days with the new dunning sequence.",
+    predictedImpact: "Recovers an estimated $100,000 of working capital this quarter.",
+    timing: "This quarter",
+    owner: "Controller",
+    basis: "modelled" as const,
+    confidence: 64,
+  };
+
+  it("snapshots a numeric predicted value from a dollar impact, and null otherwise", async () => {
+    const session = await loginSession("member");
+    const tenant = await makeTenant("Outcome A");
+
+    const withDollar = await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: dollarBody,
+      session,
+    });
+    expect(withDollar.status).toBe(201);
+    expect(
+      (withDollar.json as { action: { predictedValueUsd: string | null } }).action.predictedValueUsd,
+    ).toBe("100000.00");
+
+    const noDollar = await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: { ...dollarBody, predictedImpact: "Recovers 2.1 points of gross margin." },
+      session,
+    });
+    expect(noDollar.status).toBe(201);
+    expect(
+      (noDollar.json as { action: { predictedValueUsd: string | null } }).action.predictedValueUsd,
+    ).toBeNull();
+  });
+
+  it("records a modelled measurement and derives status and variance", async () => {
+    const session = await loginSession("member");
+    const tenant = await makeTenant("Outcome B");
+    const created = await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: dollarBody,
+      session,
+    });
+    const actionId = (created.json as { action: { id: string } }).action.id;
+
+    const progress = await api(`/api/tenants/${tenant}/actions/${actionId}/measurements`, {
+      method: "POST",
+      body: { realizedValueUsd: 40000 },
+      session,
+    });
+    expect(progress.status).toBe(201);
+    expect((progress.json as { measurement: Record<string, unknown> }).measurement).toMatchObject({
+      basis: "modelled",
+      status: "on_track",
+      realizedValueUsd: "40000.00",
+      varianceVsPrediction: "-60000.00",
+    });
+
+    const final = await api(`/api/tenants/${tenant}/actions/${actionId}/measurements`, {
+      method: "POST",
+      body: { realizedValueUsd: 120000, final: true, note: "Closed the quarter above plan." },
+      session,
+    });
+    expect(final.status).toBe(201);
+    expect((final.json as { measurement: Record<string, unknown> }).measurement).toMatchObject({
+      basis: "modelled",
+      status: "realized",
+      realizedValueUsd: "120000.00",
+      varianceVsPrediction: "20000.00",
+    });
+
+    const read = await api(`/api/tenants/${tenant}/actions/${actionId}/measurements`, { session });
+    expect(read.status).toBe(200);
+    expect((read.json as { measurements: unknown[] }).measurements).toHaveLength(2);
+  });
+
+  it("records a measured measurement from a real derived signal", async () => {
+    const session = await loginSession("member");
+    const tenant = await makeTenant("Outcome C");
+    const created = await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: dollarBody,
+      session,
+    });
+    const actionId = (created.json as { action: { id: string } }).action.id;
+
+    await db.insert(derivedSignalsTable).values({
+      tenantId: tenant,
+      layerKey: dollarBody.layerKey,
+      signalKey: "dso_days",
+      value: 38,
+      window: "90d",
+    });
+
+    const measured = await api(`/api/tenants/${tenant}/actions/${actionId}/measurements`, {
+      method: "POST",
+      body: { signalKey: "dso_days", window: "90d", realizedValueUsd: 90000 },
+      session,
+    });
+    expect(measured.status).toBe(201);
+    expect((measured.json as { measurement: Record<string, unknown> }).measurement).toMatchObject({
+      basis: "measured",
+      actualMetric: "38",
+      realizedValueUsd: "90000.00",
+    });
+  });
+
+  it("rejects a measurement naming a signal that does not exist", async () => {
+    const session = await loginSession("member");
+    const tenant = await makeTenant("Outcome D");
+    const created = await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: dollarBody,
+      session,
+    });
+    const actionId = (created.json as { action: { id: string } }).action.id;
+
+    const r = await api(`/api/tenants/${tenant}/actions/${actionId}/measurements`, {
+      method: "POST",
+      body: { signalKey: "missing_signal" },
+      session,
+    });
+    expect(r.status).toBe(400);
+    expect(r.json).toEqual({ error: "signal_not_found" });
+  });
+
+  it("refuses a non-provider seat recording a measurement", async () => {
+    // The portfolio user is a client-admin: it can commit and read its tenant's
+    // actions, but grading the track record is a provider action.
+    const provider = await loginSession("member");
+    const created = await api(`/api/tenants/${ids.tenantA}/actions`, {
+      method: "POST",
+      body: dollarBody,
+      session: provider,
+    });
+    const actionId = (created.json as { action: { id: string } }).action.id;
+
+    const session = await loginSession("portfolio-user");
+    const r = await api(`/api/tenants/${ids.tenantA}/actions/${actionId}/measurements`, {
+      method: "POST",
+      body: { realizedValueUsd: 1000 },
+      session,
+    });
+    expect(r.status).toBe(403);
+    expect(r.json).toEqual({ error: "forbidden" });
+  });
+
+  it("404s a measurement against an action that does not exist", async () => {
+    const session = await loginSession("member");
+    const r = await api(
+      `/api/tenants/${ids.tenantA}/actions/00000000-0000-0000-0000-000000000000/measurements`,
+      { method: "POST", body: { realizedValueUsd: 1 }, session },
+    );
+    expect(r.status).toBe(404);
+    expect(r.json).toEqual({ error: "not_found" });
+  });
+
+  it("the outcomes counter reconciles value identified and realized against a manual sum", async () => {
+    const session = await loginSession("member");
+    const tenant = await makeTenant("Outcome E");
+
+    const a1 = await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: { ...dollarBody, predictedImpact: "Recovers $100,000 this quarter." },
+      session,
+    });
+    const a1Id = (a1.json as { action: { id: string } }).action.id;
+    await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: { ...dollarBody, predictedImpact: "Frees $50,000 of working capital." },
+      session,
+    });
+    // A third action with no dollar figure must not inflate the identified total.
+    await api(`/api/tenants/${tenant}/actions`, {
+      method: "POST",
+      body: { ...dollarBody, predictedImpact: "Improves NPS by 4 points." },
+      session,
+    });
+
+    await api(`/api/tenants/${tenant}/actions/${a1Id}/measurements`, {
+      method: "POST",
+      body: { realizedValueUsd: 120000, final: true },
+      session,
+    });
+
+    const outcomes = await api(`/api/tenants/${tenant}/outcomes`, { session });
+    expect(outcomes.status).toBe(200);
+    const summary = (outcomes.json as { outcomes: { summary: Record<string, unknown> } }).outcomes
+      .summary;
+    expect(summary).toMatchObject({
+      valueIdentifiedUsd: 150000,
+      valueRealizedUsd: 120000,
+      actionsWithPrediction: 2,
+      actionsMeasured: 1,
+      calibration: { score: 1, hits: 1, misses: 0, resolved: 1 },
+    });
   });
 });
 

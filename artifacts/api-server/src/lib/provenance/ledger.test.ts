@@ -46,10 +46,12 @@ describe("provenance ledger", () => {
   it("exposes only append and verify operations (append-only surface)", () => {
     const exported = Object.keys(ledger).sort();
     // appendEntry runs in its own transaction; appendEntryTx composes the same
-    // append inside a caller's transaction (used by the retention erasure). Both
-    // only append; there is deliberately no update and no delete export, which is
-    // what keeps the ledger tamper-evident.
-    expect(exported).toEqual(["appendEntry", "appendEntryTx", "verifyChain"]);
+    // append inside a caller's transaction (used by the retention erasure).
+    // verifyChain re-walks a tenant's stored chain; verifyLedgerEntries is the
+    // pure, read-only verifier it shares with the backup archive and restore.
+    // Every export only appends or verifies; there is deliberately no update and
+    // no delete export, which is what keeps the ledger tamper-evident.
+    expect(exported).toEqual(["appendEntry", "appendEntryTx", "verifyChain", "verifyLedgerEntries"]);
   });
 
   it("chains each entry to its predecessor by content hash", async () => {
