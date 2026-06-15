@@ -14,6 +14,7 @@ import { and, asc, eq } from "drizzle-orm";
 import {
   assembleLayerContent,
   deepStripDashes,
+  evaluateNarrativeVoice,
   fetchHomepageContext,
   LAYER_STAGES,
   modelForStage,
@@ -476,6 +477,11 @@ async function runLayer(
     // persisted. deepStripDashes recurses through the content, hero, benchmark,
     // supplement, confounder and claim payloads; numbers, booleans and the model
     // identifier (ASCII hyphens) pass through unchanged.
+    // Editorial voice (Phase AB): measure the assembled prose deterministically
+    // and record the report ON the row. This never edits the content; a below-bar
+    // layer is persisted with its real (lower) band, not silently corrected.
+    const voiceQuality = evaluateNarrativeVoice(assembled.content);
+
     const row = deepStripDashes({
       content: assembled.content as unknown as Record<string, unknown>,
       heroPanel: hero as unknown as Record<string, unknown>,
@@ -484,6 +490,7 @@ async function runLayer(
       confounders: confound.confounders as unknown as unknown[],
       verifiedClaims: { items: narrate.verified_claims } as Record<string, unknown>,
       modelledClaims: { items: narrate.modelled_claims } as Record<string, unknown>,
+      voiceQuality: voiceQuality as unknown as Record<string, unknown>,
       reducedMode: reduced,
       generatorModel: modelForStage("narrate"),
     });

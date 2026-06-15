@@ -17,6 +17,11 @@ import {
 } from "@workspace/db";
 import { z } from "zod";
 import { createAgentCredential } from "../lib/agent/agentCredential";
+import {
+  listFindingChallenges,
+  runFindingChallenge,
+  serializeChallenge,
+} from "../lib/challenge/findingChallenge";
 import { isOwner, isProvider } from "../lib/auth/access";
 import { getBenchmarkMinCohort } from "../lib/benchmarks/benchmarks";
 import { segmentKeyFor } from "../lib/benchmarks/benchmarkMath";
@@ -33,6 +38,8 @@ import { seedTenant } from "../lib/pipeline/orchestrator";
 import { readDecryptedSignalsForMachine } from "../lib/security/signalRead";
 import { CryptoShreddedError, SignalEncryptionError } from "../lib/security/errors";
 import { requireTenantAccess } from "../middleware/auth";
+import { asBasis, asNumber, asObjectArray, asString } from "../lib/overview/overviewProjection";
+import { loadTenantOverview } from "../lib/overview/overview";
 
 export const tenantsRouter: Router = Router();
 
@@ -595,88 +602,9 @@ tenantsRouter.get("/tenants/:id/runs", requireTenantAccess, async (req, res, nex
 tenantsRouter.get("/tenants/:id/overview", requireTenantAccess, async (req, res, next) => {
   try {
     const tenantId = String(req.params.id);
-    const rows = await db
-      .select({
-        key: layersTable.key,
-        name: layersTable.name,
-        archetype: layersTable.archetype,
-        ownerPersona: layersTable.ownerPersona,
-        moduleGroup: layersTable.moduleGroup,
-        sortOrder: layersTable.sortOrder,
-        diagnosticQuestion: layersTable.diagnosticQuestion,
-        feeds: layersTable.feeds,
-        content: tenantLayersTable.content,
-        heroPanel: tenantLayersTable.heroPanel,
-        generatedAt: tenantLayersTable.generatedAt,
-        generatorModel: tenantLayersTable.generatorModel,
-      })
-      .from(layersTable)
-      .leftJoin(
-        tenantLayersTable,
-        and(
-          eq(tenantLayersTable.layerKey, layersTable.key),
-          eq(tenantLayersTable.tenantId, tenantId),
-        ),
-      )
-      .orderBy(asc(layersTable.sortOrder));
-
-    res.json({
-      overview: rows.map((r) => {
-        const c = r.content;
-        const metrics = c ? asObjectArray(c.metrics) : [];
-        const actions = c ? asObjectArray(c.actions) : [];
-        const gaps = c ? asObjectArray(c.gaps) : [];
-        const lead = metrics[0];
-        const action = actions[0];
-        const hp = r.heroPanel;
-        return {
-          key: r.key,
-          name: r.name,
-          archetype: r.archetype,
-          ownerPersona: r.ownerPersona,
-          moduleGroup: r.moduleGroup,
-          sortOrder: r.sortOrder,
-          diagnosticQuestion: r.diagnosticQuestion,
-          feeds: r.feeds,
-          generated: c != null,
-          headlineFinding: c ? asString(c.headline_finding) : null,
-          headlineImpact: c ? asString(c.headline_impact) : null,
-          headlineLever: c ? asString(c.headline_lever) : null,
-          narrative: c ? asString(c.narrative) : null,
-          confidence: c ? asNumber(c.confidence) : null,
-          confidenceGap: c ? asNumber(c.confidence_gap) : null,
-          leadMetric: lead
-            ? {
-                label: asString(lead.label),
-                value: asString(lead.value),
-                sub: asString(lead.sub),
-                tone: asTone(lead.tone),
-              }
-            : null,
-          hero: hp
-            ? {
-                metricLabel: asString(hp.metric_label),
-                metricValue: asString(hp.metric_value),
-                metricSub: asString(hp.metric_sub),
-                tone: asTone(hp.tone),
-                oneLineRead: asString(hp.one_line_read),
-              }
-            : null,
-          topAction: action
-            ? {
-                title: asString(action.title),
-                impact: asString(action.impact),
-                timing: asString(action.timing),
-                confidence: asNumber(action.confidence),
-                basis: asBasis(action.basis),
-              }
-            : null,
-          topGap: pickTopGap(gaps),
-          generatedAt: r.generatedAt,
-          generatorModel: r.generatorModel,
-        };
-      }),
-    });
+    // The authed overview and the public shareable diagnosis project through the
+    // same loadTenantOverview, so the two surfaces can never drift.
+    res.json({ overview: await loadTenantOverview(tenantId) });
   } catch (err) {
     next(err);
   }
@@ -800,6 +728,97 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
     next(err);
   }
 });
+
+// ── Phase AA: Interactive Challenge (tenant-scoped) ─────────────────────────
+// A seat challenges ONE finding in a layer's diagnosis; the engine re-reasons it
+// through the Confounder and Synthesist seats and records an append-only verdict
+// (uphold-or-revise) plus, on success, one hash-chained provenance entry. The
+// user's objection is context, never an override: a challenge can never delete a
+// finding, and a revise re-bases the challenge row only, never the layer content.
+// requireTenantAccess has already fenced the tenant for the seat.
+const challengeSchema = z.object({
+  findingRef: z
+    .string()
+    .regex(/^(causes|actions|hypotheses|metrics)\[\d+\]$/, "invalid_finding_ref"),
+  // A challenge is a real objection, not whitespace: bound the raw length, trim,
+  // then reject an empty-after-trim body so a blank submission never spends a
+  // model call or stores a meaningless row.
+  challengeText: z
+    .string()
+    .min(1)
+    .max(2000)
+    .transform((s) => s.trim())
+    .refine((s) => s.length > 0, "empty_challenge"),
+});
+
+tenantsRouter.post(
+  "/tenants/:id/layers/:key/challenges",
+  requireTenantAccess,
+  async (req, res, next) => {
+    const parsed = challengeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_input" });
+      return;
+    }
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    // A client-viewer is a read-only seat: it reads the challenge history but
+    // never spends model calls to challenge a finding, the same posture as
+    // committing an action.
+    if (user.role === "client-viewer") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    try {
+      const result = await runFindingChallenge({
+        tenantId: String(req.params.id),
+        layerKey: String(req.params.key),
+        findingRef: parsed.data.findingRef,
+        challengeText: parsed.data.challengeText,
+        userId: user.id,
+        log: logger,
+      });
+      if (result.kind === "layer_not_found") {
+        res.status(404).json({ error: "layer_not_found" });
+        return;
+      }
+      if (result.kind === "finding_not_found") {
+        res.status(404).json({ error: "finding_not_found" });
+        return;
+      }
+      if (result.kind === "profile_missing") {
+        res.status(409).json({ error: "profile_missing" });
+        return;
+      }
+      // Return the SAME serialized contract the history does, with this seat's
+      // email as the challenger. The challenge was just recorded against the live
+      // finding and never mutates the layer content, so it is the current version.
+      res.status(201).json({
+        challenge: serializeChallenge(result.challenge, user.email, true),
+      });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// The tenant's challenge history, newest first, each annotated with whether it
+// still addresses the live version of its finding.
+tenantsRouter.get(
+  "/tenants/:id/challenges",
+  requireTenantAccess,
+  async (req, res, next) => {
+    try {
+      const challenges = await listFindingChallenges(String(req.params.id));
+      res.json({ challenges });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // ── Phase X: per-tenant benchmark consent (tenant-scoped) ───────────────────
 // Reading and changing a tenant's participation in the data network is a
@@ -1304,26 +1323,11 @@ tenantsRouter.get("/tenants/:id", requireTenantAccess, async (req, res, next) =>
   }
 });
 
-// Defensive projectors for the overview endpoint. The stored content is jsonb,
-// so each field is validated before it is surfaced: a malformed value becomes
-// null rather than a fabricated stand-in.
-function asString(v: unknown): string | null {
-  return typeof v === "string" && v.length > 0 ? v : null;
-}
-function asNumber(v: unknown): number | null {
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-function asObjectArray(v: unknown): Record<string, unknown>[] {
-  return Array.isArray(v)
-    ? (v.filter((x) => x != null && typeof x === "object") as Record<string, unknown>[])
-    : [];
-}
-function asTone(v: unknown): "good" | "warn" | "bad" | "neutral" | null {
-  return v === "good" || v === "warn" || v === "bad" || v === "neutral" ? v : null;
-}
-function asBasis(v: unknown): "verified" | "modelled" | null {
-  return v === "verified" || v === "modelled" ? v : null;
-}
+// Defensive projectors for the signals endpoint. asString, asNumber,
+// asObjectArray and asBasis are shared with the overview builder and imported
+// from lib/overview/overviewProjection; asGapKind and asVerdict are
+// signals-specific. A malformed value becomes null rather than a fabricated
+// stand-in.
 function asGapKind(v: unknown): "DATA" | "SIGNAL" | "INTEG" | "MODEL" | "FLOW" | null {
   return v === "DATA" || v === "SIGNAL" || v === "INTEG" || v === "MODEL" || v === "FLOW" ? v : null;
 }
@@ -1378,27 +1382,3 @@ function projectConfounder(c: Record<string, unknown>) {
   };
 }
 
-// The single highest-lift gap is the layer's biggest blind spot. Selection by a
-// real persisted field (confidence_lift_pp), never a computed score.
-function pickTopGap(gaps: Record<string, unknown>[]) {
-  let best: {
-    kind: unknown;
-    description: string | null;
-    closes: string | null;
-    confidenceLiftPp: number | null;
-  } | null = null;
-  let bestLift = -Infinity;
-  for (const g of gaps) {
-    const lift = asNumber(g.confidence_lift_pp) ?? 0;
-    if (lift > bestLift) {
-      bestLift = lift;
-      best = {
-        kind: g.kind,
-        description: asString(g.description),
-        closes: asString(g.closes),
-        confidenceLiftPp: asNumber(g.confidence_lift_pp),
-      };
-    }
-  }
-  return best;
-}

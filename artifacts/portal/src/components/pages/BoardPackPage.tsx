@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Printer } from "lucide-react";
-import type { OverviewLayer } from "../../types";
+import { Check, Copy, Printer, Share2 } from "lucide-react";
+import type { MintedShareToken, OverviewLayer, ShareToken } from "../../types";
 import { fetchOverview } from "../../lib/tenantApi";
+import { fetchShareTokens, mintShareToken, revokeShareToken } from "../../lib/sellabilityApi";
 import { useAuth } from "../../lib/AuthContext";
 import { useTenant } from "../../lib/TenantContext";
 import { orderByPerspective, PERSPECTIVE_LABEL } from "../../lib/perspective";
-import { Link } from "../../lib/router";
+import { Link, withBase } from "../../lib/router";
 import {
   EmptyState,
   ErrorState,
@@ -34,8 +35,9 @@ type State =
 // remains. Nothing is summarized by a model here; the page assembles persisted
 // fields in the active perspective order and is print-ready.
 export function BoardPackPage() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { current, currentId, status: tenantStatus, perspective } = useTenant();
+  const isProvider = user?.role === "provider-owner" || user?.role === "provider-member";
   const [state, setState] = useState<State>({ kind: "loading" });
 
   useEffect(() => {
@@ -92,6 +94,8 @@ export function BoardPackPage() {
           ) : undefined
         }
       />
+
+      {isProvider && currentId && <ShareLinks tenantId={currentId} />}
 
       <div style={{ marginTop: 28 }}>
         {state.kind === "loading" && <SkeletonLines lines={6} />}
@@ -203,6 +207,208 @@ function BoardEntry({ layer }: { layer: OverviewLayer }) {
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+// The provider-only Share panel. A board pack can be turned into a read-only,
+// summary-only link for a prospect: minting returns the plaintext token exactly
+// ONCE, so the full URL is shown here for the operator to copy and is never
+// retrievable again. Existing links are metadata only (status, expiry, real
+// access count) with an early revoke. The viral "powered by" mark travels on the
+// shared diagnosis itself; this panel states that so the operator knows it.
+function ShareLinks({ tenantId }: { tenantId: string }) {
+  const [shares, setShares] = useState<ShareToken[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [minted, setMinted] = useState<MintedShareToken | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setShares(null);
+    setMinted(null);
+    setActionError(null);
+    setLoadError(false);
+    fetchShareTokens(tenantId).then((out) => {
+      if (!alive) return;
+      if ("unauthorized" in out) return;
+      if (out.state === "error") return setLoadError(true);
+      setShares(out.shares);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
+
+  async function reload() {
+    const out = await fetchShareTokens(tenantId);
+    if ("unauthorized" in out) return;
+    if (out.state === "error") return setLoadError(true);
+    setLoadError(false);
+    setShares(out.shares);
+  }
+
+  async function onMint() {
+    setBusy(true);
+    setActionError(null);
+    const out = await mintShareToken(tenantId, {});
+    setBusy(false);
+    if ("unauthorized" in out) return;
+    if ("error" in out) return setActionError(out.error);
+    setMinted(out.share);
+    setCopied(false);
+    void reload();
+  }
+
+  async function onRevoke(id: string) {
+    setBusy(true);
+    setActionError(null);
+    const out = await revokeShareToken(tenantId, id);
+    setBusy(false);
+    if ("unauthorized" in out) return;
+    if ("error" in out) return setActionError(out.error);
+    if (minted && minted.id === id) setMinted(null);
+    void reload();
+  }
+
+  const shareUrl = minted ? window.location.origin + withBase(minted.diagnosisPath) : null;
+
+  async function onCopy() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <section className="card" style={{ padding: 22, marginTop: 24 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
+            Share
+          </div>
+          <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)", marginTop: 2 }}>
+            Read-only diagnosis link
+          </div>
+        </div>
+        <button
+          className="btn-primary"
+          onClick={onMint}
+          disabled={busy}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+        >
+          <Share2 size={14} /> Create link
+        </button>
+      </div>
+
+      <p style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.6, margin: "10px 0 0" }}>
+        A shared link shows a board-pack summary only, with no login, no raw data, and no
+        provenance. It carries the Powered by Elevated Intelligence mark and expires
+        automatically.
+      </p>
+
+      {actionError && (
+        <div style={{ marginTop: 12, fontSize: 13, color: "var(--coral)" }}>
+          The link action did not complete ({actionError}).
+        </div>
+      )}
+
+      {minted && shareUrl && (
+        <div
+          style={{
+            marginTop: 14,
+            border: "1px solid var(--cream-dark)",
+            borderRadius: 8,
+            padding: 14,
+            background: "var(--cream-light)",
+          }}
+        >
+          <div className="eyebrow" style={{ color: "var(--teal)", marginBottom: 6 }}>
+            New link, copy it now
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <code
+              className="font-mono"
+              style={{ fontSize: 12.5, color: "var(--navy)", wordBreak: "break-all", flex: "1 1 280px" }}
+            >
+              {shareUrl}
+            </code>
+            <button
+              className="btn-ghost"
+              onClick={onCopy}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              {copied ? (
+                <>
+                  <Check size={14} /> Copied
+                </>
+              ) : (
+                <>
+                  <Copy size={14} /> Copy
+                </>
+              )}
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>
+            This full link is shown once and cannot be retrieved later. Expires{" "}
+            {formatDate(minted.expiresAt)}.
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 16 }}>
+        {loadError && (
+          <div style={{ fontSize: 13, color: "var(--coral)" }}>
+            The existing links could not be loaded.
+          </div>
+        )}
+        {!loadError && shares && shares.length === 0 && (
+          <div style={{ fontSize: 13, color: "var(--slate-light)" }}>No links yet.</div>
+        )}
+        {!loadError && shares && shares.length > 0 && (
+          <div style={{ display: "grid", gap: 8 }}>
+            {shares.map((s) => (
+              <div
+                key={s.id}
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
+                  borderTop: "1px solid var(--cream-dark)",
+                  paddingTop: 8,
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <Pill color={s.status === "active" ? "teal" : s.status === "revoked" ? "coral" : "gray"}>
+                    {s.status}
+                  </Pill>
+                  <span style={{ fontSize: 13, color: "var(--slate)" }}>{s.label ?? "Untitled link"}</span>
+                  <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+                    {s.accessCount} {s.accessCount === 1 ? "view" : "views"}, expires {formatDate(s.expiresAt)}
+                  </span>
+                </div>
+                {s.status === "active" && (
+                  <button
+                    className="btn-ghost"
+                    onClick={() => onRevoke(s.id)}
+                    disabled={busy}
+                    style={{ fontSize: 12.5 }}
+                  >
+                    Revoke
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

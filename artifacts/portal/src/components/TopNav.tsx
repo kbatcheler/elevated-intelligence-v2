@@ -1,8 +1,9 @@
-import React from "react";
-import { ShieldCheck, LogOut, ChevronDown } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { ShieldCheck, LogOut, ChevronDown, Bell } from "lucide-react";
 import { useAuth } from "../lib/AuthContext";
 import { useTenant } from "../lib/TenantContext";
 import { Link, useRouter } from "../lib/router";
+import { fetchNotifications, onUnreadInvalidated } from "../lib/pushApi";
 import type { Perspective } from "../types";
 
 interface NavItem {
@@ -45,6 +46,12 @@ export function TopNav() {
 
   const items = [...PRIMARY];
   const isProvider = user?.role.startsWith("provider") ?? false;
+  // A portfolio seat (and any provider seat) gets the Portfolio board; a client
+  // seat never sees the link. The server still fences the data, so this is a
+  // navigation affordance, not the access control itself.
+  if (isProvider || user?.orgType === "portfolio") {
+    items.push({ to: "/portfolio", label: "Portfolio" });
+  }
   if (isProvider) {
     items.push({ to: "/connections", label: "Connections" });
     items.push({ to: "/break-glass", label: "Break-glass" });
@@ -99,6 +106,7 @@ export function TopNav() {
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <PerspectiveLens value={perspective} onChange={setPerspective} />
           <div style={{ textAlign: "right", display: "none" }} className="nav-user" />
+          <NavBell active={isActive(path, "/notifications")} />
           {user && (
             <div className={`pill ${user.role.startsWith("provider") ? "pill-navy" : "pill-amber"}`}>{user.role}</div>
           )}
@@ -189,6 +197,71 @@ function TenantSwitcher({
       </select>
       <ChevronDown size={14} color="var(--slate-light)" style={{ position: "absolute", right: 10, pointerEvents: "none" }} />
     </div>
+  );
+}
+
+// The notification bell. It links to the center and carries an honest unread
+// badge read from the server (pending, sent or failed events not yet opened;
+// suppressed events never count). The count refreshes on every navigation so
+// returning to any page picks up a freshly read or freshly fired state.
+function NavBell({ active }: { active: boolean }) {
+  const { path } = useRouter();
+  const [unread, setUnread] = useState<number | null>(null);
+
+  // A single loader shared by both triggers: a route change (returning to any
+  // page re-reads the count) and an unread-invalidation event (a mark-read or
+  // read-all on the center, which carries no route change). A mounted guard
+  // keeps a late response from setting state on an unmounted bell.
+  const load = useCallback(async (alive: () => boolean) => {
+    const out = await fetchNotifications();
+    if (!alive()) return;
+    if ("state" in out && out.state === "ready") setUnread(out.data.unreadCount);
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    const alive = () => live;
+    void load(alive);
+    const unsubscribe = onUnreadInvalidated(() => void load(alive));
+    return () => {
+      live = false;
+      unsubscribe();
+    };
+  }, [path, load]);
+
+  const badge = unread != null && unread > 0;
+  return (
+    <Link
+      to="/notifications"
+      title="Notifications"
+      style={{ position: "relative", display: "inline-flex", alignItems: "center", padding: "0 4px" }}
+    >
+      <Bell size={18} color={active ? "var(--navy)" : "var(--slate)"} />
+      {badge && (
+        <span
+          className="font-mono"
+          style={{
+            position: "absolute",
+            top: -6,
+            right: -6,
+            minWidth: 16,
+            height: 16,
+            padding: "0 4px",
+            borderRadius: 8,
+            background: "var(--coral)",
+            color: "var(--paper)",
+            fontSize: 10,
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            lineHeight: 1,
+          }}
+        >
+          {unread != null && unread > 99 ? "99+" : unread}
+        </span>
+      )}
+    </Link>
   );
 }
 

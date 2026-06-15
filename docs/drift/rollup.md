@@ -1,22 +1,34 @@
-# Drift rollup: Phases A through X
+# Drift rollup: Phases A through AC
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase X (benchmarking and the data network effect, a security milestone: a tenant
-turns one private figure into a cross-tenant benchmark WITHOUT exposing any other tenant's raw data or
-identity. The published benchmark tables hold no raw values and no tenant references at all, so a cohort
-is a population and a stat is a distribution, never a roster or a list of the numbers that produced it;
-the only tenant-scoped audit path in the feature is consent. The recompute reads each opted-in tenant's
-decrypted scalar signals through the machine grounding read, skipping and counting any unreadable
-tenant rather than failing the run, suppresses any cohort below the k-anonymity floor, and publishes a
-small-but-eligible cohort with disclosed bounded noise clamped to preserve the p25 <= p50 <= p75
-ordering. Consent is default off, the modelled peer benchmark is kept alongside the verified cohort and
-never conflated with it, and a below-k cohort shows an honest lock rather than a fabricated comparison.
-Typecheck and build are green, the full suite is green at 627 tests, and the long-dash sweep is zero on
-both sides over all 118 public text and jsonb columns. Phase X is a security milestone, so execution
-STOPS here for owner review; do not auto-advance into Phase Y.)
+Last updated after Phase AC (verification and the build-report append, the closing phase of Stage 4,
+Differentiation and Moat, run back to back with Y, Z, AA, and AB under owner authorization). Phase AC
+built no product feature and changed no product code; like Phase M closed Stage 2 and Phase V closed
+Stage 3, its only artifacts are the Stage 4 evidence matrix (`phase-AC.md`), the build-report append, and
+these drift updates. Each Stage 4 acceptance criterion is mapped to existing tested evidence with the
+proof type marked honestly. Test-proven by the integration suite against live Postgres or by
+deterministic unit tests: the portfolio ranked board and the access fence with a 403 outside the
+portfolio, the push ranking and low-impact suppression and the exactly-once Morning Brief drain and the
+access-revoked event failed in place, the challenge finding-version helpers and the route boundary, the
+benchmark k-anonymity and identity-free recompute, the share-token one-way hash and clamp and status,
+the public projection that strips every internal field in the type and at runtime, the redaction
+chokepoint that keeps a bearer share token out of the observability path, the k-anonymized case-study
+aggregation, and the deterministic voice measurement that never edits the prose. Honestly marked
+source-reviewed rather than test-proven (the one accepted LOW): the `runFindingChallenge` re-reason
+engine (it spends real model calls the suite does not run) and the share-token mint and resolve and the
+unauthenticated public diagnosis route (no dedicated route integration test); the helpers, route
+boundary, and portal clients around them ARE tested. The global gates were re-run fresh: typecheck and build green,
+the full suite green at 758 tests, and the long-dash sweep zero on both sides over all 138 public text
+and jsonb columns across 37 tables. Zero new npm dependencies. Two boundaries are honestly not live (the
+external push sinks and the durable secret and archive backends are available-not-connected unless
+configured; the realized-value and benchmark figures were produced by earlier real runs and recomputed,
+not by a fresh paid seed). The architect `evaluate_task` returned PASS. Phase AC closes Stage 4; per the
+owner-authorized Y-Z-AA-AB-AC run the build now PAUSES at the Stage 4/5 boundary for owner review before
+Phase AD and does not auto-advance, and the next protocol MILESTONE hard stop is Phase AI at the end of
+Stage 5.)
 
 An owner-requested post-X audit and remediation pass (2026-06-15) followed the milestone hard stop; it
 minted no phase and advanced no gate. It actioned three in-scope fixes in the benchmark cohort read path
@@ -52,6 +64,11 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 | V | Verification and the Build-Report Append (closes Stage 3) | Pass | no (gated, Stage 3; autonomous U-V-W run) |
 | W | Outcome Loop and Value Realized (opens Stage 4) | Pass | no (gated, Stage 4; autonomous U-V-W run; hard stop after W before milestone X) |
 | X | Benchmarking and the Data Network Effect | Pass | yes (security milestone; hard stop for owner review) |
+| Y | Portfolio Intelligence View | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
+| Z | Proactive Push Intelligence | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
+| AA | Interactive Challenge | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
+| AB | Sellability Pack | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
+| AC | Verification and Build Report (closes Stage 4) | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -102,6 +119,34 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   and DELETE on the table at the database-role level is a deployment-time hardening
   left to the operator. Integrity control today is the hash chain plus the serialized
   append.
+
+- No dedicated portal unit test for the portfolio view (Y). `PortfolioPage` and
+  `portfolioApi.ts` are covered by the server portfolio integration tests (the ranked board,
+  the cross-portfolio patterns, and the provider/portfolio/403/401 scope cases) and are
+  compile-verified, but there is no portal-side unit test for the forbidden and ready rendering
+  or the drill-down. Accepted as logged drift (the one non-blocking architect item); a future
+  lightweight portal test can close it.
+- Challenge history is treated as non-critical supplementary data on the layer and Ask Different Day
+  pages (AA). If the challenge-history fetch fails, the page renders the diagnosis WITHOUT the challenge
+  overlay rather than blanking the whole page on a supplementary-data outage; the main diagnosis is
+  primary and the challenge overlay is additive. A deliberate honest-degradation choice, logged as
+  accepted drift; a future refinement could surface a distinct "challenge history unavailable" affordance
+  on the control rather than an empty overlay.
+- Case studies recomputed per public diagnosis hit, not cached (AB). `loadCaseStudyForTenant` rebuilds
+  the full k-anonymized case-study set on each cold-link request rather than reading a materialized
+  cache. It is correct and never stale, but at scale it is a latency consideration on the public
+  fast-link path; the architect noted it as non-blocking. A future refinement could cache the published
+  studies with an honest freshness stamp. Accepted as logged drift until latency measurements show it
+  violates the fast-link experience.
+- Stage 4 write and IO paths proven by source inspection, not by an automated test (surfaced in AC).
+  The challenge re-reason engine `runFindingChallenge` spends real Confounder and Synthesist model
+  calls the suite deliberately does not run, and the share-token mint, list, and resolve and the
+  unauthenticated `GET /api/public/diagnosis/:token` route have no `routes/public` or
+  `routes/sellability` integration test. The pure helpers (the finding-version hashing, the token hash
+  and clamp and status, the public projection, the route redaction), the challenge route boundary and
+  rejection cases, and the portal clients ARE tested. The architect marked the gap non-blocking; a
+  future phase can close it with an injected-model challenge test and a public-route integration test.
+  Accepted as logged drift.
 
 ## Live but runtime-only or cosmetic
 
@@ -164,6 +209,36 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 
 ## Logged spec deviations (decisions)
 
+- Share token stored as a one-way hash only, plaintext returned once (AB). The opaque token is 32
+  bytes of CSPRNG entropy base64url; only its sha256 hash is persisted and the plaintext is returned
+  to the minter exactly once, so a database read can never reconstruct a working link and a lost link
+  is re-minted, never recovered. The same one-way-reference posture the SecretStore and KMS seams take.
+- Public projection enforced in the type and at runtime (AB). `PublicDiagnosisLayer` is an `Omit` of
+  the internal owner persona, diagnostic question, and layer feed graph, and `toPublicDiagnosisLayer`
+  strips them at runtime, so the unauthenticated surface cannot leak an internal field by accident at
+  either layer.
+- Case studies reuse the Phase X privacy machinery wholesale (AB). A case study gates on the same
+  `getBenchmarkMinCohort` k-anonymity floor and blurs with the same `applyNoise` bounded noise as the
+  benchmarks, and uses the same `computeOutcomeSummary` as the outcome counter, so social proof can
+  never disagree with the counter and a small cohort can never be deanonymized.
+- Single redaction chokepoint for secret-bearing URL path segments (AB). `redactRoute` collapses a
+  bearer-carrying path (today `/api/public/diagnosis/<token>`) to its route template before the error
+  handler attaches the path to the observability context, so a token in a URL can never reach an
+  external sink. Any future secret-in-URL route must add its pattern here, not invent a second seam.
+- Push rules are per-user, not per-org (Z). A `push_rules` row belongs to exactly one user
+  (`ownerUserId` NOT NULL), so the notification center, read-state, mute, and threshold tuning
+  are all per-seat and one user muting a kind never silences another user's signal. The cost is
+  a default rule per (user, tenant, kind); the benefit is an honest per-seat surface.
+- One channel per push rule, snapshotted onto the event (Z). A rule has a single `channel`,
+  copied to the event at creation so a later channel change never rewrites delivered history.
+  Multi-channel fan-out per rule is a later additive change, not built this phase.
+- A single global Morning Brief cadence, not per-rule schedules (Z). The evaluation and drain
+  run on one platform cadence (`PUSH_MORNING_BRIEF_INTERVAL_MS`); the evaluation exposes
+  optional `restrictToUserIds` / `restrictToTenantIds` seams so a test or a future per-user
+  trigger can confine a pass hermetically without per-rule scheduling.
+- `failed` reused for access-revoked push events, no separate `revoked` status (Z). A pending
+  event whose (owner, tenant) binding was revoked is failed in place (visible in the center,
+  never delivered), keeping the lifecycle to four honest states and avoiding an enum migration.
 - scrypt instead of bcrypt or argon2 (D). The spec authorised bcrypt or argon2, but
   both ship native addons that are fragile under the Nix toolchain. scrypt is a
   strong, memory-hard KDF in the standard library, so it keeps the
@@ -399,6 +474,68 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   for authorization).
 
 ## No faked output, any phase
+
+Phase AC added no faked output and no faked telemetry: it is verification and documentation only and built
+nothing and changed no product code, like Phase M closed Stage 2 and Phase V closed Stage 3. It cited the
+existing in-phase evidence rather than re-running a destructive or paid check, marked each proof type
+honestly (integration against live Postgres, a deterministic unit test, an available-not-connected
+adapter, or source inspection where a write path spends real model calls or lacks a route integration
+test), and re-ran the global gates fresh and reported their real current totals (758 tests, the
+two-sided long-dash sweep zero over 138 public text and jsonb columns across 37 tables). No total was
+rounded and no check was reported green without running it. Phase AB below holds, and the earlier phases
+under it.
+
+Phase AB added no faked output and no faked telemetry. The selling surface is built to expose less, never to
+invent more. A share token's plaintext is shown exactly once and never persisted (only its sha256 hash is
+stored), so a database read cannot reconstruct a working link, and an invalid, expired, or revoked token
+returns a uniform 404 that reveals nothing. The public diagnosis projection strips the internal owner
+persona, the diagnostic question, and the layer feed graph in the type AND at runtime, and exposes no raw
+connector data and no provenance; a case study is published only above the k-anonymity floor, blurred and
+flagged when the cohort is small, and carries no tenant id, name, url, or date, computed by the same
+`computeOutcomeSummary` the outcome counter uses so it can never disagree with it. The access telemetry
+(view count, last-accessed) is recorded only on a genuine resolve. The editorial voice evaluator MEASURES
+and reports, it never rewrites a character, so a below-bar narrative is shown at its real band rather than
+silently corrected; rewriting prose to pass would be fabricating output, and it is deliberately not done.
+No test was made to pass by weakening an assertion; the 758-test suite and the two-sided long-dash sweep
+are reported at their real current totals. Phase AA below holds, and the earlier phases under it.
+
+Phase AA added no faked output and no faked telemetry. Every challenge verdict is computed by the
+Confounder and Synthesist seats from the real finding and the user's objection, or it is an honest
+failure: a model call that returns nothing usable, or a `revised` verdict with no new confidence, is
+recorded as a `failed` row with the real billed telemetry and NO outcome and NO provenance entry, never a
+fabricated uphold or an invented confidence number. The recorded telemetry is the real billed usage of
+each seat. A revise re-bases the challenge row's basis to `modelled_user_informed` and never rewrites the
+stored finding, so the user can object but can never delete or silently overwrite a finding; a completed
+challenge appends exactly one hash-chained provenance entry over source references with the user text
+hashed in, so the audit chain still verifies. The history's `isCurrentVersion` flag is computed by
+comparing the stored finding hash to the live finding, so a challenge against a since-changed finding is
+shown as addressing a prior version rather than misrepresented as current. No test was made to pass by
+weakening an assertion; the 716-test suite and the two-sided long-dash sweep are reported at their real
+current totals. Phase Z below holds, and the earlier phases under it.
+
+Phase Z added no faked output and no faked telemetry. Every push event figure is computed from persisted
+state or it is null: `impactUsd` comes from a parsed dollar prediction or a real measured shortfall,
+`confidence` from the action, and `rankScore` is `impactUsd * confidence / 100`, zero when unquantified, so
+an event with no dollar figure ranks last and is suppressed, never promoted, and a null impact renders as an
+empty bracket in the digest rather than a fabricated `$0`. A breach is recorded once per state (idempotent
+by `(ruleId, dedupeKey)`), so re-evaluation never invents a duplicate; a mute records suppressed events
+rather than dropping them, so no high-signal record is lost. The access fence holds on both the mint and the
+deliver path, so a push event is never minted for, or delivered about, a tenant the recipient can no longer
+reach. The available-not-connected slack and email sinks fail loudly when unconfigured rather than
+pretending to send. No test was made to pass by weakening an assertion; the 685-test suite and the two-sided
+long-dash sweep are reported at their real current totals. Phase Y below holds, and the earlier phases under
+it.
+
+Phase Y added no faked output and no faked telemetry. Every portfolio figure is computed from persisted
+state or it is not shown: a company with no currency-anchored prediction or no measurement carries null
+dollar figures, which `formatUsd` renders as a dash, never a fabricated `$0` or an invented "value at
+risk", and the totals expose how many companies actually have layer content and outcomes behind the
+numbers. A cross-portfolio gap pattern appears only for a gap shared by at least two tenants, so a gap
+unique to one company is never promoted into a fabricated trend. The scope is the session binding, so the
+board never shows a tenant the caller is not entitled to, and an empty binding set is an honest empty
+board rather than a borrowed or fabricated one. No test was made to pass by weakening an assertion. The
+646-test suite and the two-sided long-dash sweep are reported at their real current totals. Phase X below
+holds, and the earlier phases under it.
 
 Phase X added no faked output and no faked telemetry. A benchmark figure is computed from persisted,
 de-identified cohort math or it is not shown: a cohort below the k-anonymity floor publishes no stat and

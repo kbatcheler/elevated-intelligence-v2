@@ -805,3 +805,82 @@ describe("GET /api/architecture", () => {
     expect(byName.get("challenge")?.grounding).toBe(true);
   });
 });
+
+// Phase AA: the Interactive Challenge route boundary. Every assertion here is a
+// path that is REJECTED before the engine would spend a model call (zod, the
+// read-only-seat gate, or the tenant fence) plus the read side, so the suite
+// never makes a live model call. The uphold-or-revise re-reasoning itself is
+// covered by the pure-helper unit tests, not exercised against live models here.
+describe("Phase AA interactive challenge route boundary", () => {
+  const validChallenge = { findingRef: "causes[0]", challengeText: "This ignores the seasonality of the segment." };
+
+  it("requires authentication to read the challenge history", async () => {
+    const r = await api(`/api/tenants/${ids.tenantA}/challenges`);
+    expect(r.status).toBe(401);
+  });
+
+  it("returns an honest empty history for an in-scope seat with nothing challenged", async () => {
+    const session = await loginSession("member");
+    const r = await api(`/api/tenants/${ids.tenantA}/challenges`, { session });
+    expect(r.status).toBe(200);
+    expect(r.json).toEqual({ challenges: [] });
+  });
+
+  it("fences the history read to a tenant the seat cannot see", async () => {
+    const session = await loginSession("client-viewer");
+    const r = await api(`/api/tenants/${ids.tenantB}/challenges`, { session });
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects a malformed finding ref with 400 before any model call", async () => {
+    const session = await loginSession("member");
+    const r = await api(`/api/tenants/${ids.tenantA}/layers/business-performance/challenges`, {
+      method: "POST",
+      body: { findingRef: "gaps[0]", challengeText: "not a challengeable kind" },
+      session,
+    });
+    expect(r.status).toBe(400);
+    expect(r.json).toEqual({ error: "invalid_input" });
+  });
+
+  it("rejects an empty challenge text with 400", async () => {
+    const session = await loginSession("member");
+    const r = await api(`/api/tenants/${ids.tenantA}/layers/business-performance/challenges`, {
+      method: "POST",
+      body: { findingRef: "causes[0]", challengeText: "" },
+      session,
+    });
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects an over-long challenge text with 400", async () => {
+    const session = await loginSession("member");
+    const r = await api(`/api/tenants/${ids.tenantA}/layers/business-performance/challenges`, {
+      method: "POST",
+      body: { findingRef: "causes[0]", challengeText: "x".repeat(2001) },
+      session,
+    });
+    expect(r.status).toBe(400);
+  });
+
+  it("forbids a read-only client-viewer seat from spending a challenge", async () => {
+    const session = await loginSession("client-viewer");
+    const r = await api(`/api/tenants/${ids.tenantA}/layers/business-performance/challenges`, {
+      method: "POST",
+      body: validChallenge,
+      session,
+    });
+    expect(r.status).toBe(403);
+    expect(r.json).toEqual({ error: "forbidden" });
+  });
+
+  it("fences a challenge POST to a tenant the seat cannot see", async () => {
+    const session = await loginSession("client-viewer");
+    const r = await api(`/api/tenants/${ids.tenantB}/layers/business-performance/challenges`, {
+      method: "POST",
+      body: validChallenge,
+      session,
+    });
+    expect(r.status).toBe(403);
+  });
+});

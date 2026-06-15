@@ -1,6 +1,12 @@
-import React, { useEffect, useState } from "react";
-import type { LayerRegistryEntry, PipelineRun, TenantLayerDetail } from "../../types";
+import React, { useCallback, useEffect, useState } from "react";
+import type {
+  FindingChallenge,
+  LayerRegistryEntry,
+  PipelineRun,
+  TenantLayerDetail,
+} from "../../types";
 import { fetchLayers, fetchRuns, fetchTenantLayer } from "../../lib/tenantApi";
+import { fetchChallenges, groupChallengesByRef } from "../../lib/challengeApi";
 import { useAuth } from "../../lib/AuthContext";
 import { useTenant } from "../../lib/TenantContext";
 import {
@@ -13,12 +19,18 @@ import {
   SkeletonLines,
 } from "../primitives";
 import { heroFor } from "../heroes/registry";
-import { LayerSections } from "../layer/sections";
+import { LayerSections, type ChallengeContext } from "../layer/sections";
 import { BenchmarkConsent } from "../layer/BenchmarkConsent";
 
 type State =
   | { kind: "loading" }
-  | { kind: "ready"; detail: TenantLayerDetail; run: PipelineRun | null; entry: LayerRegistryEntry | null }
+  | {
+      kind: "ready";
+      detail: TenantLayerDetail;
+      run: PipelineRun | null;
+      entry: LayerRegistryEntry | null;
+      challenges: FindingChallenge[];
+    }
   | { kind: "empty" }
   | { kind: "no-tenant" }
   | { kind: "error" };
@@ -26,9 +38,10 @@ type State =
 // A single layer for the current tenant. The hero is dispatched by archetype
 // (registry, with a generic fallback); everything below it is the shared frame
 // in LayerSections. Every figure shown is a persisted field, never computed
-// client-side.
+// client-side. Each finding card carries the Interactive Challenge (Phase AA):
+// a non-viewer seat can object to a finding and the engine re-reasons it.
 export function LayerPage({ layerKey }: { layerKey: string }) {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { currentId, current, status: tenantStatus } = useTenant();
   const [state, setState] = useState<State>({ kind: "loading" });
 
@@ -42,27 +55,43 @@ export function LayerPage({ layerKey }: { layerKey: string }) {
     }
     let alive = true;
     setState({ kind: "loading" });
-    Promise.all([fetchTenantLayer(currentId, layerKey), fetchRuns(currentId), fetchLayers()]).then(
-      ([detailOut, runsOut, layersOut]) => {
-        if (!alive) return;
-        if ("unauthorized" in detailOut) return void logout();
-        if (detailOut.state === "empty") return setState({ kind: "empty" });
-        if (detailOut.state === "error") return setState({ kind: "error" });
-        const run =
-          "unauthorized" in runsOut || runsOut.state === "error"
-            ? null
-            : runsOut.items.find((r) => r.layerKey === layerKey) ?? null;
-        const entry =
-          "unauthorized" in layersOut || layersOut.state === "error"
-            ? null
-            : layersOut.items.find((l) => l.key === layerKey) ?? null;
-        setState({ kind: "ready", detail: detailOut.data, run, entry });
-      },
-    );
+    Promise.all([
+      fetchTenantLayer(currentId, layerKey),
+      fetchRuns(currentId),
+      fetchLayers(),
+      fetchChallenges(currentId),
+    ]).then(([detailOut, runsOut, layersOut, challengesOut]) => {
+      if (!alive) return;
+      if ("unauthorized" in detailOut) return void logout();
+      if (detailOut.state === "empty") return setState({ kind: "empty" });
+      if (detailOut.state === "error") return setState({ kind: "error" });
+      const run =
+        "unauthorized" in runsOut || runsOut.state === "error"
+          ? null
+          : runsOut.items.find((r) => r.layerKey === layerKey) ?? null;
+      const entry =
+        "unauthorized" in layersOut || layersOut.state === "error"
+          ? null
+          : layersOut.items.find((l) => l.key === layerKey) ?? null;
+      // The challenge overlay is non-critical: a transient failure shows no
+      // history rather than blocking the layer. The list is filtered to this
+      // layer's challenges only.
+      const challenges =
+        "unauthorized" in challengesOut || challengesOut.state === "error"
+          ? []
+          : challengesOut.challenges.filter((c) => c.layerKey === layerKey);
+      setState({ kind: "ready", detail: detailOut.data, run, entry, challenges });
+    });
     return () => {
       alive = false;
     };
   }, [currentId, layerKey, tenantStatus, logout]);
+
+  // A new challenge is prepended so it appears immediately on its finding card,
+  // newest first, matching the server ordering.
+  const handleChallenged = useCallback((challenge: FindingChallenge) => {
+    setState((s) => (s.kind === "ready" ? { ...s, challenges: [challenge, ...s.challenges] } : s));
+  }, []);
 
   const crumbs = [
     { label: "Layers", to: "/layers" },
@@ -99,7 +128,14 @@ export function LayerPage({ layerKey }: { layerKey: string }) {
             }
           />
         )}
-        {state.kind === "ready" && <LayerBody {...state} />}
+        {state.kind === "ready" && (
+          <LayerBody
+            {...state}
+            canChallenge={user?.role !== "client-viewer"}
+            onChallenged={handleChallenged}
+            onUnauthorized={logout}
+          />
+        )}
       </div>
     </PageWidth>
   );
@@ -109,16 +145,33 @@ function LayerBody({
   detail,
   run,
   entry,
+  challenges,
+  canChallenge,
+  onChallenged,
+  onUnauthorized,
 }: {
   detail: TenantLayerDetail;
   run: PipelineRun | null;
   entry: LayerRegistryEntry | null;
+  challenges: FindingChallenge[];
+  canChallenge: boolean;
+  onChallenged: (challenge: FindingChallenge) => void;
+  onUnauthorized: () => void;
 }) {
   const Hero = heroFor(entry?.archetype);
   // The benchmark-variant layer is the only surface where participation in the
   // verified cohort is meaningful, so the default-off consent control lives here,
   // directly beneath its hero. The tenant id comes from the persisted detail.
   const isBenchmarkLayer = entry?.archetype === "Performance scorecard, benchmark variant";
+
+  const challenge: ChallengeContext = {
+    tenantId: detail.tenantId,
+    layerKey: detail.layerKey,
+    byRef: groupChallengesByRef(challenges),
+    canChallenge,
+    onChallenged,
+    onUnauthorized,
+  };
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
@@ -143,7 +196,7 @@ function LayerBody({
       )}
       <Hero entry={entry} detail={detail} />
       {isBenchmarkLayer && <BenchmarkConsent tenantId={detail.tenantId} />}
-      <LayerSections detail={detail} feeds={entry?.feeds ?? []} />
+      <LayerSections detail={detail} feeds={entry?.feeds ?? []} challenge={challenge} />
       <ReasoningStrip
         run={run}
         confounders={detail.confounders}

@@ -1,6 +1,14 @@
 import { eq } from "drizzle-orm";
 import type { NextFunction, Request, Response } from "express";
-import { db, orgTenantsTable, usersTable, type User, type UserRole } from "@workspace/db";
+import {
+  db,
+  orgsTable,
+  orgTenantsTable,
+  usersTable,
+  type OrgType,
+  type User,
+  type UserRole,
+} from "@workspace/db";
 import { canAccessTenant, isOwner, isProvider } from "../lib/auth/access";
 import { SESSION_COOKIE, verifySession } from "../lib/auth/session";
 import { requireSecret } from "../lib/secrets/secretStore";
@@ -14,6 +22,10 @@ export interface AuthedUser {
   displayName: string;
   role: UserRole;
   orgId: string | null;
+  // The type of the user's org, resolved fresh alongside the user. Null when the
+  // seat has no org. The portfolio surface reads this to decide who is offered a
+  // portfolio board; the server still fences the data by binding, never by this.
+  orgType: OrgType | null;
   status: User["status"];
 }
 
@@ -51,15 +63,22 @@ export async function loadSessionUser(req: Request): Promise<AuthedUser | null> 
   const secret = await requireSecret("SESSION_SECRET");
   const payload = verifySession(token, secret);
   if (!payload) return null;
-  const rows = await db.select().from(usersTable).where(eq(usersTable.id, payload.userId)).limit(1);
-  const user = rows[0];
-  if (!user || user.status === "disabled") return null;
+  const rows = await db
+    .select({ user: usersTable, orgType: orgsTable.type })
+    .from(usersTable)
+    .leftJoin(orgsTable, eq(orgsTable.id, usersTable.orgId))
+    .where(eq(usersTable.id, payload.userId))
+    .limit(1);
+  const row = rows[0];
+  if (!row || row.user.status === "disabled") return null;
+  const user = row.user;
   return {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
     role: user.role,
     orgId: user.orgId,
+    orgType: row.orgType ?? null,
     status: user.status,
   };
 }

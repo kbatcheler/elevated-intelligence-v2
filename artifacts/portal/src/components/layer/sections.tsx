@@ -1,6 +1,7 @@
 import React from "react";
 import type {
   Confounder,
+  FindingChallenge,
   GapKind,
   LayerAction,
   LayerCause,
@@ -20,6 +21,45 @@ import {
   Tag,
   VerdictPill,
 } from "../primitives";
+import { ChallengeControl } from "./ChallengeControl";
+
+// The wiring a finding card needs to offer the Interactive Challenge (Phase AA):
+// the tenant and layer to address, the prior challenges grouped by finding ref,
+// whether this seat may raise one, and the callbacks. Absent (undefined) on any
+// surface that does not enable challenging, so the cards render unchanged there.
+export interface ChallengeContext {
+  tenantId: string;
+  layerKey: string;
+  byRef: Map<string, FindingChallenge[]>;
+  canChallenge: boolean;
+  onChallenged: (challenge: FindingChallenge) => void;
+  onUnauthorized: () => void;
+}
+
+export function FindingChallengeSlot({
+  ctx,
+  findingRef,
+}: {
+  ctx: ChallengeContext | undefined;
+  findingRef: string;
+}) {
+  if (!ctx) return null;
+  const prior = ctx.byRef.get(findingRef) ?? [];
+  // Render nothing when this seat cannot challenge and there is no history to
+  // show: an empty, honest absence rather than a dead affordance.
+  if (!ctx.canChallenge && prior.length === 0) return null;
+  return (
+    <ChallengeControl
+      tenantId={ctx.tenantId}
+      layerKey={ctx.layerKey}
+      findingRef={findingRef}
+      prior={prior}
+      canChallenge={ctx.canChallenge}
+      onChallenged={ctx.onChallenged}
+      onUnauthorized={ctx.onUnauthorized}
+    />
+  );
+}
 
 // The shared layer body: everything below the archetype hero. Each section
 // renders only when its real content is present, so an under-generated layer
@@ -144,7 +184,7 @@ function Metrics({ detail }: { detail: TenantLayerDetail }) {
 }
 
 // ── Causes ──────────────────────────────────────────────────────────────────
-function Causes({ causes }: { causes: LayerCause[] }) {
+function Causes({ causes, challenge }: { causes: LayerCause[]; challenge?: ChallengeContext }) {
   if (!causes || causes.length === 0) return null;
   return (
     <section>
@@ -158,6 +198,7 @@ function Causes({ causes }: { causes: LayerCause[] }) {
             </div>
             {c.impact && <Field label="Impact" value={c.impact} />}
             <Body>{c.detail}</Body>
+            <FindingChallengeSlot ctx={challenge} findingRef={`causes[${i}]`} />
           </Card>
         ))}
       </div>
@@ -199,7 +240,7 @@ function Confounders({ confounders }: { confounders: Confounder[] | null }) {
 }
 
 // ── Challenger counters ─────────────────────────────────────────────────────
-function Challengers({ hypotheses }: { hypotheses: LayerHypothesis[] }) {
+function Challengers({ hypotheses, challenge }: { hypotheses: LayerHypothesis[]; challenge?: ChallengeContext }) {
   if (!hypotheses || hypotheses.length === 0) return null;
   return (
     <section>
@@ -213,6 +254,7 @@ function Challengers({ hypotheses }: { hypotheses: LayerHypothesis[] }) {
             </div>
             {h.supportingSignals && <Field label="Supporting" value={h.supportingSignals} />}
             {h.alternativeExplanation && <Field label="Alternative" value={h.alternativeExplanation} />}
+            <FindingChallengeSlot ctx={challenge} findingRef={`hypotheses[${i}]`} />
           </Card>
         ))}
       </div>
@@ -221,7 +263,7 @@ function Challengers({ hypotheses }: { hypotheses: LayerHypothesis[] }) {
 }
 
 // ── Actions with predicted recovery ─────────────────────────────────────────
-function Actions({ actions }: { actions: LayerAction[] }) {
+function Actions({ actions, challenge }: { actions: LayerAction[]; challenge?: ChallengeContext }) {
   if (!actions || actions.length === 0) return null;
   return (
     <section>
@@ -239,6 +281,7 @@ function Actions({ actions }: { actions: LayerAction[] }) {
               {a.timing && <Field label="Timing" value={a.timing} />}
               {a.owner && <Field label="Owner" value={a.owner} />}
             </div>
+            <FindingChallengeSlot ctx={challenge} findingRef={`actions[${i}]`} />
           </Card>
         ))}
       </div>
@@ -382,19 +425,21 @@ function Feeds({ feeds }: { feeds: string[] }) {
 export function LayerSections({
   detail,
   feeds,
+  challenge,
 }: {
   detail: TenantLayerDetail;
   feeds: string[];
+  challenge?: ChallengeContext;
 }) {
   const supplements = detail.supplementBlocks?.blocks ?? [];
   return (
     <>
       <AnalystTake detail={detail} />
       <Metrics detail={detail} />
-      <Causes causes={detail.content.causes} />
+      <Causes causes={detail.content.causes} challenge={challenge} />
       <Confounders confounders={detail.confounders} />
-      <Challengers hypotheses={detail.content.hypotheses} />
-      <Actions actions={detail.content.actions} />
+      <Challengers hypotheses={detail.content.hypotheses} challenge={challenge} />
+      <Actions actions={detail.content.actions} challenge={challenge} />
       <Gaps gaps={detail.content.gaps} />
       <Benchmark peer={detail.peerBenchmark} />
       <Supplements blocks={supplements} />

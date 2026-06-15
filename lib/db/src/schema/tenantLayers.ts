@@ -24,6 +24,13 @@ export const tenantLayersTable = pgTable(
     confounders: jsonb("confounders").$type<unknown[] | null>(),
     verifiedClaims: jsonb("verified_claims").$type<Record<string, unknown> | null>(),
     modelledClaims: jsonb("modelled_claims").$type<Record<string, unknown> | null>(),
+    // The deterministic editorial voice measurement of this layer's assembled
+    // narrative (Phase AB). Kept OUT of the model-generated content blob on
+    // purpose: content is model output, voiceQuality is our own measurement
+    // ABOUT that output, so the honesty boundary between the two stays clean.
+    // Nullable: a layer built before the voice check ran simply has no score yet
+    // (honest absence, never a fabricated pass).
+    voiceQuality: jsonb("voice_quality").$type<Record<string, unknown> | null>(),
     // True when this layer was built with the reduced express chain (the
     // confound and challenge sub-stages skipped). A full-mode refresh rebuilds a
     // reduced layer; an express refresh never downgrades an existing full build.

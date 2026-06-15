@@ -56,3 +56,12 @@ export * from "./backupEvents";
 // percentile stats. The cohort and stat tables carry NO tenant reference, so no
 // join can reverse a published stat to a contributing tenant.
 export * from "./benchmarks";
+// Proactive Push Intelligence (Phase Z): per-user rules and the recorded,
+// ranked, idempotent business-intelligence notifications they produce. Distinct
+// seam from the operational alert_events of Phase O/P.
+export * from "./pushIntelligence";
+// Interactive Challenge (Phase AA): an append-only overlay recording each
+// challenge of a specific finding and its Confounder + Synthesist re-reasoning
+// (uphold or revise). Never mutates or deletes the challenged finding.
+export * from "./findingChallenges";
+export * from "./diagnosisShareTokens";

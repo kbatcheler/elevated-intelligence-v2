@@ -6,6 +6,7 @@ import {
   invitePinsTable,
   orgsTable,
   usersTable,
+  type OrgType,
   type User,
   type UserRole,
 } from "@workspace/db";
@@ -67,6 +68,20 @@ function userSummary(user: Pick<User, "id" | "email" | "displayName" | "role" | 
     role: user.role,
     orgId: user.orgId,
   };
+}
+
+// Resolve a user's org type for the auth payload, so the portal can offer the
+// portfolio surface to a portfolio seat without a second round trip. The server
+// still fences the portfolio data by binding, never by this hint; it is for
+// navigation only. Null when the seat has no org.
+async function orgTypeFor(orgId: string | null): Promise<OrgType | null> {
+  if (!orgId) return null;
+  const rows = await db
+    .select({ type: orgsTable.type })
+    .from(orgsTable)
+    .where(eq(orgsTable.id, orgId))
+    .limit(1);
+  return rows[0]?.type ?? null;
 }
 
 async function setSessionCookie(res: Response, userId: string, role: UserRole): Promise<void> {
@@ -152,7 +167,7 @@ authRouter.post("/register", registerLimiter, async (req, res, next) => {
 
     await setSessionCookie(res, created.id, created.role);
     logger.info({ userId: created.id, role: created.role }, "user registered");
-    res.status(201).json({ user: userSummary(created) });
+    res.status(201).json({ user: { ...userSummary(created), orgType: await orgTypeFor(created.orgId) } });
   } catch (err) {
     if (err instanceof PinUnavailableError) {
       res.status(403).json({ error: "invalid_or_used_pin" });
@@ -192,7 +207,7 @@ authRouter.post("/login", loginLimiter, async (req, res, next) => {
     }
     await db.update(usersTable).set({ lastLoginAt: new Date() }).where(eq(usersTable.id, user.id));
     await setSessionCookie(res, user.id, user.role);
-    res.json({ user: userSummary(user) });
+    res.json({ user: { ...userSummary(user), orgType: await orgTypeFor(user.orgId) } });
   } catch (err) {
     next(err);
   }
@@ -218,6 +233,7 @@ authRouter.get("/status", async (req, res, next) => {
         displayName: user.displayName,
         role: user.role,
         orgId: user.orgId,
+        orgType: user.orgType,
       },
     });
   } catch (err) {

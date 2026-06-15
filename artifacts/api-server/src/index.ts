@@ -5,6 +5,7 @@ import { startBackupArchive } from "./lib/backups/backupLoop";
 import { startBenchmarkRecompute } from "./lib/benchmarks/benchmarkLoop";
 import { startConnectorMaintenance } from "./lib/connectors/oauthRefresh";
 import { logger } from "./lib/logger";
+import { startPushMorningBrief } from "./lib/push/pushBrief";
 import { startRetentionPurge } from "./lib/retention/retention";
 
 const port = Number(process.env.PORT ?? "3001");
@@ -54,6 +55,12 @@ async function start(): Promise<void> {
   // math, never writing a stat below the k-anonymity floor. Started only here so
   // importing the app in tests never starts a timer.
   startBenchmarkRecompute(logger);
+
+  // Start the in-process Morning Brief loop (Phase Z). Each tick evaluates the
+  // push rules into recorded, ranked, idempotent events and drains the pending
+  // ones to their channel as one digest per recipient. Started only here so
+  // importing the app in tests never starts a timer.
+  startPushMorningBrief(logger);
 }
 
 void start();

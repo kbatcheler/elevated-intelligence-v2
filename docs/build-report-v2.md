@@ -1621,3 +1621,388 @@ configuration; logged as drift, not built, because the recompute always re-appli
 and a stricter floor only ever makes the next recompute more conservative). The drift report is
 `phase-X.md`; the drift index and the rollup are updated to "A through X". Phase X is a security
 milestone, so this is a HARD STOP for owner review; execution does not auto-advance into Phase Y.
+
+## Phase Y: portfolio intelligence view
+
+Phase Y opens the owner-authorized autonomous Stage 4 run (Y, Z, AA, AB, AC, which pauses at the
+Stage 4/5 boundary before Phase AD). The "portfolio" org type already exists from Phase D, so
+Phase Y builds ONLY the experience over it: a ranked multi-company board, cross-portfolio gap
+patterns, and a drill-down into any bound tenant's full diagnosis. It is not a milestone.
+
+### What was built
+
+One read assembles the board (`GET /api/portfolio/summary`, mounted under the shared
+`requireAuth` gate). Scope is resolved server-side from the session alone, never from the
+client: a provider seat sees every tenant as a portfolio; a seat whose `orgType` is `portfolio`
+with an `orgId` sees only the tenants its org is bound to through `org_tenants`; every other seat
+(a client org, or a user with no org) is refused with `403 portfolio_only`, and a missing
+session is `401`. A portfolio caller can never reach a tenant outside its bindings because it
+never names a tenant; the binding set is the query. An empty binding set is an honest empty
+board, not an error. The read fans out over only the in-scope tenant ids for the tenant rows,
+the layer catalogue, the persisted `tenant_layers` content, the `committed_actions`, and the
+`outcome_measurements` joined back to their actions, with every jsonb projection defensive (a
+malformed value becomes null, never a fabricated stand-in).
+
+The pure `portfolioMath` module ranks each bound tenant by realized-and-at-risk value and
+open-gap severity so the worst and best surface to the top, counts open gaps by severity, rolls
+the per-tenant outcome summary (via the shared `computeOutcomeSummary`) into portfolio totals
+with NULLABLE dollar figures, and derives cross-portfolio gap patterns only from persisted
+tenant-layer gaps and only for a gap shared by at least two tenants ("N of M companies have
+..."). The auth payload now carries `orgType` (the middleware left-joins `orgs`; the auth routes
+return it via an `orgTypeFor()` helper) purely so the portal can offer the nav; the server still
+fences the data by the session binding, never by this field. The portal adds a framework-free
+`portfolioApi.ts` (a discriminated union mapping 401 and 403 to their own states), a
+`PortfolioPage` state machine (ranked board, patterns, drill-down via `setCurrentId` then
+navigate, distinct loading/empty/ready/forbidden/error states), the mirrored portfolio types,
+the `/portfolio` route with no client-side role gate (the server fences), and a TopNav link
+shown only to a provider or portfolio seat.
+
+### The honesty boundaries
+
+Every portfolio figure is computed from persisted state or it is not shown. A company with no
+currency-anchored prediction or no measurement carries null dollar figures, which `formatUsd`
+renders as a dash, never a fabricated `$0` or an invented "value at risk". The totals expose how
+many companies actually have layer content and outcomes behind the numbers. A gap unique to one
+company is never promoted to a cross-portfolio pattern. The `/portfolio` route has no client-side
+role gate on purpose: access is the server's (`403 portfolio_only` rendered as an honest
+forbidden state), not the nav's.
+
+### Verification
+
+Typecheck and build green (exit 0; portal 1746 modules, api-server bundled); full suite green at
+646 tests (api-server 334 across 39 files including the new `portfolioMath` unit tests and the
+portfolio integration tests, portal 177 across 14 files, cortex 84, connectors 29, edge-agent
+10, db 8, scripts 4); long-dash sweep zero on both sides (a fresh `rg` over the authored tree and
+a database-wide cast over all 118 public text and jsonb columns, unchanged because Phase Y added
+no schema); zero new npm dependencies. The architect `evaluate_task` returned PASS, with one
+non-blocking item (no dedicated portal unit test for `PortfolioPage` / `portfolioApi`; the server
+integration tests carry the functional and authorization coverage). The drift report is
+`phase-Y.md`; the drift index and the rollup are updated to "A through Y". Phase Y is not a
+milestone; per the owner-authorized Stage 4 run, execution continues to Phase Z and does not
+pause here (the pause is at the Stage 4/5 boundary before Phase AD).
+
+## Phase Z: proactive push intelligence
+
+Phase Z is the second phase of the owner-authorized autonomous Stage 4 run (Y, Z, AA, AB, AC,
+which pauses at the Stage 4/5 boundary before Phase AD). It turns the persisted outcome loop
+into recorded, ranked, deliverable notifications: a per-user in-app notification center,
+per-(user, tenant, kind) rules a seat can tune and mute, and a scheduled Morning Brief digest
+delivered to a chosen channel. It is a deliberately SEPARATE seam from the Phase O/P
+operational alert seam (`alert_events`): those are connector and ops-health events for the
+provider-owner; these are business-intelligence notifications for any seat, with their own new
+enums so the two lifecycles never entangle. It is not a milestone.
+
+### What was built
+
+Two new tables (`lib/db/src/schema/pushIntelligence.ts`). `push_rules` is per-user, per-tenant,
+per-kind (`ownerUserId` NOT NULL, unique on `(ownerUserId, tenantId, type)`), carrying
+`enabled`, a `mutedUntil`, optional `minImpactUsd` / `minConfidence` floors (null means no
+floor), and a `channel`; a default rule (enabled, no floor, in_app) is materialized lazily for
+each tenant a user can reach. `push_events` is one recorded notification, idempotent by
+`(ruleId, dedupeKey)` so the same breach in the same state never notifies twice and a state
+change mints a new event, with owner and tenant denormalized for a single-table inbox and a
+belt-and-suspenders access check. Three new enums (`push_rule_type` of `outcome_shortfall` and
+`high_value_action`; `push_channel` of `in_app`, `slack`, `email`; `push_delivery_status` of
+`pending`, `suppressed`, `sent`, `failed`).
+
+The evaluator (`pushEvaluator.ts`) each pass materializes the default rules, builds candidate
+breaches from real rows only (a `high_value_action` is an open committed action carrying a
+parsed dollar prediction; an `outcome_shortfall` is the latest measurement of an action graded
+`missed` with a positive dollar shortfall), scores each candidate under each enabled rule
+(`rankScore` is `impactUsd * confidence / 100`), and records a `pending` or `suppressed` event
+with ON CONFLICT DO NOTHING. A disabled rule produces nothing; a muted rule still evaluates but
+records suppressed, so a mute hides noise without losing the record. The drainer
+(`pushNotifier.ts`) mirrors the Phase P alert notifier: it claims pending rows with FOR UPDATE
+SKIP LOCKED, groups them per (recipient, channel), delivers exactly one ranked digest per group
+(capped at `PUSH_DIGEST_LIMIT`, default 10; the overflow stays in the center), and flips every
+claimed row to `sent` or `failed` exactly once. `in_app` is a no-op that always succeeds;
+`slack` reuses `SLACK_WEBHOOK_URL`; `email` is an available-not-connected adapter that fails
+loudly with "set EMAIL_PUSH_ENDPOINT to connect the email push channel" rather than silently
+dropping a notification. The scheduled Morning Brief (`pushBrief.ts`, `startPushMorningBrief`,
+cadence `PUSH_MORNING_BRIEF_INTERVAL_MS`, default 12 hours) runs the evaluation then the drain,
+started ONLY from the server entrypoint, mirroring the retention, notifier, and backup loops
+(no overlap, swallow a tick failure, unref'd timer). The HTTP surface
+(`routes/push.ts`, mounted at `/api/push` under `requireAuth`) is `GET /notifications`,
+`POST /notifications/:id/read`, `POST /notifications/read-all`, `GET /rules`, `PATCH /rules/:id`,
+and `POST /rules/:id/mute`, every read and write fenced per-user and per-tenant. The portal adds
+a framework-free `pushApi.ts` (honest discriminated states plus a pub/sub that refreshes the nav
+badge on a successful mark), a `NotificationsPage` (distinct loading, empty, ready, error states;
+per-event impact and rank; read, read-all, tune, mute), the `/notifications` route with no
+client-side role gate (the server fences), and the `TopNav` NavBell unread badge.
+
+### The honesty boundaries
+
+Every event figure is computed from persisted state or it is null; `rankScore` is zero when
+unquantified, so an event with no dollar figure ranks last and is suppressed, never promoted,
+and a null impact renders as an empty bracket in the digest, never a fabricated `$0`. A breach is
+recorded once per state (idempotent by `(ruleId, dedupeKey)`); a mute records suppressed events
+rather than dropping them, so nothing high-signal is lost. The access fence holds on BOTH the
+mint and the deliver path: a push rule whose tenant binding was revoked after it was created is
+dropped by the evaluator before any event is minted, and a pending event whose (owner, tenant)
+pair is no longer reachable at delivery time is failed in place WITHOUT being handed to an
+external transport, so a tenant's business intelligence is never leaked to a recipient who can no
+longer read it in the center. `slack` and `email` are available-not-connected sinks that fail
+loudly when unconfigured rather than pretending to send.
+
+### Verification
+
+Typecheck and build green (exit 0; portal 1748 modules, api-server bundled); full suite green at
+685 tests (api-server 357 across 41 files including the new `pushMath` unit tests and the push
+integration tests with the revocation regression, portal 193 across 15 files including the new
+`pushApi` tests, cortex 84, connectors 29, edge-agent 10, db 8, scripts 4); long-dash sweep zero
+on both sides (the source guard plus a database-wide cast over all 123 public text and jsonb
+columns, now including the `push_rules` and `push_events` text columns); zero new npm
+dependencies. The architect `evaluate_task` first returned FAIL on a broken-access-control
+finding (a revoked binding could still mint and deliver push events); the fix closed both the
+mint path (the evaluator fences its loaded rules to the pairs reachable right now) and the
+deliver path (the drainer re-verifies access and fails revoked rows without delivery), with a
+self-contained revocation integration test as the regression guard, after which the architect
+`evaluate_task` returned PASS. The drift report is `phase-Z.md`; the drift index and the rollup
+are updated to "A through Z". Phase Z is not a milestone; per the owner-authorized Stage 4 run,
+execution continues to Phase AA and does not pause here (the pause is at the Stage 4/5 boundary
+before Phase AD; the next protocol milestone hard stop is AI at the end of Stage 5).
+
+## Phase AA: interactive challenge
+
+Phase AA is the third phase of the owner-authorized autonomous Stage 4 run (Y, Z, AA, AB, AC,
+which pauses at the Stage 4/5 boundary before Phase AD). It lets a seat CHALLENGE one finding in
+a layer's diagnosis: the objection is re-reasoned through the Confounder and Synthesist seats,
+which either uphold the finding with reasoning or revise it with a new confidence and a note, and
+every exchange is recorded as an append-only, auditable verdict. The user's input is context,
+never an override: a challenge can never delete a finding, and a revise re-bases the challenge row
+only, never the stored layer content. It EXTENDS Ask Different Day, it does not replace it. It is
+not a milestone.
+
+### What was built
+
+One new table (`lib/db/src/schema/findingChallenges.ts`). `finding_challenges` is one recorded
+challenge against one finding: the tenant, the layer key, the `findingRef`, a `findingHashRef`
+(the sha256 of the canonical finding text at challenge time, so a later refresh that changes the
+finding is detectable), the challenger, the sanitized challenge text, the original confidence and
+basis snapshot, the outcome's revised confidence and `revisedBasis`, the confounder note, the
+synthesist reasoning, an `error` for an honest failure, the billed `telemetry`, and the
+`provenanceContentHash` of the entry a success appended. Two new enums (`finding_challenge_status`
+of `completed` and `failed`; `finding_challenge_outcome` of `upheld` and `revised`, null on a
+failed row). New cortex stages re-test the objection (challenge-confound) and decide
+uphold-or-revise (challenge-synthesis), both grounded, with no model literal in source.
+
+The service (`artifacts/api-server/src/lib/challenge/findingChallenge.ts`). `runFindingChallenge`
+loads the live finding, hashes its canonical text, runs the Confounder then the Synthesist seat,
+records each seat's billed model usage, and writes the outcome in ONE transaction: on success it
+appends exactly one hash-chained provenance entry (claim path `<layerKey>.challenge.<findingRef>`,
+source ref a `challenge:sha256:` digest over the outcome with the user text HASHED in, never
+embedded) and inserts a `completed` row; on a model failure, or a `revised` verdict with no new
+confidence, it inserts an honest `failed` row with the real billed telemetry and NO provenance,
+never a fabricated uphold or an invented number. A revise sets `revisedBasis` to
+`modelled_user_informed` on the challenge ROW only; the cortex basis enum and the stored layer
+content are never touched. The pure helpers (`parseFindingRef`, `extractFinding`,
+`canonicalFindingText`, `findingHash`, `currentFindingHash`) are unit-tested in isolation, and
+`serializeChallenge` is the single shaper the list and the submit path share. `listFindingChallenges`
+returns a tenant's challenges newest first, each annotated with the challenger's email (null when
+removed) and an honest `isCurrentVersion` flag, loading each layer's content once.
+
+The HTTP surface (`artifacts/api-server/src/routes/tenants.ts`, under `requireAuth` and
+`requireTenantAccess`): `POST /tenants/:id/layers/:key/challenges` and `GET /tenants/:id/challenges`.
+The POST order is the tenant fence, then a zod parse (the `findingRef` must match the challengeable
+kinds; the `challengeText` is bounded, trimmed, and refused when empty after trim), then the
+client-viewer model-spend gate, then the live re-reasoning, so a malformed body, a blank body, or a
+read-only seat is rejected BEFORE any model call. The portal adds a framework-free `challengeApi.ts`
+(honest discriminated fetch and submit states plus `groupChallengesByRef`), a `ChallengeControl`
+(an inline challenge box and per-finding history; a seat that cannot challenge sees the history but
+no submit box), `FindingChallengeSlot` wired into the Causes, Actions, and Challengers cards, the
+layer page (which fetches challenges alongside the layer and computes `canChallenge` as a
+non-client-viewer seat), and the Ask Different Day page (which groups challenges by layer), all of
+which extend the existing finding cards rather than replacing the perspective lens.
+
+### The honesty boundaries
+
+Every challenge verdict is computed by the two seats or it is an honest failure: a model call that
+returns nothing usable, or a `revised` verdict with no new confidence, is a `failed` row with the
+real billed telemetry and NO outcome and NO provenance, never a fabricated uphold or an invented
+confidence. The user's objection is context, never an override: a challenge can never delete a
+finding, and a revise re-bases the challenge row only (`modelled_user_informed`), never the stored
+layer content, so a user can object but can never silently overwrite or remove a finding. A
+completed challenge appends exactly one hash-chained provenance entry over source references with
+the user text hashed in, so `verifyChain` still passes. The history's `isCurrentVersion` is
+computed from the stored finding hash against the live finding, so a challenge against a
+since-changed finding is shown as addressing a prior version, never misrepresented as current. The
+user challenge text is sanitized once before it is used for the prompt or stored, so the long-dash
+constraint holds for user input too.
+
+### Verification
+
+Typecheck and build green (exit 0; portal 1750 modules, api-server bundled); full suite green at
+716 tests (api-server 377 across 42 files including the new `findingChallenge` pure-helper unit
+tests and the challenge route-boundary tests, portal 204 across 16 files including the new
+`challengeApi` tests, cortex 84, connectors 29, edge-agent 10, db 8, scripts 4); long-dash sweep
+zero on both sides (the source guard plus a database-wide cast over all 135 public text and jsonb
+columns, now including the `finding_challenges` text columns); zero new npm dependencies. The
+architect `evaluate_task` returned PASS with no high or severe finding; two LOW items were fixed
+rather than logged as accepted drift: the submit response now returns the same serialized contract
+the history does (with this seat's email and the current-version flag, so a just-recorded challenge
+is never mislabelled as "a removed user"), and the challenge text is trimmed and refused when empty
+after trim (so a blank submission never spends a model call or stores a meaningless row). The
+remaining accepted LOW is that the challenge-history fetch is treated as non-critical supplementary
+data: a fetch failure renders the diagnosis without the overlay rather than blanking the page. The
+drift report is `phase-AA.md`; the drift index and the rollup are updated to "A through AA". Phase
+AA is not a milestone; per the owner-authorized Stage 4 run, execution continues to Phase AB and
+does not pause here (the pause is at the Stage 4/5 boundary before Phase AD; the next protocol
+milestone hard stop is AI at the end of Stage 5).
+
+## Phase AB: the sellability pack (a finished diagnosis becomes a sales surface)
+
+Phase AB is the fourth phase of the owner-authorized autonomous Stage 4 run (Y, Z, AA, AB, AC). It
+turns a finished diagnosis into a selling surface without rewriting a single finding: a provider
+mints a read-only, summary-only shareable link that a cold prospect opens with no account; the
+public diagnosis carries anonymized, segment-level social proof drawn from the real Phase W outcome
+loop, plus a viral "powered by" mark and a path back to the product; and the narrate stage now
+carries a deterministic editorial voice-quality measurement recorded honestly alongside the
+content. It added zero npm dependencies and holds no em-dash or en-dash in source or in data.
+
+### What it does
+
+One new table (`diagnosis_share_tokens`, one privacy enum `diagnosis_share_privacy` of
+`summary_only`) holds one read-only share of one tenant's diagnosis. The opaque token is 32 bytes
+of CSPRNG entropy rendered base64url and is returned to the minter EXACTLY ONCE; only its sha256
+hash ever touches a column, so a database read can never reconstruct a working link. The data layer
+mints (clamping the lifetime to a 1-to-365-day band, default 30), lists a tenant's shares as
+metadata only (never the token, never the hash, each with a status derived from its real columns:
+revoked, expired, or active), revokes early and idempotently, and resolves a presented token by
+hashing it, loading the one unexpired unrevoked row, recording real access telemetry, and returning
+only the tenant id and privacy posture. A non-match (unknown, expired, or revoked) is
+indistinguishable to the caller, which keeps the public 404 uniform.
+
+The case-study builder produces anonymized, segment-level social proof from the real Phase W
+outcome loop. A case study is a DISTRIBUTION over a cohort of opted-in tenants in one segment,
+never a named company and never a single company's figure. It reuses the exact Phase X privacy
+machinery: the same k-anonymity floor hard-gates whether a segment is published at all, and the
+same bounded noise blurs a small cohort's quartiles with an honest `noised` flag. The per-tenant
+math is the same `computeOutcomeSummary` the `/outcomes` endpoint uses, so a case study can never
+disagree with the counter, and only a tenant with at least one resolved outcome (a real track
+record) contributes; no tenant id, name, url, or date ever appears in the output.
+
+The narrate stage gains a deterministic editorial voice-quality measurement (`evaluateNarrativeVoice`
+in `lib/cortex`): seven genuine checks (sentence length in a human band, no marketing hype, no
+first-person consultant voice, numeric specificity, has a proof receipt, names a blind spot, no
+long dash) yield a 0-to-100 score, a band, and per-check detail. It is a MEASUREMENT, never an
+edit: rewriting the prose to "pass" would be fabricating output, so the report is recorded on the
+layer and a below-bar layer is shown at its real lower band.
+
+The HTTP surface is two-sided. Authed provider/owner routes mint, list, and revoke share tokens and
+read the published case studies (provider seat required; the tenant routes also require per-tenant
+access, since selling is a provider-side action). The ONLY unauthenticated data surface is
+`GET /api/public/diagnosis/:token`: it resolves the token through the share-token middleware, loads
+the tenant overview, narrows each layer through `toPublicDiagnosisLayer` (which strips the internal
+owner persona, the diagnostic question, and the layer feed graph), and returns the public layers,
+the tenant's case study, and the constant powered-by mark, behind a tight per-IP rate limit. In the
+portal, the public page is mounted OUTSIDE the auth provider (a cold prospect never triggers an auth
+probe or the sign-in gate), renders honest distinct loading / ready / empty / unavailable / error
+states, and the Board Pack gains a provider-only panel to create a link, copy the full URL exactly
+once, and see existing links as metadata only with an early revoke.
+
+### The honesty boundaries
+
+The selling surface never fabricates and never leaks. The token's plaintext is shown once and never
+stored, only its hash is, so the database cannot reconstruct a link; an invalid, expired, or revoked
+token returns a uniform 404 that reveals nothing. The public projection is enforced in the type
+(`PublicDiagnosisLayer` is an `Omit` of the internal fields) AND at runtime, so the cold link
+exposes no owner persona, no diagnostic question, no layer feed graph, no raw connector data, and no
+provenance. A case study is published only above the k-anonymity floor and carries no identity at
+all, with small cohorts blurred and flagged rather than exposed. The voice evaluator measures and
+reports, it never edits, so a below-bar narrative is shown at its real band rather than silently
+corrected. The access telemetry (view count, last-accessed) is real, recorded only on a genuine
+resolve. The architect `evaluate_task` first FAILED on one HIGH: the global error handler attached
+`req.path` to the observability context, and for the public route the path contains the bearer share
+token, so a failure deep in a public request could forward a live or attempted token to an external
+Sentry-compatible sink even though the database stores only the hash. The fix is a single redaction
+chokepoint (`redactRoute`) that collapses `/api/public/diagnosis/<bearer>` to the route template
+before any capture, with a regression test proving the token substring never survives; the re-review
+returned PASS. The accepted non-blocking drift is that the tenant case study is recomputed per public
+hit rather than cached, correct and never stale but a latency consideration on the cold-link path at
+scale.
+
+### Verification
+
+Typecheck and build green (exit 0; portal 1753 modules, api-server bundled); the full suite is green
+at 758 tests (api-server 393 across 46 files including the new `shareTokens`, `caseStudies`,
+`overviewProjection`, and `redactRoute` tests, portal 225 across 18 files including the new
+`sellabilityApi` and `publicApi` tests, cortex 89 including the new `voice` editorial-quality tests,
+connectors 29, edge-agent 10, db 8, scripts 4); the long-dash sweep is zero on both sides (the
+source guard plus a database-wide cast over all 138 public text and jsonb columns, now including the
+`diagnosis_share_tokens` text columns); zero new npm dependencies (the token is `node:crypto`; the
+public page, clients, and routing are framework-free over the existing stack). The drift report is
+`phase-AB.md`; the drift index and the rollup are updated to "A through AB". Phase AB is not a
+milestone; per the owner-authorized Stage 4 run, execution continues to Phase AC (the Stage 4
+verification and build-report close), after which the run PAUSES at the Stage 4/5 boundary for owner
+review before Phase AD; the next protocol milestone hard stop is AI at the end of Stage 5.
+
+## Phase AC: verification and the build-report append (closes Stage 4)
+
+Phase AC is the closing phase of Stage 4 (Differentiation and Moat), run back to back with Y, Z, AA,
+and AB under owner authorization. It built no product feature and changed no product code; like Phase
+M closed Stage 2 and Phase V closed Stage 3, its only artifacts are the Stage 4 evidence matrix
+(`docs/drift/phase-AC.md`), this build-report append, and the drift updates. It added zero npm
+dependencies and contains no em-dash or en-dash in source or in data.
+
+### What Stage 4 delivered
+
+Stage 4 turned the diagnosis from a single-tenant artifact into a differentiated, defensible product
+surface across four phases. Phase Y added the portfolio intelligence view: a ranked multi-tenant
+board (value at risk, value identified versus realized, overall confidence, and the count and
+severity of open gaps, worst and best surfaced to the top), cross-portfolio gap patterns, and a
+drill-down into any bound tenant's full diagnosis, all fenced so a portfolio seat sees only its bound
+tenants and is refused with a 403 on any tenant outside the portfolio. Phase Z added proactive push
+intelligence: per-seat push rules and events distinct from the Phase P operations alerts, a scheduled
+Morning Brief digest over email and Slack adapters that are available-not-connected until configured,
+ranking by predicted dollar impact and confidence with low-impact signal suppressed, an in-app
+notification center with read-state and mute, and an access-revoked event failed in place rather than
+delivered. Phase AA added the interactive challenge: a seat challenges one finding and the objection
+is re-reasoned through the Confounder and Synthesist seats, which uphold it with reasoning or revise
+it with a new confidence and a `modelled_user_informed` basis, with the user's input as context and
+never an override (a challenge can never delete a finding, a revise re-bases the challenge row only
+and never the stored layer content), each exchange auditable and a completed challenge appending
+exactly one hash-chained provenance entry. Phase AB added the sellability pack: a read-only,
+summary-only shareable diagnosis link whose token is shown once and stored only as a sha256 hash,
+anonymized segment-level case studies that reuse the Phase X k-anonymity and noise machinery and the
+Phase W outcome math, a viral powered-by mark, and a deterministic editorial voice-quality
+measurement at the narrate stage that records the score without ever editing the prose.
+
+### What this phase verified
+
+Each Stage 4 acceptance criterion is mapped in `phase-AC.md` to existing tested evidence with the
+proof type marked honestly. The integration suite proves, against live Postgres, the portfolio access
+fence and the 403 outside the portfolio, the push ranking and the exactly-once Morning Brief drain
+and the revocation, the challenge route boundary (tenant fencing, the read-only seat refused a spend,
+a blank or over-long or malformed challenge rejected before any model call, auth required to read the
+history), and the benchmark recompute and owner-only routes. Deterministic unit tests prove the
+portfolio, push, benchmark, and outcome math, the case-study k-anonymized aggregation, the voice
+measurement (seven genuine checks, identical output for identical input, never an edit), the
+share-token clamp and one-way hash and status, the public projection that strips the owner persona
+and diagnostic question and layer feed graph in the type and at runtime, and the redaction chokepoint
+that keeps a bearer share token out of the observability path. Three paths are honestly marked
+source-reviewed rather than test-proven, the one accepted LOW for this phase: the challenge re-reason
+engine (`runFindingChallenge`), which spends real Confounder and Synthesist model calls the suite
+deliberately does not run, and the share-token mint and resolve and the unauthenticated public
+diagnosis route, which have no dedicated route integration test. The pure helpers, the route boundary
+and rejection cases, and the portal clients around these paths are all tested, and the case-study
+loader's reuse of the SAME `computeOutcomeSummary` the `/outcomes` endpoint uses (so social proof can
+never disagree with the outcome counter) is verified by source inspection. Two boundaries are honestly
+not live: the external push sinks and the
+durable secret and archive backends remain available-not-connected unless configured, and the
+realized-value and benchmark figures were produced by earlier real runs and recomputed here, not by a
+fresh paid model seed. No Stage 4 figure is fabricated: a value is computed from persisted state or
+it is not shown.
+
+### Verification
+
+The global gates were re-run fresh for this phase. Typecheck and build are green across the workspace
+(exit 0 on both; portal 1753 modules, api-server bundled). The full suite is green at 758 tests
+(api-server 393 across 46 files, portal 225 across 18 files, cortex 89, connectors 29, edge-agent 10,
+db 8, scripts 4); this phase added no tests and changed no product code. The long-dash sweep is zero
+on both sides: the source guard is green over authored source including the Phase AB and AC Markdown,
+and a fresh database-wide cast over all 138 public text and jsonb columns across 37 tables reports
+zero hits. Zero new npm dependencies. The architect `evaluate_task` returned PASS. The drift report
+is `phase-AC.md`; the drift index and the rollup are updated to "A through AC". Phase AC closes Stage
+4 (Differentiation and Moat); per the owner-authorized Y-Z-AA-AB-AC run, the build now PAUSES at the
+Stage 4/5 boundary for owner review before Phase AD and does not auto-advance. The next protocol
+milestone hard stop is Phase AI at the end of Stage 5.

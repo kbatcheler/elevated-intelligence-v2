@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ArrowRight, Sparkles } from "lucide-react";
-import type { OverviewLayer, SignalLayer } from "../../types";
+import type { FindingChallenge, OverviewLayer, SignalLayer } from "../../types";
 import { fetchOverview, fetchSignals } from "../../lib/tenantApi";
+import { fetchChallenges, groupChallengesByRef } from "../../lib/challengeApi";
 import { useAuth } from "../../lib/AuthContext";
 import { useTenant } from "../../lib/TenantContext";
 import { Link } from "../../lib/router";
+import { FindingChallengeSlot, type ChallengeContext } from "../layer/sections";
 import {
   ConfidencePill,
   EmptyState,
@@ -18,7 +20,7 @@ import {
 
 type State =
   | { kind: "loading" }
-  | { kind: "ready"; overview: OverviewLayer[]; signals: SignalLayer[] }
+  | { kind: "ready"; overview: OverviewLayer[]; signals: SignalLayer[]; challenges: FindingChallenge[] }
   | { kind: "empty" }
   | { kind: "no-tenant" }
   | { kind: "error" };
@@ -59,8 +61,11 @@ function buildQuestions(overview: OverviewLayer[], signals: SignalLayer[]): QA[]
 // (narrative, causes, recommended actions, open confounders) with provenance and
 // the generation time. It is explicitly not a live model call: the deferral is
 // honest, and the answer always declares it was assembled from saved reasoning.
+// The Interactive Challenge (Phase AA) is the one live affordance here: a
+// non-viewer seat can object to a specific cause or action and the engine
+// re-reasons that finding, recorded as an auditable uphold-or-revise.
 export function AskDifferentDayPage() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const { currentId, current, status: tenantStatus } = useTenant();
   const [state, setState] = useState<State>({ kind: "loading" });
   const [open, setOpen] = useState<string | null>(null);
@@ -75,14 +80,19 @@ export function AskDifferentDayPage() {
     let alive = true;
     setState({ kind: "loading" });
     setOpen(null);
-    Promise.all([fetchOverview(currentId), fetchSignals(currentId)]).then(([ovOut, sigOut]) => {
-      if (!alive) return;
-      if ("unauthorized" in ovOut || "unauthorized" in sigOut) return void logout();
-      if (ovOut.state === "error" || sigOut.state === "error") return setState({ kind: "error" });
-      if (ovOut.state === "empty") return setState({ kind: "empty" });
-      const signals = sigOut.state === "empty" ? [] : sigOut.items;
-      setState({ kind: "ready", overview: ovOut.items, signals });
-    });
+    Promise.all([fetchOverview(currentId), fetchSignals(currentId), fetchChallenges(currentId)]).then(
+      ([ovOut, sigOut, chOut]) => {
+        if (!alive) return;
+        if ("unauthorized" in ovOut || "unauthorized" in sigOut) return void logout();
+        if (ovOut.state === "error" || sigOut.state === "error") return setState({ kind: "error" });
+        if (ovOut.state === "empty") return setState({ kind: "empty" });
+        const signals = sigOut.state === "empty" ? [] : sigOut.items;
+        // The challenge overlay is non-critical: a transient failure shows no
+        // history rather than blocking the answers.
+        const challenges = "unauthorized" in chOut || chOut.state === "error" ? [] : chOut.challenges;
+        setState({ kind: "ready", overview: ovOut.items, signals, challenges });
+      },
+    );
     return () => {
       alive = false;
     };
@@ -92,6 +102,24 @@ export function AskDifferentDayPage() {
     () => (state.kind === "ready" ? buildQuestions(state.overview, state.signals) : []),
     [state],
   );
+
+  const handleChallenged = useCallback((challenge: FindingChallenge) => {
+    setState((s) => (s.kind === "ready" ? { ...s, challenges: [challenge, ...s.challenges] } : s));
+  }, []);
+
+  // Group every loaded challenge by its layer, then by finding ref, so each
+  // question card gets exactly its own findings' history with no per-render
+  // re-filtering cost.
+  const byLayer = useMemo(() => {
+    const out = new Map<string, Map<string, FindingChallenge[]>>();
+    if (state.kind !== "ready") return out;
+    for (const qa of questions) {
+      out.set(qa.key, groupChallengesByRef(state.challenges.filter((c) => c.layerKey === qa.key)));
+    }
+    return out;
+  }, [state, questions]);
+
+  const canChallenge = user?.role !== "client-viewer";
 
   return (
     <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
@@ -117,11 +145,27 @@ export function AskDifferentDayPage() {
         {state.kind === "ready" && questions.length === 0 && (
           <EmptyState title="Nothing to ask yet" message="No layer has been generated, so there are no answers to assemble." />
         )}
-        {state.kind === "ready" && questions.length > 0 && (
+        {state.kind === "ready" && questions.length > 0 && currentId && (
           <div style={{ display: "grid", gap: 10 }}>
-            {questions.map((qa) => (
-              <QuestionCard key={qa.key} qa={qa} open={open === qa.key} onToggle={() => setOpen((k) => (k === qa.key ? null : qa.key))} />
-            ))}
+            {questions.map((qa) => {
+              const challenge: ChallengeContext = {
+                tenantId: currentId,
+                layerKey: qa.key,
+                byRef: byLayer.get(qa.key) ?? new Map(),
+                canChallenge,
+                onChallenged: handleChallenged,
+                onUnauthorized: logout,
+              };
+              return (
+                <QuestionCard
+                  key={qa.key}
+                  qa={qa}
+                  challenge={challenge}
+                  open={open === qa.key}
+                  onToggle={() => setOpen((k) => (k === qa.key ? null : qa.key))}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -129,7 +173,17 @@ export function AskDifferentDayPage() {
   );
 }
 
-function QuestionCard({ qa, open, onToggle }: { qa: QA; open: boolean; onToggle: () => void }) {
+function QuestionCard({
+  qa,
+  challenge,
+  open,
+  onToggle,
+}: {
+  qa: QA;
+  challenge: ChallengeContext;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       <button
@@ -159,13 +213,15 @@ function QuestionCard({ qa, open, onToggle }: { qa: QA; open: boolean; onToggle:
         </span>
         {open ? <ChevronDown size={16} color="var(--slate-light)" /> : <ChevronRight size={16} color="var(--slate-light)" />}
       </button>
-      {open && <Answer qa={qa} />}
+      {open && <Answer qa={qa} challenge={challenge} />}
     </div>
   );
 }
 
-function Answer({ qa }: { qa: QA }) {
+function Answer({ qa, challenge }: { qa: QA; challenge: ChallengeContext }) {
   const s = qa.signal;
+  // slice(0,3) preserves content order, so the index here is the same index the
+  // engine uses for the finding ref (causes[i] / actions[i]).
   const causes = (s?.causes ?? []).slice(0, 3);
   const actions = (s?.actions ?? []).slice(0, 3);
   const openConfounders = (s?.confounders ?? [])
@@ -186,6 +242,7 @@ function Answer({ qa }: { qa: QA }) {
                 {c.basis && c.confidence != null && <ConfidencePill basis={c.basis} confidence={c.confidence} />}
               </div>
               {c.impact && <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{c.impact}</div>}
+              <FindingChallengeSlot ctx={challenge} findingRef={`causes[${i}]`} />
             </div>
           ))}
         </Block>
@@ -200,6 +257,7 @@ function Answer({ qa }: { qa: QA }) {
                 {a.basis && a.confidence != null && <ConfidencePill basis={a.basis} confidence={a.confidence} />}
               </div>
               {a.impact && <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{a.impact}</div>}
+              <FindingChallengeSlot ctx={challenge} findingRef={`actions[${i}]`} />
             </div>
           ))}
         </Block>

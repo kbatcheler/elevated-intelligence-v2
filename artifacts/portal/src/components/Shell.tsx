@@ -10,6 +10,8 @@ import { BriefPage } from "./pages/BriefPage";
 import { BoardPackPage } from "./pages/BoardPackPage";
 import { LayersPage } from "./pages/LayersPage";
 import { LayerPage } from "./pages/LayerPage";
+import { PortfolioPage } from "./pages/PortfolioPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { ReasoningPage } from "./pages/ReasoningPage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { AnomaliesPage } from "./pages/AnomaliesPage";
@@ -80,6 +82,17 @@ function Routes({ role }: { role: UserRole }) {
       return <BoardPackPage />;
     case "/layers":
       return <LayersPage />;
+    case "/portfolio":
+      // No role gate here: the server resolves portfolio scope from the session
+      // and returns 403 portfolio_only for any non-portfolio, non-provider seat,
+      // which the page renders as an honest access state. A client seat that
+      // types the URL simply sees that panel rather than a hidden NotFound.
+      return <PortfolioPage />;
+    case "/notifications":
+      // Every authenticated seat has a notification center; the server fences the
+      // events and rules to the tenants the seat can reach and returns an empty
+      // set otherwise, which the page renders as an honest empty state.
+      return <NotificationsPage />;
     case "/anomalies":
       return <AnomaliesPage />;
     case "/war-room":

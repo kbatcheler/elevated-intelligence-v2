@@ -20,6 +20,11 @@ import {
   buildPerceive,
   buildScore,
 } from "../prompts/layerStages";
+import {
+  buildFindingChallengeConfound,
+  buildFindingChallengeDecision,
+  type FindingChallengeInput,
+} from "../prompts/findingChallenge";
 import type { LayerDescriptor, LayerGrounding } from "../prompts/shared";
 import { profileSchema, type ProfileOutput } from "../schemas/profile";
 import {
@@ -38,6 +43,12 @@ import {
   type PerceiveOutput,
   type ScoreOutput,
 } from "../schemas/stages";
+import {
+  findingChallengeConfoundSchema,
+  findingChallengeDecisionSchema,
+  type FindingChallengeConfound,
+  type FindingChallengeDecision,
+} from "../schemas/findingChallenge";
 import type { StageResult, StageTelemetry } from "./types";
 import type { ZodType } from "zod/v4";
 
@@ -302,6 +313,31 @@ export function runNarrate(
 ): Promise<StageResult<NarrateOutput>> {
   const { system, user } = buildNarrate(profile, layer, hypothesised, confounders, challenge, grounding);
   return runAnthropicStage("narrate", { system, user, schema: narrateOutputSchema, log });
+}
+
+// Interactive Challenge (Phase AA). A challenge re-reasons ONE finding via two
+// dedicated, finding-scoped calls that reuse the Confounder and Synthesist seats
+// (so telemetry and cost record exactly as a layer build does) without rebuilding
+// the whole layer. The Confounder (Gemini, grounded) re-tests whether the user's
+// objection introduces a confounder.
+export function runFindingChallengeConfound(
+  input: FindingChallengeInput,
+  log: Logger = silentLogger,
+): Promise<StageResult<FindingChallengeConfound>> {
+  const { system, user } = buildFindingChallengeConfound(input);
+  return runGeminiStage("confound", { system, user, schema: findingChallengeConfoundSchema, log });
+}
+
+// The Synthesist (Claude) decides uphold-or-revise for the single finding,
+// folding in the Confounder's re-examination. The user's input is context, never
+// an override; the finding can never be deleted.
+export function runFindingChallengeDecision(
+  input: FindingChallengeInput,
+  confound: FindingChallengeConfound,
+  log: Logger = silentLogger,
+): Promise<StageResult<FindingChallengeDecision>> {
+  const { system, user } = buildFindingChallengeDecision(input, confound);
+  return runAnthropicStage("narrate", { system, user, schema: findingChallengeDecisionSchema, log });
 }
 
 export function runScore(

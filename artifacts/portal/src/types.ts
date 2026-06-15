@@ -1,4 +1,5 @@
 export type UserRole = "provider-owner" | "provider-member" | "client-admin" | "client-viewer";
+export type OrgType = "provider" | "client" | "portfolio";
 
 export interface User {
   id: string;
@@ -6,6 +7,10 @@ export interface User {
   displayName: string;
   role: UserRole;
   orgId: string | null;
+  // The type of the user's org, resolved server-side alongside the user. Null
+  // when the seat has no org. The portal reads this only to offer the portfolio
+  // nav to a portfolio seat; the server fences the data by binding, not by this.
+  orgType: OrgType | null;
 }
 
 export interface Pin {
@@ -47,6 +52,119 @@ export interface Org {
   type: "provider" | "client" | "portfolio";
   createdAt: string;
   tenants: { id: string; name: string }[];
+}
+
+// ── Portfolio Intelligence (Phase Y) ───────────────────────────────────────
+// The shape of GET /api/portfolio/summary, mirroring the server's portfolioMath
+// output exactly. Every figure is a real persisted value or null; a company with
+// no numeric prediction carries null dollar figures (the board shows a dash),
+// never a fabricated zero or a fabricated "value at risk".
+export type GapSeverity = "high" | "medium" | "low";
+export type PortfolioScopeType = "provider" | "portfolio";
+
+export interface PortfolioOpenGaps {
+  total: number;
+  high: number;
+  medium: number;
+  low: number;
+  severityScore: number;
+}
+export interface PortfolioCompleteness {
+  hasLayerContent: boolean;
+  hasOutcomes: boolean;
+  missing: string[];
+}
+export interface PortfolioScope {
+  type: PortfolioScopeType;
+  orgId: string | null;
+  orgName: string | null;
+}
+export interface PortfolioTotals {
+  tenantCount: number;
+  valueIdentifiedUsd: number | null;
+  valueRealizedUsd: number | null;
+  unrealizedValueUsd: number | null;
+  openGaps: PortfolioOpenGaps;
+  tenantsWithLayerContent: number;
+  tenantsWithOutcomes: number;
+}
+export interface PortfolioTenant {
+  rank: number;
+  tenantId: string;
+  tenantName: string;
+  status: string;
+  dataMode: string;
+  generatedLayers: number;
+  totalLayers: number;
+  valueIdentifiedUsd: number | null;
+  valueRealizedUsd: number | null;
+  unrealizedValueUsd: number | null;
+  overallConfidence: number | null;
+  confidenceLayers: number;
+  openGaps: PortfolioOpenGaps;
+  completeness: PortfolioCompleteness;
+}
+export interface PortfolioPattern {
+  layerKey: string;
+  layerName: string;
+  kind: GapKind | null;
+  affectedTenants: number;
+  totalTenants: number;
+  share: number;
+  severity: GapSeverity;
+  tenantIds: string[];
+  examples: string[];
+}
+export interface PortfolioSummary {
+  scope: PortfolioScope;
+  totals: PortfolioTotals;
+  tenants: PortfolioTenant[];
+  patterns: PortfolioPattern[];
+}
+
+// ── Proactive Push Intelligence (Phase Z) ──────────────────────────────────
+// The shape of the /api/push surface, mirroring the server's serializers
+// exactly. Every figure is a real persisted value or null; an event with no
+// dollar prediction carries a null impact (the center shows a dash) and a zero
+// rank score, never a fabricated number. A suppressed event is shown in the
+// center, visually distinct, but never counts toward the unread badge.
+export type PushDeliveryStatus = "pending" | "suppressed" | "sent" | "failed";
+export type PushChannel = "in_app" | "slack" | "email";
+export type PushRuleType = "outcome_shortfall" | "high_value_action";
+
+export interface PushNotification {
+  id: string;
+  tenantId: string | null;
+  tenantName: string | null;
+  sourceType: string;
+  sourceId: string;
+  title: string;
+  message: string;
+  impactUsd: number | null;
+  confidence: number | null;
+  rankScore: number;
+  deliveryStatus: PushDeliveryStatus;
+  channel: PushChannel;
+  read: boolean;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface PushNotifications {
+  notifications: PushNotification[];
+  unreadCount: number;
+}
+
+export interface PushRule {
+  id: string;
+  tenantId: string;
+  tenantName: string | null;
+  type: PushRuleType;
+  enabled: boolean;
+  mutedUntil: string | null;
+  minImpactUsd: number | null;
+  minConfidence: number | null;
+  channel: PushChannel;
 }
 
 // ── Intelligence domain (Phase E) ──────────────────────────────────────────
@@ -447,6 +565,73 @@ export interface OverviewLayer {
   generatorModel: string | null;
 }
 
+// Sellability Pack (Phase AB).
+// Read-only shareable diagnosis links and anonymized case studies. Every figure
+// mirrors a real backend value: a share carries only metadata (never the token
+// or its hash after mint), and a case study is an aggregate over a cohort that
+// has cleared the k-anonymity floor, never a named company.
+export type ShareTokenStatus = "active" | "expired" | "revoked";
+export type DiagnosisSharePrivacy = "summary_only";
+
+export interface ShareToken {
+  id: string;
+  privacyLevel: DiagnosisSharePrivacy;
+  label: string | null;
+  status: ShareTokenStatus;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastAccessedAt: string | null;
+  accessCount: number;
+  createdAt: string;
+}
+
+// Returned ONLY from mint: the plaintext token and its portal path, never
+// readable again from any list. The caller composes the absolute URL.
+export interface MintedShareToken extends ShareToken {
+  token: string;
+  diagnosisPath: string;
+}
+
+export interface CaseStudyQuartiles {
+  p25: number;
+  p50: number;
+  p75: number;
+}
+export interface CaseStudyCalibration {
+  hits: number;
+  misses: number;
+  resolved: number;
+  score: number | null;
+}
+export interface CaseStudy {
+  segmentKey: string;
+  sector: string;
+  revenueBand: string;
+  contributorCount: number;
+  noised: boolean;
+  realizedUsd: CaseStudyQuartiles;
+  identifiedUsd: CaseStudyQuartiles;
+  calibration: CaseStudyCalibration;
+}
+
+// The public shareable diagnosis (GET /api/public/diagnosis/:token). The layer is
+// the board-pack overview shape narrowed to its public fields: the internal owner
+// persona, diagnostic question, and layer feed graph are stripped server side, so
+// a prospect never receives them.
+export type PublicDiagnosisLayer = Omit<
+  OverviewLayer,
+  "ownerPersona" | "diagnosticQuestion" | "feeds"
+>;
+export interface PoweredByMark {
+  label: string;
+  href: string;
+}
+export interface PublicDiagnosis {
+  layers: PublicDiagnosisLayer[];
+  caseStudy: CaseStudy | null;
+  poweredBy: PoweredByMark;
+}
+
 // ── Tenant signals (GET /api/tenants/:id/signals) ──
 // The heavier companion to /overview: the FULL per-layer signal arrays that the
 // derived surfaces (anomaly inbox, dependency map, Ask Different Day, war room)
@@ -679,4 +864,35 @@ export interface ConnectorHealthRow {
 export interface ConnectorHealthReport {
   tenantId: string;
   connections: ConnectorHealthRow[];
+}
+
+// ── Interactive Challenge (Phase AA) ──
+// A challenge re-reasons ONE finding. status "completed" carries an outcome
+// (upheld|revised); "failed" carries an honest error and no outcome. A revise
+// carries a new confidence and the basis "modelled_user_informed", shown only
+// on the challenge, never folded into the layer's verified|modelled vocabulary.
+// isCurrentVersion is true when the challenge still addresses the live finding,
+// false when a refresh has since changed it, null when the finding is gone.
+export type FindingChallengeStatus = "completed" | "failed";
+export type FindingChallengeOutcome = "upheld" | "revised";
+
+export interface FindingChallenge {
+  id: string;
+  layerKey: string;
+  findingRef: string;
+  findingTitle: string;
+  challengerEmail: string | null;
+  challengeText: string;
+  status: FindingChallengeStatus;
+  outcome: FindingChallengeOutcome | null;
+  originalConfidence: number | null;
+  originalBasis: string | null;
+  revisedConfidence: number | null;
+  revisedBasis: string | null;
+  confounderNote: string | null;
+  reasoning: string | null;
+  error: string | null;
+  provenanceContentHash: string | null;
+  isCurrentVersion: boolean | null;
+  createdAt: string;
 }

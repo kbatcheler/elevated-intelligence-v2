@@ -1,8 +1,9 @@
 import React from "react";
 import { AuthProvider, useAuth } from "./lib/AuthContext";
-import { RouterProvider } from "./lib/router";
+import { RouterProvider, matchPath, useRouter } from "./lib/router";
 import { Gate } from "./components/Gate";
 import { Shell } from "./components/Shell";
+import { PublicDiagnosisPage } from "./components/pages/PublicDiagnosisPage";
 
 function Main() {
   const { user, loading } = useAuth();
@@ -26,12 +27,26 @@ function Main() {
   return <Shell />;
 }
 
+// The shareable diagnosis renders OUTSIDE the auth provider: a cold prospect has
+// no session and must never trigger an auth probe or see the sign-in gate. Every
+// other path runs through the authenticated app shell.
+function Root() {
+  const { path } = useRouter();
+  const publicMatch = matchPath("/d/:token", path);
+  if (publicMatch) {
+    return <PublicDiagnosisPage token={publicMatch.token} />;
+  }
+  return (
+    <AuthProvider>
+      <Main />
+    </AuthProvider>
+  );
+}
+
 export default function App() {
   return (
     <RouterProvider>
-      <AuthProvider>
-        <Main />
-      </AuthProvider>
+      <Root />
     </RouterProvider>
   );
 }

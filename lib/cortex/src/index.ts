@@ -107,9 +107,33 @@ export {
   runNarrate,
   runScore,
   runEnrichment,
+  runFindingChallengeConfound,
+  runFindingChallengeDecision,
 } from "./stages/runners";
+
+// Interactive Challenge (Phase AA): the finding-scoped re-reasoning schemas,
+// types, and prompt input. A challenge re-reasons one finding, never a layer.
+export {
+  findingChallengeConfoundSchema,
+  findingChallengeDecisionSchema,
+  findingChallengeOutcomeEnum,
+  type FindingChallengeConfound,
+  type FindingChallengeDecision,
+  type FindingChallengeOutcome,
+} from "./schemas/findingChallenge";
+export { type FindingChallengeInput } from "./prompts/findingChallenge";
 export { assembleLayerContent, type AssembleResult } from "./stages/assemble";
 export { type StageResult, type StageTelemetry } from "./stages/types";
+
+// Editorial voice quality (Phase AB): a deterministic measurement of an
+// assembled layer's prose against a fixed bar. A measurement, never an edit.
+export {
+  evaluateNarrativeVoice,
+  VOICE_BAR,
+  type VoiceBand,
+  type VoiceCheck,
+  type VoiceReport,
+} from "./quality/voice";
 
 // The extraction-zone seam (Tier 2, the split pipeline) and the default
 // in-boundary adapter. The orchestrator threads StageContext through the Lens

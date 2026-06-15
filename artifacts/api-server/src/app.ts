@@ -10,11 +10,16 @@ import { backupsRouter } from "./routes/backups";
 import { benchmarksRouter } from "./routes/benchmarks";
 import { clientRouter } from "./routes/client";
 import { captureError } from "./lib/observability/sentryReporter";
+import { redactRoute } from "./lib/observability/redactRoute";
 import { healthRouter } from "./routes/health";
 import { layersRouter } from "./routes/layers";
 import { operationsRouter } from "./routes/operations";
+import { portfolioRouter } from "./routes/portfolio";
+import { publicRouter } from "./routes/public";
+import { pushRouter } from "./routes/push";
 import { retentionRouter } from "./routes/retention";
 import { securityRouter } from "./routes/security";
+import { sellabilityRouter } from "./routes/sellability";
 import { spendRouter } from "./routes/spend";
 import { tenantsRouter } from "./routes/tenants";
 
@@ -86,6 +91,14 @@ app.use("/api/client", requireAuth, clientRouter);
 // header; the bearer credential is its sole trust root.
 app.use("/api/agent", agentRouter);
 
+// The public, unauthenticated shareable diagnosis (Phase AB). Gated by an opaque
+// share token inside the router (per-IP rate limited, token resolved to a single
+// tenant, board-pack-level projection only), NOT by a user session, so it is
+// mounted ahead of the session gate below. This is the only data surface that
+// serves an unauthenticated read, and it never exposes connector data,
+// provenance, the full causes/proof arrays, or any identity.
+app.use("/api/public", publicRouter);
+
 // Everything else under /api requires a valid, non-disabled session. requireAuth
 // runs once here; the data routers follow. Per-tenant fencing is enforced inside
 // the tenants router on the :id routes.
@@ -95,6 +108,24 @@ app.use("/api", architectureRouter);
 app.use("/api", tenantsRouter);
 app.use("/api", securityRouter);
 app.use("/api", retentionRouter);
+
+// The Portfolio Intelligence view (Phase Y). Mounted under the shared session
+// gate above; the router itself resolves scope from the session and refuses any
+// non-portfolio, non-provider seat with 403 portfolio_only, so it needs no
+// dedicated role gate here.
+app.use("/api/portfolio", portfolioRouter);
+
+// The Proactive Push Intelligence surface (Phase Z). Mounted under the shared
+// session gate above; every route is per-user and double-fenced inside the router
+// (ownerUserId = me AND tenant reachable), so it needs no dedicated role gate.
+app.use("/api/push", pushRouter);
+
+// The Sellability Pack authed surface (Phase AB). Mounted under the shared
+// session gate above; every route additionally requires a provider seat (and the
+// tenant routes per-tenant access) inside the router, since minting, revoking, and
+// listing shares and reading the anonymized case studies are provider-side selling
+// actions, never a client or portfolio concern.
+app.use("/api", sellabilityRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
@@ -106,8 +137,10 @@ app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   // Phase P: capture the unhandled error to the aggregator. Fire-and-forget and
   // best-effort (captureError never throws), so it never delays or alters the
   // response. Only the request path is attached, never the body, query, or
-  // headers, so no secret or client data reaches the wire.
-  void captureError(err, { subsystem: "http", route: req.path, level: "error" });
+  // headers, so no secret or client data reaches the wire. The path itself is
+  // redacted first (Phase AB): the public diagnosis route carries a bearer share
+  // token as a path segment, which must never reach the observability aggregator.
+  void captureError(err, { subsystem: "http", route: redactRoute(req.path), level: "error" });
   res.status(500).json({ error: "Internal server error" });
 });
 
