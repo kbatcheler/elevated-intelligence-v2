@@ -96,7 +96,11 @@ export class AwsSecretsManagerSecretStore implements SecretStore {
     const region = this.requireRegion();
     const credentials = resolveAwsCredentials(this.options.credentials);
     const url = this.endpoint(region) + "/";
-    const payload = Buffer.from(JSON.stringify(body), "utf8");
+    // Sign over the exact UTF-8 bytes of the JSON, then send that same string as
+    // the body. fetch encodes the string as UTF-8, so the bytes are byte-identical
+    // to the signed payload and the signature verifies.
+    const json = JSON.stringify(body);
+    const payload = Buffer.from(json, "utf8");
     const signed = signRequestV4({
       method: "POST",
       url,
@@ -109,9 +113,9 @@ export class AwsSecretsManagerSecretStore implements SecretStore {
       },
       payload,
       addContentSha256Header: true,
-      now: this.now()(),
+      now: this.now(),
     });
-    return this.fetchImpl(url, { method: "POST", headers: signed.headers, body: payload, signal });
+    return this.fetchImpl(url, { method: "POST", headers: signed.headers, body: json, signal });
   }
 
   // Read the AWS error code (__type) from a non-2xx response, without ever

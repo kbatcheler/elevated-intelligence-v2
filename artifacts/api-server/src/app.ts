@@ -1,3 +1,4 @@
+import path from "node:path";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { logger } from "./lib/logger";
@@ -166,6 +167,45 @@ app.use("/api/push", pushRouter);
 // listing shares and reading the anonymized case studies are provider-side selling
 // actions, never a client or portfolio concern.
 app.use("/api", sellabilityRouter);
+
+// Portal static serving for the single-container production model. The portal is
+// a static SPA build; in production the API serves it at "/" and the API under
+// "/api", "/v1", and "/mcp", so the whole system runs from one image (the Cloud
+// Run target in docs/migration-runbook.md). In local development the vite dev
+// server serves the portal instead, so this is gated by PORTAL_DIST_DIR and is
+// inert by default, which keeps the test app a pure JSON API. Env is read per
+// request so the behaviour stays twelve-factor and is directly testable.
+let portalStaticDir: string | undefined;
+let portalStatic: ReturnType<typeof express.static> | undefined;
+function portalStaticHandler(dir: string): ReturnType<typeof express.static> {
+  if (!portalStatic || portalStaticDir !== dir) {
+    portalStaticDir = dir;
+    portalStatic = express.static(dir, { index: false });
+  }
+  return portalStatic;
+}
+
+// First, serve a real built asset (hashed js/css, favicon) when one exists.
+app.use((req, res, next) => {
+  const dir = process.env.PORTAL_DIST_DIR;
+  if (!dir) return next();
+  portalStaticHandler(dir)(req, res, next);
+});
+
+// Then the SPA fallback: a GET/HEAD navigation that is not an API path and did
+// not match a static asset gets the portal shell, so a client-side deep link
+// resolves. An unknown API path falls through to the JSON 404 below, never the
+// HTML shell, so an API caller always gets an honest JSON error.
+app.use((req, res, next) => {
+  const dir = process.env.PORTAL_DIST_DIR;
+  if (!dir) return next();
+  if (req.method !== "GET" && req.method !== "HEAD") return next();
+  const p = req.path;
+  if (p.startsWith("/api") || p.startsWith("/v1") || p.startsWith("/mcp")) return next();
+  res.sendFile(path.join(dir, "index.html"), (err) => {
+    if (err) next(err);
+  });
+});
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });

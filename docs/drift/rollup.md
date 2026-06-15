@@ -1,10 +1,44 @@
-# Drift rollup: Phases A through AG
+# Drift rollup: Phases A through AI
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase AG (the curated custom-layer creation flow, the fourth phase of Stage 5,
+Last updated after Phase AI (verification and the build-report append, the closing phase and milestone of
+Stage 5, Platform completion, and the end of the owner-authorized AE-through-AI sequence). Phase AI builds
+no product code: it maps every Stage 5 acceptance criterion to the existing tested evidence, re-runs the
+gates fresh (typecheck and build green, the full suite green at 888 tests, the long-dash sweep zero on
+both sides over all 144 public text and jsonb columns across the 39 base tables), and consolidates the
+Stage 5 build-report append, mirroring how Phase M closed Stage 2, Phase V closed Stage 3, and Phase AC
+closed Stage 4. The last feature phase it follows, AH (cloud portability, run under the same
+owner-authorized AE-through-AI sequence whose only milestone hard stop is Phase AI), makes the deployment
+portable off this single managed host without changing one product guarantee: it
+adds a second cloud target for each "available, not connected" seam, proves the queue is safe across more
+than one instance, and writes the deploy artifacts. One shared zero-dependency AWS SigV4 signer
+(`lib/aws/sigv4.ts`, `node:crypto` only) is pinned by AWS's published IAM ListUsers vector plus per-rule
+canonicalization properties (single-encode for s3, double-encode for other services, sorted query, sorted
+and trimmed signed headers, payload sha256). An AWS Secrets Manager adapter mirrors the Phase Q GCP one
+(available-not-connected until a region is set, the SAME `[A-Za-z0-9_-]{1,255}` ref grammar so a reference
+is byte-identical across providers, the full surface over the signer and fetch, ResourceNotFoundException
+to null, no value or token or body logged, `SECRET_STORE_PROVIDER=aws`), and an S3 archive adapter mirrors
+the Phase U GCS one (available-not-connected until `S3_ARCHIVE_BUCKET` is set, put/get/list/describe with
+a non-secret describe, write-once via `If-None-Match: *` returning 412, `ARCHIVE_STORE_PROVIDER=s3`). A
+new integration test proves the `pipeline_jobs` queue claims every job exactly once across two
+simultaneous instances with terminal rows equal to input, documenting that `LAYER_CONCURRENCY` is
+per-instance and fleet parallelism is instances times that with no fleet-wide ceiling claimed. The deploy
+artifacts (a multi-stage `Dockerfile` that serves the built portal and the API as one process, a
+local-parity `docker-compose.yml`, `infra/gcp/*.tf`, and `docs/migration-runbook.md`) are written and
+ASCII-verified but NOT built here, because this container has no Docker daemon. The global gates were
+re-run fresh: typecheck and build green, the full suite green at 888 tests (api-server 493, portal 234,
+cortex 110, connectors 29, edge-agent 10, db 8, scripts 4; +35 from AG, all in api-server), and the
+long-dash sweep zero on both sides over all 144 public text and jsonb columns across 39 base tables (no
+schema added). Zero new npm dependencies. The architect `evaluate_task` returned PASS after one remediation round (the first review caught the GCP Terraform missing a Cloud Run `roles/run.invoker` grant, so the service URL would have been unreachable; a gated public-invoker binding to `allUsers` plus the access-model documentation were added and the gates re-run green before PASS). The new still-live
+items (the per-instance LAYER_CONCURRENCY operational fact and the Docker and live-cloud owner-rerun
+boundary) are added below. Phase AI, the final phase of Stage 5, then mapped every Stage 5 acceptance
+criterion to existing tested evidence and re-ran the gates green; its architect `evaluate_task` returned
+PASS. Phase AI now CLOSES Stage 5 and PAUSES at the milestone for owner review; it does not auto-advance.
+
+Earlier, updated after Phase AG (the curated custom-layer creation flow, the fourth phase of Stage 5,
 Platform completion, run under the owner-authorized AE-through-AI sequence; Phase AF paused at its own
 gate on the real-endpoint blocker and the owner authorized proceeding). Phase AG turns the always-latent
 "custom layers are more rows" capability of the `layers` registry (the single source of layer identity,
@@ -194,6 +228,8 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 | AE | Ingestion Suite | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
 | AF | Local LLM Seat and Sovereign Mode | Pass | no (gated, Stage 5; PAUSED at the AF gate on the real-endpoint blocker, does not auto-advance to AG) |
 | AG | Curated Custom-Layer Creation Flow | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
+| AH | Cloud Portability | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
+| AI | Verification and the Build-Report Append (closes Stage 5) | Pass | yes (milestone hard stop; closes Stage 5, end of the autonomous AE-AF-AG-AH-AI run, paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -318,6 +354,20 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   and the `/layers` routes ARE integration-tested, but there is no portal-side rendering test. Accepted as
   logged drift, mirroring the AE ingestion-panel and AF sovereign-surface items; a future lightweight
   portal test can close it.
+- Multi-instance fan-out has no fleet-wide ceiling, by design (AH). `LAYER_CONCURRENCY` is the
+  per-instance worker count, so the total parallelism across a fleet is `instances * LAYER_CONCURRENCY`.
+  The `pipeline_jobs` queue (not a coordinator) is the safety boundary: an integration test proves each
+  job is claimed exactly once across two simultaneous instances with terminal rows equal to input. This is
+  an operational fact to size deliberately, not a defect; no global limiter is claimed.
+- Cloud portability is proven by adapter, not by a live container or cloud (AH). The AWS SigV4 signer, the
+  AWS Secrets Manager and S3 adapters, the multi-instance queue proof, and the single-process
+  portal-plus-API serving are test-proven through the workflows, but four things are the owner's to run and
+  are NOT done here (claiming them would be fabrication): `docker build` and `docker compose up` (no Docker
+  daemon in this container), a full in-container demo seed (needs a Docker host plus live model provider
+  keys, and a live frontier seed is deliberately not re-run for cost), a live AWS or GCP run of the
+  available-not-connected adapters (needs real credentials and a bucket the owner provisions), and
+  `terraform apply` of `infra/gcp` plus the durable Postgres and PITR the platform owns. The
+  provable-versus-owner-rerun split is in `phase-AH.md`.
 
 ## Live but runtime-only or cosmetic
 

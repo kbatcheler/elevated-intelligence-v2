@@ -1,1 +1,3 @@
-- [DB-wide long-dash sweep](db-long-dash-sweep.md) - how to run the two-sided dash gate's DB half; executeSql drops RAISE NOTICE, so return a scalar, not a DO block.
+# Memory index
+
+- [Stage gate workflow quirks](stage-gate-workflow-quirks.md) - log-flush ordering, infra/ ASCII not CI-guarded, known flaky test, drift-protocol gate sequence.

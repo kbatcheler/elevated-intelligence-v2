@@ -1,0 +1,91 @@
+# Local parity for the production image. The same Dockerfile builds one image
+# that this file runs three ways: as the schema migrator, as the app, and (under
+# the "seed" profile) as a full demo seed, all against a throwaway Postgres. It
+# mirrors the cloud topology (one stateless app container plus a managed
+# Postgres) closely enough to be the portability proof on a laptop:
+#
+#   docker compose up --build               # migrate, then serve on :8080
+#   docker compose --profile seed run --rm seed   # full demo seed in the image
+#
+# The values below are local-only. In the cloud every secret comes from the
+# platform secret manager through the SecretStore, never from a compose file.
+
+name: elevated-intelligence-v2
+
+services:
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: ei
+      POSTGRES_PASSWORD: ei_local_only
+      POSTGRES_DB: ei
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ei -d ei"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot: push the Drizzle schema into the database, then exit. The app
+  # depends on this completing so it never serves against an unmigrated database.
+  migrate:
+    build:
+      context: .
+      target: runtime
+    command: ["pnpm", "--filter", "@workspace/db", "push"]
+    environment:
+      DATABASE_URL: postgres://ei:ei_local_only@db:5432/ei
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build:
+      context: .
+      target: runtime
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://ei:ei_local_only@db:5432/ei
+      # Local-only development values. In the cloud these are resolved from the
+      # platform secret manager through the SecretStore, never set in a file.
+      SESSION_SECRET: local_dev_session_secret_change_me
+      OWNER_EMAIL: owner@example.com
+      OWNER_PASSWORD: local_dev_owner_password_change_me
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Optional full demo seed inside the running image. Enable with:
+  #   docker compose --profile seed run --rm seed
+  # A complete seed exercises the model pipeline, so it needs the provider keys
+  # (AI_INTEGRATIONS_ANTHROPIC_* and AI_INTEGRATIONS_GEMINI_*) in the
+  # environment; without them the connector and ingestion seeds still run.
+  seed:
+    profiles: ["seed"]
+    build:
+      context: .
+      target: runtime
+    command: ["pnpm", "--filter", "@workspace/api-server", "seed:demo"]
+    environment:
+      DATABASE_URL: postgres://ei:ei_local_only@db:5432/ei
+      SESSION_SECRET: local_dev_session_secret_change_me
+      OWNER_EMAIL: owner@example.com
+      OWNER_PASSWORD: local_dev_owner_password_change_me
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+volumes:
+  db-data:

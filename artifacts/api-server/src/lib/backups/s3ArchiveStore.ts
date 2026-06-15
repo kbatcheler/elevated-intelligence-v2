@@ -119,7 +119,7 @@ export class S3ArchiveStore implements ArchiveStore {
         headers,
         payload: bytes,
         addContentSha256Header: true,
-        now: this.now()(),
+        now: this.now(),
       });
       const res = await this.fetchImpl(url, { method: "PUT", headers: signed.headers, body: bytes, signal });
       if (res.status === 412) {
@@ -145,7 +145,7 @@ export class S3ArchiveStore implements ArchiveStore {
         service: SERVICE,
         credentials,
         addContentSha256Header: true,
-        now: this.now()(),
+        now: this.now(),
       });
       const res = await this.fetchImpl(url, { method: "GET", headers: signed.headers, signal });
       if (res.status === 404) return null;
@@ -169,7 +169,7 @@ export class S3ArchiveStore implements ArchiveStore {
         service: SERVICE,
         credentials,
         addContentSha256Header: true,
-        now: this.now()(),
+        now: this.now(),
       });
       const res = await this.fetchImpl(url, { method: "GET", headers: signed.headers, signal });
       if (res.status !== 200) {

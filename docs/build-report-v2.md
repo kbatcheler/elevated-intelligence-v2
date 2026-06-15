@@ -2269,3 +2269,173 @@ tables reports zero hits. Zero new npm dependencies. The architect `evaluate_tas
 first pass with no findings. The drift index, the rollup, and this build report are updated to "A through
 AG". Per the owner-authorized AE-through-AI sequence Phase AG does NOT pause at its own gate; execution
 continues to Phase AH. The next protocol milestone hard stop is Phase AI at the end of Stage 5.
+
+## Phase AH: cloud portability
+
+Phase AH is the fifth phase of Stage 5 (Platform completion), run under the owner-authorized
+AE-through-AI sequence whose only milestone hard stop is Phase AI. It makes the deployment portable off
+this single managed host without changing one product guarantee: it adds a second cloud target for each
+"available, not connected" seam (AWS alongside the existing GCP), proves the seed queue is safe across
+more than one running instance, and writes the deploy artifacts so an owner can stand the system up on
+their own infrastructure. Zero new npm dependencies (node:crypto and the Node global fetch only, no AWS
+SDK); ASCII hyphen only in source, in data, and in these documents.
+
+### The shared SigV4 signer
+
+One zero-dependency AWS Signature Version 4 signer (`artifacts/api-server/src/lib/aws/sigv4.ts`, built on
+`node:crypto` alone) is shared by both AWS adapters so the signing logic lives in exactly one place. The
+canonical URI is single-encoded for `s3` and double-encoded for every other service, the query string is
+sorted, the signed headers are lowercased, trimmed, and sorted, `host` and `x-amz-date` are always signed
+with an optional `x-amz-security-token`, and the payload is hashed with sha256 (so a write-once
+`If-None-Match` header is part of the signed set for the S3 path). Credentials resolve lazily from
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and the optional `AWS_SESSION_TOKEN`; their absence throws a
+precise error rather than signing with empty keys. The signer is pinned by a golden test against AWS's
+published IAM `ListUsers` example vector plus a property test for each canonicalization rule.
+
+### The two cloud adapters
+
+The AWS Secrets Manager adapter (`lib/secrets/awsSecretsManagerSecretStore.ts`) mirrors the Phase Q GCP
+adapter exactly: available-not-connected until a region is set (the first call throws "AWS Secrets Manager
+is available, not connected: set AWS_SECRETS_MANAGER_REGION (or AWS_REGION) to connect it."), the full
+`GetSecretValue` / `CreateSecret` / `PutSecretValue` / `DeleteSecret` surface over the signer and the
+global fetch, a `ResourceNotFoundException` mapped to null on read and tolerated idempotently on delete,
+and no value, token, or body ever logged. Critically it uses the SAME `[A-Za-z0-9_-]{1,255}` ref grammar
+as the GCP adapter, so a secret reference (a tenant `authRef`) is byte-identical across providers and
+stays portable when the backend changes. `getSecretStore` selects it with `SECRET_STORE_PROVIDER=aws`.
+
+The S3 archive adapter (`lib/backups/s3ArchiveStore.ts`) is the AWS sibling of the Phase U GCS adapter:
+available-not-connected until `S3_ARCHIVE_BUCKET` is set, `put` / `get` / `list` / `describe` over the
+signer and fetch, where `describe` reports only `{ provider: "s3", connected }` and never a bucket, path,
+or credential, so the owner-only backup status route stays non-secret. Write-once is enforced with the
+`If-None-Match: *` precondition S3 honours: a second write to a key returns 412 and is surfaced loudly
+rather than overwriting, preserving the ledger archive's immutability. The endpoint is overridable so the
+tests drive it path-style against an injected fetch with no live bucket. `createArchiveStore` selects it
+with `ARCHIVE_STORE_PROVIDER=s3`.
+
+### Multi-instance queue ownership
+
+The `pipeline_jobs` seed queue has always claimed each job with `FOR UPDATE SKIP LOCKED`. Phase AH adds an
+integration test that stands up two distinct instance ids, each running its own worker pool, both draining
+one tenant's queue at once, and asserts every layer is claimed by exactly one worker, the count of
+terminal rows equals the count of input jobs (nothing dropped or duplicated), and the work is observably
+distributed across both instances. This documents the operational contract: `LAYER_CONCURRENCY` is the
+per-instance worker count, so fleet-wide parallelism is `instances * LAYER_CONCURRENCY`, and no fleet-wide
+ceiling is claimed because the queue itself, not a coordinator, is the safety boundary.
+
+### The deploy artifacts
+
+A multi-stage `Dockerfile` builds the workspace on `node:22-bookworm-slim` with the repo's pinned pnpm
+(portal built to `dist/public`, api-server bundled to `dist/index.mjs`) and runs `node
+artifacts/api-server/dist/index.mjs` as a single twelve-factor process that serves both the API and the
+built portal (`PORTAL_DIST_DIR`), with a `HEALTHCHECK` on `/health`. The api-server already served the
+built portal when `PORTAL_DIST_DIR` is set, excluding the `/api`, `/v1`, and `/mcp` namespaces from the
+SPA fallback and returning a JSON 404 for an unknown API path; Phase AH adds the integration test pinning
+this. A `docker-compose.yml` is the local-parity stack (a `postgres:16-bookworm` database, a one-shot
+migrate running `pnpm --filter @workspace/db push`, the app, and an optional seed profile),
+`infra/gcp/*.tf` is a minimal executable GCP target (Cloud Run v2 with a `roles/run.invoker` grant to
+`allUsers`, gated by the `allow_unauthenticated` variable that defaults to true, so the service URL is
+reachable by a browser while the app keeps its own application-layer authorization; Cloud SQL Postgres 16;
+Secret Manager for `SESSION_SECRET` and `OWNER_PASSWORD` via `SECRET_STORE_PROVIDER=gcp`; a `DATABASE_URL`
+secret env over the `/cloudsql` socket; and a GCS bucket), and `docs/migration-runbook.md` documents the GCP primary path,
+the AWS equivalent, the drizzle migration, and the cutover and rollback. These artifacts are written and
+ASCII-verified but NOT built here.
+
+### The honesty boundary: proven here versus owner must run on a Docker host
+
+Test-proven here through the workflows: the SigV4 signer against AWS's vector and the canonicalization
+properties, both cloud adapters' full surface and available-not-connected behaviour over an injected
+fetch, the cross-provider portable ref grammar, the S3 write-once 412, the queue's exactly-once guarantee
+across two simultaneous instances against real Postgres, and the single-process portal-plus-API serving
+with the API namespaces protected from the SPA shell. NOT done here and the owner's to run (claiming any of
+it would be fabrication): `docker build` and `docker compose up` (no Docker daemon in this container), a
+full in-container demo seed (needs a Docker host plus live model provider credentials, and a live frontier
+seed is deliberately not re-run for cost), a live AWS or GCP run of the available-not-connected adapters
+(needs real credentials and a bucket the owner provisions), and `terraform apply` of `infra/gcp` plus the
+durable Postgres and point-in-time recovery the platform owns.
+
+### Verification
+
+Typecheck and build green across the workspace. The full suite is green at 888 tests (api-server 493
+across 58 files, portal 234 across 18, cortex 110 across 13, connectors 29 across 5, edge-agent 10 across
+3, db 8, scripts 4), up 35 from Phase AG's 853, all in api-server (56 to 58 files): sigv4 9 and
+portalStatic.integration 5 (two new files), the AwsSecretsManagerSecretStore describe (+9) in secretStore,
+the two S3ArchiveStore describes (+10) in archiveStore, and the multi-instance queue cases (+2). The
+long-dash sweep is zero on both sides: the source guard is green over authored source including this Phase
+AH Markdown, and a fresh database-wide cast over all 144 public text and jsonb columns across 39 base
+tables (no schema added this phase) reports zero hits. Zero new npm dependencies. The architect
+`evaluate_task` returned PASS after one remediation round: the first review flagged a single deploy-artifact
+blocker (the GCP Terraform created the Cloud Run service and output its URL but granted no
+`roles/run.invoker`, so the URL would have rejected every browser and the runbook's `GET /health` smoke
+test), which was fixed by adding a gated `roles/run.invoker` grant to `allUsers` plus the access-model
+documentation, after which the three workflow gates were re-run green. The drift index, the rollup, and
+this build report are updated to "A through AH". Per the owner-authorized AE-through-AI sequence Phase AH does NOT pause at its own gate; execution
+continues to Phase AI, the final phase of Stage 5 and the next protocol milestone hard stop.
+
+## Phase AI: verification and the build-report append (closes Stage 5)
+
+Phase AI is the closing phase and milestone of Stage 5 (Platform completion), the end of the
+owner-authorized AE-through-AI sequence. It built no product feature and changed no product code; like
+Phase M closed Stage 2, Phase V closed Stage 3, and Phase AC closed Stage 4, its only artifacts are the
+Stage 5 evidence matrix (`docs/drift/phase-AI.md`), this build-report append, and the drift updates. It
+added zero npm dependencies and contains no em-dash or en-dash in source or in data.
+
+### What Stage 5 delivered
+
+Stage 5 turned a finished single-host product into a complete, portable, self-serviceable platform across
+five phases. Phase AD audited the full application against the design language and fixed the drift it
+found without an overhaul: shared responsive chrome so the read pages stay usable at 375px, a tone-to-ink
+mapping so normal-sized tone text clears WCAG AA contrast, and a global focus ring, with the
+design-language doc reconciled to the implementation. Phase AE added the ingestion suite: five inbound
+data paths (a per-tenant key gated ingestion API with an OpenAPI document, timing-safe HMAC webhooks, a
+strict-MIME manual upload that keys numeric data positionally so a raw header never lands in a stored
+key, an SFTP drop that deletes every file whether processed or rejected, and an MCP server under
+per-tenant auth) on ONE shared derive-and-discard core that persists only the derived math and keeps no
+raw store, raw column, or lingering raw file, proven system-wide by a unique-sentinel sweep. Phase AF
+added the local LLM seat and a single sovereign data mode that runs every cortex stage in-boundary on the
+local seat, with confound and challenge still running but grounding honestly dropped, sovereign-only
+telemetry recorded only from a real run, and a fail-loud guard against a faked verification channel,
+proven hermetically because this container has no local model endpoint. Phase AG added the curated
+custom-layer creation flow: an owner-gated layer lifecycle where one shared runnable predicate gates both
+the seed fan-out and the portal catalog so an unapproved custom layer runs nowhere and the two can never
+disagree, with an optional benchmark mapping that pools a mapped layer under its canonical key and
+excludes an unmapped one so a cohort is never fabricated. Phase AH made the deployment portable off this
+single managed host: a shared zero-dependency AWS SigV4 signer, an AWS Secrets Manager and an S3 archive
+adapter mirroring the GCP and GCS ones with the SAME portable ref grammar and write-once semantics, a
+proof that the queue claims each job exactly once across more than one instance, and the deploy artifacts
+(a multi-stage Dockerfile, a local-parity compose file, executable GCP Terraform with the invoker
+binding that makes the Cloud Run URL reachable, and a migration runbook).
+
+### What this phase verified
+
+Each Stage 5 acceptance criterion is mapped in `phase-AI.md` to existing tested evidence with the proof
+type marked honestly. The integration suite proves, against live Postgres, the five ingestion paths and
+the system-wide raw-artifact absence sweep, the custom-layer create and owner-only approve and catalog
+gating, the queue claiming each job exactly once across two simultaneous instances, and the
+single-process portal-plus-API serving. Deterministic unit tests prove the AWS SigV4 signer against AWS's
+published vector, the custom-layer template validation and the archetype lockstep guard, and the
+benchmark cohort math. Sovereign mode is proven hermetically by an in-process conformance server and
+spies with no live model (connected makes zero frontier calls from the extraction zone; sovereign makes
+zero external calls anywhere, every stage on the local runtime, confound and challenge not skipped). Two
+classes are honestly not live here and are verified as honest seams: the AWS, S3, GCP, and GCS adapters
+are available-not-connected unless their env is configured, and the deploy artifacts are ASCII-verified
+but not built because this container has no Docker daemon. Two paths are honestly marked source-reviewed,
+the accepted LOWs: the portal ingestion admin client and the portal custom-layer panel, whose server
+endpoints and client functions are tested. The owner-rerun boundary carried out of Stage 5 is the
+sovereign real-endpoint full seed (AF) and the Docker build, full in-container seed, live cloud run, and
+`terraform apply` (AH), all recorded honestly rather than faked. No Stage 5 figure is fabricated: a value
+is computed from persisted state or it is not shown.
+
+### Verification
+
+The global gates were re-run fresh for this phase. Typecheck and build are green across the workspace
+(exit 0 on both; portal 1756 modules, api-server bundled to `dist/index.mjs`). The full suite is green at
+888 tests (api-server 493 across 58 files, portal 234 across 18 files, cortex 110 across 13 files,
+connectors 29 across 5 files, edge-agent 10 across 3 files, db 8, scripts 4); this phase added no tests
+and changed no product code. The long-dash sweep is zero on both sides: the source guard is green over
+authored source including the Phase AH and AI Markdown, and a fresh database-wide cast over all 144
+public text and jsonb columns across the 39 base tables reports zero hits; the Terraform and the root
+Dockerfile, which the source guard's roots do not cover, were verified ASCII by hand. Zero new npm
+dependencies. The architect `evaluate_task` returned PASS. The drift report is `phase-AI.md`; the drift
+index and the rollup are updated to "A through AI". Phase AI closes Stage 5 (Platform completion) and is
+the final milestone of the owner-authorized AE-through-AI sequence; the build now PAUSES at the Phase AI
+milestone for owner review and does not auto-advance.
