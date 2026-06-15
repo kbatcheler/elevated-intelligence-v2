@@ -12,10 +12,15 @@ import { clientRouter } from "./routes/client";
 import { captureError } from "./lib/observability/sentryReporter";
 import { redactRoute } from "./lib/observability/redactRoute";
 import { healthRouter } from "./routes/health";
+import { ingestRouter } from "./routes/ingest";
+import { mcpRouter } from "./routes/mcp";
+import { ingestionAdminRouter } from "./routes/ingestionAdmin";
 import { layersRouter } from "./routes/layers";
 import { operationsRouter } from "./routes/operations";
 import { portfolioRouter } from "./routes/portfolio";
 import { publicRouter } from "./routes/public";
+import { uploadRouter } from "./routes/upload";
+import { webhookRouter } from "./routes/webhooks";
 import { pushRouter } from "./routes/push";
 import { retentionRouter } from "./routes/retention";
 import { securityRouter } from "./routes/security";
@@ -46,7 +51,18 @@ app.use(
   }),
 );
 
-app.use(express.json());
+// The body limit is raised from the 100kb default to admit a full ingestion
+// signal set (Phase AE) while still bounding an oversized post. The verify hook
+// captures the exact raw bytes on req.rawBody so the webhook receiver can
+// recompute its HMAC over the body the client signed, not a re-serialisation.
+app.use(
+  express.json({
+    limit: "1mb",
+    verify: (req, _res, buf) => {
+      (req as Request & { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 
 // Liveness, no auth.
 app.use("/", healthRouter);
@@ -91,6 +107,26 @@ app.use("/api/client", requireAuth, clientRouter);
 // header; the bearer credential is its sole trust root.
 app.use("/api/agent", agentRouter);
 
+// The public Ingestion API (Phase AE). Gated by its own per-tenant ingestion key
+// inside the router (rate limited, tenant resolved from the key), NOT by a user
+// session, so it is mounted ahead of the session gate below. Every payload is
+// derived numeric math by contract; no raw artifact is persisted.
+app.use("/v1/ingest", ingestRouter);
+
+// The inbound webhook receiver (Phase AE). Public, gated only by a per-source
+// HMAC over the raw body (verified inside the router), NOT by a user session, so
+// it is mounted ahead of the session gate below. Mounted under /api/webhooks
+// before the /api session gate so the more specific path wins. Every payload is
+// derived numeric math; no raw artifact is persisted.
+app.use("/api/webhooks", webhookRouter);
+
+// The MCP server (Phase AE). Speaks JSON-RPC 2.0, gated by the same per-tenant
+// ingestion key as the Ingestion API (verified inside the router), NOT by a user
+// session, so it is mounted ahead of the session gate below. submit_signals
+// writes through the shared derive-and-discard terminus; the read tools never
+// fabricate a result.
+app.use("/mcp", mcpRouter);
+
 // The public, unauthenticated shareable diagnosis (Phase AB). Gated by an opaque
 // share token inside the router (per-IP rate limited, token resolved to a single
 // tenant, board-pack-level projection only), NOT by a user session, so it is
@@ -106,6 +142,10 @@ app.use("/api", requireAuth);
 app.use("/api", layersRouter);
 app.use("/api", architectureRouter);
 app.use("/api", tenantsRouter);
+// Ingestion suite admin console (Phase AE): mint/list/revoke per-tenant ingestion
+// keys and webhook sources. Provider-only inside the router, behind this gate.
+app.use("/api", ingestionAdminRouter);
+app.use("/api", uploadRouter);
 app.use("/api", securityRouter);
 app.use("/api", retentionRouter);
 

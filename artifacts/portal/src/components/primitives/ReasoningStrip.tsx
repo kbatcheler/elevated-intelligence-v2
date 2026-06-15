@@ -71,6 +71,13 @@ export function ReasoningStrip({
   const [open, setOpen] = useState(false);
   const stages = run?.subStages ?? [];
   const confounderCount = confounders?.length ?? 0;
+  // Sovereign honesty marker: surfaced ONLY when the run actually recorded it on a
+  // sub-stage. In sovereign mode every stage ran in-boundary on the local seat
+  // with no external provider, so there was no external grounding or web-search
+  // verification channel. This is read straight off the recorded telemetry, never
+  // inferred; an outside_in or connected run records no marker and the strip is
+  // unchanged for it.
+  const sovereign = stages.some((s) => s.telemetry?.executionMode === "sovereign");
 
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -95,6 +102,20 @@ export function ReasoningStrip({
           <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>
             How this was reasoned
           </span>
+          {sovereign && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--navy-soft)",
+                border: "1px solid var(--border)",
+                borderRadius: 999,
+                padding: "2px 8px",
+              }}
+            >
+              Sovereign mode
+            </span>
+          )}
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--slate-light)", fontSize: 12 }}>
           <span>
@@ -114,6 +135,12 @@ export function ReasoningStrip({
               {stages.map((s, i) => (
                 <StageRow key={i} stage={s} />
               ))}
+            </div>
+          )}
+          {sovereign && (
+            <div style={{ marginTop: 14, fontSize: 12, color: "var(--navy-soft)", display: "flex", flexWrap: "wrap", gap: "2px 16px" }}>
+              <span style={{ fontWeight: 600 }}>Reasoned in sovereign mode</span>
+              <span>External grounding unavailable</span>
             </div>
           )}
           <div style={{ marginTop: 14, fontSize: 12, color: "var(--slate-light)", display: "flex", flexWrap: "wrap", gap: "2px 16px" }}>

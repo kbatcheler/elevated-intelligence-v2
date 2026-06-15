@@ -16,9 +16,13 @@ import {
   deepStripDashes,
   evaluateNarrativeVoice,
   fetchHomepageContext,
+  sovereignNoFetchHomepageContext,
   LAYER_STAGES,
+  applySovereignNarrateCalibration,
+  applySovereignScoreCalibration,
   modelForStage,
   profileSchema,
+  resolveCortexDataMode,
   runChallenge,
   runConfound,
   runEnrichment,
@@ -63,26 +67,8 @@ import { getAlerter } from "../alerts/alerter";
 import { captureError } from "../observability/sentryReporter";
 import { assertSeedWithinBudget } from "./budget";
 import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } from "./queue";
+import { isReducedLayer } from "./reduceDecision";
 import { recordModelUsageSafe } from "./usage";
-
-// In express mode, only these high-signal layers run the full nine-stage
-// adversarial chain (perceive through supplements). Every other layer runs a
-// reduced chain with the confound and challenge sub-stages skipped. Full mode
-// runs the complete chain on every layer regardless of this set. The keys match
-// the registry's stable layer keys; they are a fixed product policy, not data.
-const PRIORITY_LAYER_KEYS = new Set<string>([
-  "business-performance",
-  "finance",
-  "pricing-margin",
-  "demand-intelligence",
-  "competitive-intelligence",
-]);
-
-// Whether a layer runs the reduced chain for a seed mode: only in express mode,
-// and only for layers outside the priority set.
-function isReducedLayer(mode: "full" | "express", layerKey: string): boolean {
-  return mode === "express" && !PRIORITY_LAYER_KEYS.has(layerKey);
-}
 
 export interface SeedOptions {
   log: Logger;
@@ -240,10 +226,20 @@ async function persistSubStages(ctx: RunCtx): Promise<void> {
 }
 
 // Run (or resume) one sub-stage. On resume, returns the persisted output.
+//
+// `calibrate` is an optional pure transform applied to the stage output BEFORE
+// it is persisted to the sub-stage JSONB and BEFORE it is returned, so the
+// persisted record can never expose an output the caller would only sanitise
+// later. Phase AF uses it to downgrade sovereign verified claims to modelled at
+// the narrate and score stages; it is the identity transform (a strict no-op,
+// returning the same object) in outside_in and connected mode, so the persisted
+// output is byte-for-byte unchanged there. On resume the already-persisted
+// output is already calibrated, so it is returned as is.
 async function executeStage<T>(
   ctx: RunCtx,
   stage: PipelineSubStageName,
   run: () => Promise<StageResult<T>>,
+  calibrate: (output: T) => T = (o) => o,
 ): Promise<T> {
   const node = ctx.subStages.find((s) => s.name === stage);
   if (!node) throw new Error(`unknown sub-stage ${stage}`);
@@ -283,9 +279,13 @@ async function executeStage<T>(
     throw new StageError(stage, result.reason);
   }
   node.status = "done";
-  node.output = result.output;
+  // Calibrate BEFORE persisting and returning, so the sub-stage JSONB and every
+  // downstream consumer only ever see the calibrated form (a strict no-op, the
+  // same object, in outside_in and connected mode).
+  const output = calibrate(result.output);
+  node.output = output;
   await persistSubStages(ctx);
-  return result.output;
+  return output;
 }
 
 // Mark a sub-stage as deliberately skipped by the reduced express chain. No
@@ -370,7 +370,27 @@ async function executeEnrichment(
       node.telemetry = result.telemetry;
       node.durationMs = result.telemetry.latencyMs;
     } else {
-      node.telemetry = { seat: STAGE_CONFIG[name].role, model: modelForStage(name), latencyMs: 0, batched: true };
+      // peers and supplements are folded out of the single batched call, so they
+      // carry the model that ACTUALLY ran and any sovereign honesty markers from
+      // that call, with batched:true and NO token fields so the Evaluator is
+      // counted exactly once. In outside_in and connected mode result.telemetry.model
+      // is the evaluator model (identical to the prior modelForStage(name)) and
+      // there are no markers, so those payloads stay byte-for-byte unchanged; in
+      // sovereign mode this reflects the local seat instead of falsely naming the
+      // external evaluator model with no markers.
+      node.telemetry = {
+        seat: STAGE_CONFIG[name].role,
+        model: result.telemetry.model,
+        latencyMs: 0,
+        batched: true,
+        ...(result.telemetry.executionMode !== undefined ? { executionMode: result.telemetry.executionMode } : {}),
+        ...(result.telemetry.groundingAvailable !== undefined
+          ? { groundingAvailable: result.telemetry.groundingAvailable }
+          : {}),
+        ...(result.telemetry.webSearchAvailable !== undefined
+          ? { webSearchAvailable: result.telemetry.webSearchAvailable }
+          : {}),
+      };
       node.durationMs = 0;
     }
   }
@@ -396,7 +416,11 @@ async function runLayer(
 ): Promise<LayerOutcome> {
   const resume = opts.resume !== false;
   const mode = opts.mode ?? "full";
-  const reduced = isReducedLayer(mode, layer.key);
+  // Sovereign mode never reduces: every stage, including the two adversarial
+  // ones, runs in-boundary, so isReducedLayer returns false there regardless of
+  // the seed mode (see reduceDecision). outside_in and connected keep the
+  // express priority-layer policy unchanged.
+  const reduced = isReducedLayer(mode, layer.key, dataMode);
 
   // Resume and the express->full upgrade share one skip decision. A built layer
   // satisfies this run unless it must be upgraded: an existing full build (the
@@ -450,20 +474,38 @@ async function runLayer(
       await persistSubStages(ctx);
     } else {
       confound = await executeStage<ConfounderOutput>(ctx, "confound", () =>
-        runConfound(profile, layer, hypothesise, log, grounding),
+        runConfound(profile, layer, hypothesise, log, grounding, stageCtx),
       );
       challenge = await executeStage<ChallengeOutput>(ctx, "challenge", () =>
-        runChallenge(profile, layer, hypothesise, confound, log, grounding),
+        runChallenge(profile, layer, hypothesise, confound, log, grounding, stageCtx),
       );
     }
-    const narrate = await executeStage<NarrateOutput>(ctx, "narrate", () =>
-      runNarrate(profile, layer, hypothesise, confound, challenge, log, grounding),
+    // Sovereign-mode honesty calibration. In sovereign mode no external grounding
+    // or web-search channel ran, so a claim can never be honestly verified: the
+    // narrate calibration downgrades any verified claim to modelled (used for the
+    // stored verifiedClaims array and the provenance ledger), and the score
+    // calibration downgrades any per-claim basis the Evaluator marked verified, so
+    // the assembled, displayed content carries no verified badge. Both are no-ops
+    // in outside_in and connected mode, leaving those paths byte-for-byte unchanged.
+    //
+    // The calibration is passed INTO executeStage so it runs before the sub-stage
+    // output is persisted to the JSONB, never after: the raw, uncalibrated narrate
+    // and score outputs (which a sovereign local model could mark verified) are
+    // never written to tenant_pipeline_runs.subStages, only the calibrated form.
+    const narrate = await executeStage<NarrateOutput>(
+      ctx,
+      "narrate",
+      () => runNarrate(profile, layer, hypothesise, confound, challenge, log, grounding, stageCtx),
+      (output) => applySovereignNarrateCalibration(output, dataMode),
     );
-    const score = await executeStage<ScoreOutput>(ctx, "score", () =>
-      runScore(profile, layer, narrate, confound, challenge, log, grounding),
+    const score = await executeStage<ScoreOutput>(
+      ctx,
+      "score",
+      () => runScore(profile, layer, narrate, confound, challenge, log, grounding, stageCtx),
+      (output) => applySovereignScoreCalibration(output, dataMode),
     );
     const { hero, peers, supplements } = await executeEnrichment(ctx, () =>
-      runEnrichment(profile, layer, narrate, log, grounding),
+      runEnrichment(profile, layer, narrate, log, grounding, stageCtx),
     );
 
     // The Evaluator (score) is the single writer of confidence and basis; the
@@ -482,6 +524,17 @@ async function runLayer(
     // layer is persisted with its real (lower) band, not silently corrected.
     const voiceQuality = evaluateNarrativeVoice(assembled.content);
 
+    // The generator model that actually produced the narrative, read from the
+    // narrate sub-stage's recorded telemetry rather than assumed. In outside_in
+    // and connected mode narrate ran on the external reasoner whose telemetry
+    // model is modelForStage("narrate"), so this is byte-for-byte the same value;
+    // in sovereign mode narrate ran on the local seat, so this honestly records
+    // the env-supplied local model id instead of a frontier model that never ran.
+    // Falls back to the configured narrate seat only if telemetry is somehow
+    // absent, which cannot happen on a successful run (executeStage throws first).
+    const narrateNode = ctx.subStages.find((s) => s.name === "narrate");
+    const generatorModel = narrateNode?.telemetry?.model ?? modelForStage("narrate");
+
     const row = deepStripDashes({
       content: assembled.content as unknown as Record<string, unknown>,
       heroPanel: hero as unknown as Record<string, unknown>,
@@ -492,7 +545,7 @@ async function runLayer(
       modelledClaims: { items: narrate.modelled_claims } as Record<string, unknown>,
       voiceQuality: voiceQuality as unknown as Record<string, unknown>,
       reducedMode: reduced,
-      generatorModel: modelForStage("narrate"),
+      generatorModel,
     });
 
     await db
@@ -628,11 +681,28 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
     return seedConnectedTenant(existingTenant[0].id, rawUrl, opts);
   }
 
-  log.info({ url: rawUrl }, "seed: fetching homepage ground truth");
-  const homepage = await fetchHomepageContext(rawUrl, log);
+  // Sovereign is a deployment-wide regime selected from the environment: it runs
+  // EVERY stage in-boundary with no external provider. An outside_in seed under
+  // sovereign therefore profiles and builds entirely on the local seat, with no
+  // public-web grounding. When unset this resolves to outside_in and changes
+  // nothing about the existing public-web path.
+  const dataMode: CortexDataMode = resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in";
 
-  log.info({ url: rawUrl, grounded: homepage.ok }, "seed: running profile stage");
-  const profileResult = await runProfile(rawUrl, homepage, log);
+  // In sovereign mode the deployment must not reach the public web at all, so the
+  // homepage is deliberately NOT fetched: the profile runs in-boundary on the
+  // local seat with an honest no-grounding context (ok:false, no network IO).
+  // Every other mode fetches the homepage as the empirical anchor for profiling.
+  let homepage;
+  if (dataMode === "sovereign") {
+    log.info({ url: rawUrl }, "seed: sovereign mode, skipping public-web homepage fetch");
+    homepage = sovereignNoFetchHomepageContext(rawUrl);
+  } else {
+    log.info({ url: rawUrl }, "seed: fetching homepage ground truth");
+    homepage = await fetchHomepageContext(rawUrl, log);
+  }
+
+  log.info({ url: rawUrl, grounded: homepage.ok, dataMode }, "seed: running profile stage");
+  const profileResult = await runProfile(rawUrl, homepage, log, { dataMode });
   if (!profileResult.ok) {
     // The profile call may have consumed real tokens before failing schema
     // validation. Record that spend now (the tenant shell does not exist yet, so
@@ -689,7 +759,7 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   }
   log.info({ tenantId, layers: registry.length }, "seed: fanning out across layers");
 
-  const layers = await runLayers(tenantId, profile, registry, opts);
+  const layers = await runLayers(tenantId, profile, registry, opts, undefined, dataMode);
 
   const anyError = layers.some((o) => o.status === "error");
   await db
@@ -884,13 +954,18 @@ async function seedConnectedTenant(
   // A refresh rebuilds every layer on the fresh grounding, so resume is forced
   // off here: a previously built layer must be regenerated against the new
   // signals, never skipped as already done.
+  // A connected tenant under a sovereign deployment runs every stage in-boundary
+  // too, while still grounding on its own derived signals; otherwise it is the
+  // Tier 2 connected split (Lens in-boundary, adversarial seats external). When
+  // CORTEX_DATA_MODE is unset this resolves to connected and is unchanged.
+  const dataMode: CortexDataMode = resolveCortexDataMode() === "sovereign" ? "sovereign" : "connected";
   const layers = await runLayers(
     tenantId,
     profile,
     registry,
     { ...opts, resume: false },
     groundingByLayer,
-    "connected",
+    dataMode,
   );
 
   const anyError = layers.some((o) => o.status === "error");

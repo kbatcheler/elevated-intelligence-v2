@@ -93,11 +93,13 @@ export function modelForStage(stage: StageName): string {
   return SEATS[STAGE_CONFIG[stage].seat].model;
 }
 
-// The two grounding regimes a run can use. outside_in is the public-web demo
-// (the regression contract); connected grounds on the tenant's own derived
-// signals. This is the switch that decides whether the sensitive Lens stages run
-// in-boundary on the local seat (Tier 2, the split pipeline).
-export type CortexDataMode = "outside_in" | "connected";
+// The grounding regimes a run can use. outside_in is the public-web demo (the
+// regression contract); connected grounds on the tenant's own derived signals
+// and routes the two sensitive Lens stages in-boundary on the local seat (Tier 2,
+// the split pipeline); sovereign (Phase AF) runs EVERY stage in-boundary on the
+// local seat with no external provider and no public-web grounding at all, for a
+// deployment that must never reach an external model.
+export type CortexDataMode = "outside_in" | "connected" | "sovereign";
 
 // The sensitive extraction stages. In connected mode these run in-boundary on
 // the local seat so the client's own signals are interpreted inside the
@@ -108,6 +110,40 @@ export const IN_BOUNDARY_STAGES: readonly StageName[] = ["perceive", "hypothesis
 
 export function runsInBoundary(stage: StageName, dataMode: CortexDataMode): boolean {
   return dataMode === "connected" && IN_BOUNDARY_STAGES.includes(stage);
+}
+
+// Whether a stage executes on the in-boundary local seat for this data mode. This
+// is the single routing predicate every runner consults. Sovereign mode runs
+// EVERY stage on the local seat, so no external provider is ever consulted;
+// connected mode runs only the two sensitive Lens stages in-boundary (delegating
+// to runsInBoundary); outside_in runs nothing local. Because runsOnLocal reduces
+// to runsInBoundary for the non-sovereign modes, connected and outside_in routing
+// is unchanged byte-for-byte.
+export function runsOnLocal(stage: StageName, dataMode: CortexDataMode): boolean {
+  if (dataMode === "sovereign") return true;
+  return runsInBoundary(stage, dataMode);
+}
+
+// Whether external grounding/verification channels are available in this mode.
+// Sovereign mode has neither Anthropic web search nor Gemini grounded challenge,
+// so no claim can be honestly marked verified and the Lens/adversarial stages run
+// ungrounded; outside_in and connected both keep the external grounding seats. The
+// orchestrator reads this to downgrade sovereign verified claims to modelled, and
+// the local runner reads it to mark telemetry honestly.
+export function groundingAvailable(dataMode: CortexDataMode): boolean {
+  return dataMode !== "sovereign";
+}
+
+// The single switch that selects the run's grounding regime from the environment,
+// read once at the seed boundary and threaded as a StageContext so no stage ever
+// reads the environment itself. CORTEX_DATA_MODE=sovereign runs the whole pipeline
+// in-boundary with no external provider; =connected is the Tier 2 split; anything
+// else (including unset) is outside_in, the public-web regression default.
+export function resolveCortexDataMode(env: NodeJS.ProcessEnv = process.env): CortexDataMode {
+  const raw = env["CORTEX_DATA_MODE"];
+  if (raw === "sovereign") return "sovereign";
+  if (raw === "connected") return "connected";
+  return "outside_in";
 }
 
 // The in-boundary extraction seat, resolved from the environment. Its model

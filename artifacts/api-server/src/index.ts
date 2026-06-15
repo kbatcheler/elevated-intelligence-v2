@@ -4,6 +4,7 @@ import { ensureProviderOrgAndOwner } from "./lib/auth/bootstrap";
 import { startBackupArchive } from "./lib/backups/backupLoop";
 import { startBenchmarkRecompute } from "./lib/benchmarks/benchmarkLoop";
 import { startConnectorMaintenance } from "./lib/connectors/oauthRefresh";
+import { startSftpDropWatcher } from "./lib/ingestion/sftpDrop";
 import { logger } from "./lib/logger";
 import { startPushMorningBrief } from "./lib/push/pushBrief";
 import { startRetentionPurge } from "./lib/retention/retention";
@@ -61,6 +62,12 @@ async function start(): Promise<void> {
   // ones to their channel as one digest per recipient. Started only here so
   // importing the app in tests never starts a timer.
   startPushMorningBrief(logger);
+
+  // Start the in-process SFTP-drop watcher (Phase AE, ingestion path 4). Each
+  // tick processes files dropped by an external SFTP server into the per-tenant
+  // inbound tree, derives them in memory, and deletes the raw file. Started only
+  // here so importing the app in tests never starts a timer.
+  startSftpDropWatcher(logger);
 }
 
 void start();

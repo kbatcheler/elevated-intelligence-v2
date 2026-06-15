@@ -417,6 +417,14 @@ export interface SeatTelemetry {
   // single batched Evaluator call recorded on hero. The Intelligence
   // Architecture summation reads this to avoid triple-counting that one call.
   batched?: boolean;
+  // Sovereign-mode honesty markers (Phase AF). Present only on sub-stages a
+  // sovereign run produced: the whole pipeline ran in-boundary on the local seat
+  // with no external provider, so no external grounding or web-search channel was
+  // available. Absent on outside_in and connected runs, so the strip is unchanged
+  // for them. These are recorded by the runner, never inferred by the portal.
+  executionMode?: "sovereign";
+  groundingAvailable?: boolean;
+  webSearchAvailable?: boolean;
 }
 export interface SubStage {
   name: string;

@@ -1,10 +1,77 @@
-# Drift rollup: Phases A through AD
+# Drift rollup: Phases A through AF
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase AD (the full-application experience audit, the opening phase of Stage 5,
+Last updated after Phase AF (the local LLM seat and sovereign-mode phase, the third phase of Stage 5,
+Platform completion, run under the owner-authorized AE-through-AI sequence). Phase AF adds one local
+OpenAI-compatible seat and a single sovereign data mode that runs EVERY cortex stage in-boundary. Config
+gains a "sovereign" `CortexDataMode` resolved by a single `resolveCortexDataMode(env)` switch
+(`CORTEX_DATA_MODE=sovereign`) and a `runsOnLocal(stage, dataMode)` predicate (`sovereign ||
+runsInBoundary`); `IN_BOUNDARY_STAGES` and the outside_in and connected behaviour are byte-for-byte
+unchanged, and the no-literal-model invariant holds (the local model id stays a SEAT, never inlined). In
+sovereign mode the orchestrator routes every stage through the local `ExtractionZoneRuntime` seam on one
+threaded `StageContext`; confound and challenge still RUN but on the local seat with grounding DROPPED
+(honest, no faked Google Search), and `seedTenant` uses a pure no-fetch homepage context so even the
+profile stays in-boundary. Sovereign-only telemetry markers (`executionMode:"sovereign"`,
+`groundingAvailable:false`, `webSearchAvailable:false`) are recorded only from a real run, a narrate and
+score verified-to-modelled calibration is applied before persistence, and a sovereign run that emits
+`verified_claims` fails loud rather than presenting a faked verification channel. The portal
+`ReasoningStrip` shows "Reasoned in sovereign mode" and "External grounding unavailable" only when a
+stage telemetry is sovereign, with real model and token figures only. Proven HERMETICALLY (no live model)
+by an in-process conformance server and spies: connected makes zero frontier calls from the extraction
+zone, and sovereign makes zero external Anthropic/Gemini calls anywhere, every stage on the injected
+local runtime with confound/challenge not skipped. The global gates were re-run fresh: typecheck and
+build green, the full suite green at 819 tests (api-server 433, portal 225, cortex 110, connectors 29,
+edge-agent 10, db 8, scripts 4; +25 from AE, all in cortex and api-server), and the long-dash sweep zero
+on both sides over all 143 public text and jsonb columns across 39 base tables (no schema added). Zero
+new npm dependencies. The architect `evaluate_task` returned PASS after two remediation rounds at the
+sovereign orchestration boundary (keep the express reduction off in sovereign mode, label the generator
+from telemetry not config, and thread plus actually apply a pre-persist calibrate; then replace the
+sovereign homepage fetch with the no-fetch context and carry the real model id and sovereign markers
+through the folded enrichment telemetry). Per the real-endpoint blocker Phase AF PAUSES at its own gate:
+this container has no local OpenAI-compatible model endpoint (`LOCAL_MODEL_*` unset, nothing listening,
+no GPU), so `docs/drift/STOP.md` records what is proven hermetically versus what needs a real endpoint
+(real extraction quality and a local-only full seed with real latency and token/cost telemetry, plus the
+owner rerun steps), and the build does NOT auto-advance to Phase AG without an owner. The new still-live
+item is added below. The next protocol milestone hard stop is Phase AI at the end of Stage 5.
+
+Earlier, updated after Phase AE (the ingestion suite, the second phase of Stage 5, Platform completion,
+run under the owner-authorized AE-through-AI sequence). Phase AE adds five inbound data paths that all
+terminate at ONE shared derive-and-discard core, so no path can persist a raw artifact: the core parses
+the inbound bytes or payload in memory, derives a `DerivedSignalSet`, persists ONLY the derived math
+through the Phase H connector terminus (`persistDerivedSignalSet`, per-tenant encrypted and set
+root-hashed), guards every signal's key, window, and unit as a non-identifying metric token at this
+terminus, appends one provenance entry per layer whose claim path records the ingestion method and layer
+(the source ref is the derived-set root hash over the math only), and discards the raw input. The paths are the ingestion API `POST /v1/ingest` (per-tenant scrypt-hashed revocable key
+in `ingestion_keys`, equal-time miss path, rate limited, OpenAPI document), per-source webhooks
+(timing-safe HMAC against a secret in `webhook_sources`), manual upload (csv and xlsx deterministic math;
+pdf and docx contract text extracted in the in-boundary seat and discarded, leaving numeric metrics;
+spreadsheet signals keyed by generic positional `column_<n>` so a raw header never lands in a stored key;
+strict MIME, extension, and size gating; honest derived-versus-discarded account), an SFTP drop
+(per-tenant credential, inbound-directory watcher, delete whether processed OR rejected so no raw file
+lingers, quiet-period guard), and an MCP
+server (`submit_signals` plus `get_diagnosis`, `get_layer`, `get_actions` under per-tenant auth), with a
+portal Access-console panel to mint and revoke keys and webhook sources with a one-shot reveal. The
+central acceptance is test-proven: one integration test drives all five paths with a single unique
+sentinel and sweeps every public text and jsonb column plus the SFTP scratch directory, asserting it
+appears nowhere. The global gates were re-run fresh: typecheck and build green, the full suite green at
+794 tests (api-server 429, portal 225, cortex 89, connectors 29, edge-agent 10, db 8, scripts 4; +36 all
+in six new api-server files), and the long-dash sweep zero on both sides over all 143 public text and
+jsonb columns across 39 base tables. Zero new npm dependencies. Two shared test-infrastructure faults
+surfaced by the sixth DB-touching integration file were fixed (the SFTP quiet-period age clamp, and
+serializing the cross-package test runner plus a test-time `lib/db` pool cap; the server pool default is
+unchanged); the one accepted LOW is the source-reviewed portal ingestion admin client (added to "Still
+live" below). The architect's first review returned FAIL with four boundary-hardening items at the
+derive-and-discard seam (the ingestion metadata-token guard, generic positional upload keys, SFTP
+discard of a rejected file rather than a `.rejected` copy, and a strengthened raw-absence test); all four
+were applied and the gate re-run green before the architect `evaluate_task` returned PASS. Per the owner-authorized sequence this phase
+does NOT pause at its own gate; execution continues to Phase AF, whose acceptance needs a real local
+OpenAI-compatible model endpoint absent from this container, so a STOP.md and pause follow at the AF gate
+if none is provided. The next protocol milestone hard stop is Phase AI at the end of Stage 5.
+
+Earlier, updated after Phase AD (the full-application experience audit, the opening phase of Stage 5,
 Platform completion, run as a single owner-authorized phase). Per the binding Adaptation Guide, Phase
 AD was RETIRED AS AN OVERHAUL and run instead as a SHORT audit of the existing portal against the
 design language (`docs/design-language.md`) and the AD acceptance set, FIXING DRIFT rather than
@@ -97,6 +164,8 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 | AB | Sellability Pack | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
 | AC | Verification and Build Report (closes Stage 4) | Pass | no (gated, Stage 4; autonomous Y-Z-AA-AB-AC run, pauses before AD) |
 | AD | Experience Audit and Drift Fix (opens Stage 5) | Pass | no (gated, Stage 5; single owner-authorized phase, pauses at its own gate before AE) |
+| AE | Ingestion Suite | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
+| AF | Local LLM Seat and Sovereign Mode | Pass | no (gated, Stage 5; PAUSED at the AF gate on the real-endpoint blocker, does not auto-advance to AG) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -187,6 +256,34 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   as-is. The `.table-scroll` helper is available for them but was not applied, since they are operator
   surfaces outside the core-read 375px requirement. Accepted as logged drift; a future pass can wrap
   them.
+- No dedicated portal unit test for the ingestion admin panel (AE). `IngestionPanel` and
+  `ingestionApi.ts` (mint and revoke ingestion keys and webhook sources with a one-shot reveal) are
+  source-reviewed; the server mint, revoke, and gate endpoints behind them ARE integration-tested
+  (`routes/ingest.integration.test.ts`, `routes/webhooks.integration.test.ts`), but there is no
+  portal-side unit test. Accepted as logged drift; a future lightweight portal test can close it,
+  mirroring the existing `adminApi` and `securityApi` client tests.
+- Cross-package test suite is run serialized, with a test-time DB pool cap (AE). The root `test` script
+  runs the per-package vitest suites at `--workspace-concurrency=1` and `lib/db` caps the per-process
+  pool at 5 under `VITEST`, because the default concurrent run oversubscribed the 8 CPUs and tripped the
+  pool connection-acquisition timeout as intermittent 500s in whichever DB-touching test was running.
+  Product runtime is unaffected (the server pool default of 20 is unchanged; an explicit
+  `DATABASE_POOL_MAX` still wins). A test-harness decision, logged so a future reader knows the suite is
+  intentionally serialized.
+- No real local OpenAI-compatible model endpoint in this container (AF). Sovereign mode runs every cortex
+  stage in-boundary on a local seat that speaks the OpenAI-compatible `POST /v1/chat/completions` wire, but
+  `LOCAL_MODEL_*` is unset, nothing is listening on a local inference port, and there is no GPU. The
+  routing, the three honesty markers, the verified-to-modelled calibration, and the fail-loud
+  "available, not connected" path are proven HERMETICALLY by an in-process conformance server and spies
+  (no live model). What needs a real endpoint and is therefore deferred to an owner rerun: the real
+  extraction quality of an actual local or open model on the sovereign path, and a local-only full seed of
+  a real tenant end to end with real timings and token/cost telemetry. No figure is fabricated to stand in
+  for them; per the blocker the build PAUSES at the AF gate and does not auto-advance to Phase AG. The
+  provable-versus-needs-endpoint split and the owner rerun steps and missing env are in `docs/drift/STOP.md`.
+- Portal sovereign surface is source-reviewed, not test-covered (AF). `ReasoningStrip.tsx` and the
+  `types.ts` sovereign markers ("Reasoned in sovereign mode", "External grounding unavailable") are
+  source-reviewed; the markers they read ARE asserted at their source by the cortex `sovereign-pipeline`
+  test, so the portal total stays at 225. Accepted as logged drift, mirroring the AE portal item; a future
+  lightweight portal test can close it.
 
 ## Live but runtime-only or cosmetic
 

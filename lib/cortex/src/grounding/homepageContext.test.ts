@@ -4,7 +4,12 @@
 // alias rejections in isHostnameSafe short-circuit before any DNS lookup.
 
 import { describe, expect, it } from "vitest";
-import { isHostnameSafe, isPrivateAddress } from "./homepageContext";
+import {
+  cleanHomepageTarget,
+  isHostnameSafe,
+  isPrivateAddress,
+  sovereignNoFetchHomepageContext,
+} from "./homepageContext";
 
 describe("isPrivateAddress", () => {
   it("flags loopback, private, and link-local v4 ranges", () => {
@@ -55,5 +60,40 @@ describe("isHostnameSafe", () => {
   it("rejects a hostname that does not resolve", async () => {
     const r = await isHostnameSafe("this-domain-should-not-resolve.invalid");
     expect(r.ok).toBe(false);
+  });
+});
+
+describe("cleanHomepageTarget", () => {
+  it("strips protocol, path, and www to a bare domain and canonical https URL", () => {
+    expect(cleanHomepageTarget("https://www.Example.com/pricing?x=1")).toEqual({
+      domain: "example.com",
+      tryUrl: "https://www.Example.com/pricing?x=1",
+    });
+  });
+
+  it("prepends https for a bare domain", () => {
+    expect(cleanHomepageTarget("Example.com")).toEqual({
+      domain: "example.com",
+      tryUrl: "https://example.com",
+    });
+  });
+});
+
+describe("sovereignNoFetchHomepageContext", () => {
+  it("returns an honest declined context with no network IO and zero bytes", () => {
+    const ctx = sovereignNoFetchHomepageContext("https://www.example.com/about");
+    expect(ctx.ok).toBe(false);
+    expect(ctx.domain).toBe("example.com");
+    expect(ctx.finalUrl).toBe("https://www.example.com/about");
+    expect(ctx.status).toBe(0);
+    expect(ctx.bytesFetched).toBe(0);
+    expect(ctx.bytesExtracted).toBe(0);
+    expect(ctx.durationMs).toBe(0);
+    expect(ctx.snippet).toBe("");
+    expect(ctx.errorReason).toBe("sovereign mode: public web fetch disabled");
+  });
+
+  it("never claims grounding: ok is false so the profile records itself ungrounded", () => {
+    expect(sovereignNoFetchHomepageContext("acme.test").ok).toBe(false);
   });
 });

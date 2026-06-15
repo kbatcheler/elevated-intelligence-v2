@@ -14,6 +14,9 @@ export {
   modelForStage,
   seatForStage,
   runsInBoundary,
+  runsOnLocal,
+  groundingAvailable,
+  resolveCortexDataMode,
   resolveLocalSeat,
   type Provider,
   type SeatKey,
@@ -37,6 +40,7 @@ export { stripDashes, deepStripDashes } from "./sanitize";
 // Grounding.
 export {
   fetchHomepageContext,
+  sovereignNoFetchHomepageContext,
   isHostnameSafe,
   isPrivateAddress,
   type HomepageContext,
@@ -124,6 +128,15 @@ export {
 export { type FindingChallengeInput } from "./prompts/findingChallenge";
 export { assembleLayerContent, type AssembleResult } from "./stages/assemble";
 export { type StageResult, type StageTelemetry } from "./stages/types";
+
+// Sovereign-mode honesty calibration (Phase AF): pure transforms the orchestrator
+// applies after narrate and score so no claim is ever presented as verified when
+// no external verification channel ran. No-ops in outside_in and connected mode.
+export {
+  applySovereignNarrateCalibration,
+  applySovereignScoreCalibration,
+  SOVEREIGN_UNVERIFIED_RATIONALE,
+} from "./stages/calibration";
 
 // Editorial voice quality (Phase AB): a deterministic measurement of an
 // assembled layer's prose against a fixed bar. A measurement, never an edit.

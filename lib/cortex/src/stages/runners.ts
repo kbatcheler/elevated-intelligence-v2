@@ -6,7 +6,7 @@
 import { callClaudeJson, type SystemBlock } from "../clients/anthropic";
 import { callGeminiJson } from "../clients/gemini";
 import { getExtractionRuntime } from "../clients/local";
-import { modelForStage, runsInBoundary, STAGE_CONFIG, type StageName } from "../config";
+import { modelForStage, runsOnLocal, STAGE_CONFIG, type StageName } from "../config";
 import type { HomepageContext } from "../grounding/homepageContext";
 import { DEFAULT_STAGE_CONTEXT, type StageContext } from "./extractionZone";
 import { silentLogger, type Logger } from "../logger";
@@ -64,6 +64,12 @@ function buildTelemetry(
     // True only when a real, token-billed provider response was received. Left
     // false (the default) for a no-call failure so the ledger never costs it.
     billed?: boolean;
+    // Phase AF sovereign-mode honesty markers. Set ONLY on a sovereign stage (by
+    // runLocalStage), spread conditionally so outside_in and connected telemetry
+    // payloads are byte-for-byte unchanged.
+    executionMode?: "sovereign";
+    groundingAvailable?: boolean;
+    webSearchAvailable?: boolean;
   },
   // The model that actually ran. The external seats resolve it from config; the
   // in-boundary Lens passes its env-supplied local model so telemetry honestly
@@ -80,6 +86,9 @@ function buildTelemetry(
     ...(p.cacheReadTokens != null ? { cacheReadTokens: p.cacheReadTokens } : {}),
     ...(p.cacheCreationTokens != null ? { cacheCreationTokens: p.cacheCreationTokens } : {}),
     ...(p.searchCallCount != null ? { searchCalls: p.searchCallCount } : {}),
+    ...(p.executionMode != null ? { executionMode: p.executionMode } : {}),
+    ...(p.groundingAvailable != null ? { groundingAvailable: p.groundingAvailable } : {}),
+    ...(p.webSearchAvailable != null ? { webSearchAvailable: p.webSearchAvailable } : {}),
   };
 }
 
@@ -182,12 +191,20 @@ async function runLocalStage<T>(
   ctx: StageContext,
   args: { system: string | SystemBlock[]; user: string; schema: ZodType<T>; maxTokens?: number; log: Logger },
 ): Promise<StageResult<T>> {
+  // Sovereign-only honesty markers: the whole run is in-boundary, so no external
+  // grounding or web-search verification channel was available. Connected
+  // in-boundary Lens stages carry no marker (their run still has the external
+  // adversarial seats), so the connected path stays byte-for-byte unchanged.
+  const marker =
+    ctx.dataMode === "sovereign"
+      ? { executionMode: "sovereign" as const, groundingAvailable: false, webSearchAvailable: false }
+      : {};
   const runtime = ctx.extractionRuntime ?? getExtractionRuntime();
   if (!runtime) {
     return {
       ok: false,
       reason: LOCAL_SEAT_UNCONFIGURED,
-      telemetry: buildTelemetry(stage, { durationMs: 0 }, "local: not connected"),
+      telemetry: buildTelemetry(stage, { durationMs: 0, ...marker }, "local: not connected"),
     };
   }
   // The in-boundary adapter takes a single system string; flatten any cached
@@ -212,6 +229,7 @@ async function runLocalStage<T>(
           inputTokens: res.inputTokens,
           outputTokens: res.outputTokens,
           billed: res.billed,
+          ...marker,
         },
         runtime.model,
       ),
@@ -222,7 +240,13 @@ async function runLocalStage<T>(
     output: res.value,
     telemetry: buildTelemetry(
       stage,
-      { durationMs: res.durationMs, inputTokens: res.inputTokens, outputTokens: res.outputTokens, billed: true },
+      {
+        durationMs: res.durationMs,
+        inputTokens: res.inputTokens,
+        outputTokens: res.outputTokens,
+        billed: true,
+        ...marker,
+      },
       runtime.model,
     ),
   };
@@ -233,14 +257,20 @@ export async function runProfile(
   rawUrl: string,
   ctx: HomepageContext,
   log: Logger = silentLogger,
+  // outside_in (the default) keeps the profile on the external reasoner. Sovereign
+  // routes it in-boundary onto the local seat, with the rest of the pipeline.
+  stageCtx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<ProfileOutput>> {
-  const res = await runAnthropicStage("profile", {
+  const args = {
     system: [{ text: PROFILE_SYSTEM_PROMPT, cache: true }],
     user: buildProfileUser(rawUrl, ctx),
     schema: profileSchema,
     maxTokens: 4096,
     log,
-  });
+  };
+  const res = runsOnLocal("profile", stageCtx.dataMode)
+    ? await runLocalStage("profile", stageCtx, args)
+    : await runAnthropicStage("profile", args);
   // The URL is authoritative input, never a model guess: inject the canonical
   // (post-redirect) URL we fetched, falling back to the raw seed URL.
   if (res.ok) res.output.url = ctx.ok ? ctx.finalUrl : rawUrl;
@@ -258,7 +288,7 @@ export function runPerceive(
   ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<PerceiveOutput>> {
   const { system, user } = buildPerceive(profile, layer, grounding);
-  if (runsInBoundary("perceive", ctx.dataMode)) {
+  if (runsOnLocal("perceive", ctx.dataMode)) {
     return runLocalStage("perceive", ctx, { system, user, schema: perceiveOutputSchema, log });
   }
   return runAnthropicStage("perceive", { system, user, schema: perceiveOutputSchema, log });
@@ -273,7 +303,7 @@ export function runHypothesise(
   ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<HypothesisedLayer>> {
   const { system, user } = buildHypothesise(profile, layer, perceive, grounding);
-  if (runsInBoundary("hypothesise", ctx.dataMode)) {
+  if (runsOnLocal("hypothesise", ctx.dataMode)) {
     return runLocalStage("hypothesise", ctx, { system, user, schema: hypothesisedLayerSchema, log });
   }
   return runAnthropicStage("hypothesise", { system, user, schema: hypothesisedLayerSchema, log });
@@ -285,8 +315,15 @@ export function runConfound(
   hypothesised: HypothesisedLayer,
   log: Logger = silentLogger,
   grounding?: LayerGrounding,
+  // Sovereign routes the Confounder in-boundary too, with its Google Search
+  // grounding dropped (honest, never a faked search); outside_in and connected
+  // keep it on the external grounder seat exactly as before.
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<ConfounderOutput>> {
   const { system, user } = buildConfound(profile, layer, hypothesised, grounding);
+  if (runsOnLocal("confound", ctx.dataMode)) {
+    return runLocalStage("confound", ctx, { system, user, schema: confounderOutputSchema, log });
+  }
   return runGeminiStage("confound", { system, user, schema: confounderOutputSchema, log });
 }
 
@@ -297,8 +334,12 @@ export function runChallenge(
   confounders: ConfounderOutput,
   log: Logger = silentLogger,
   grounding?: LayerGrounding,
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<ChallengeOutput>> {
   const { system, user } = buildChallenge(profile, layer, hypothesised, confounders, grounding);
+  if (runsOnLocal("challenge", ctx.dataMode)) {
+    return runLocalStage("challenge", ctx, { system, user, schema: challengeOutputSchema, log });
+  }
   return runGeminiStage("challenge", { system, user, schema: challengeOutputSchema, log });
 }
 
@@ -310,8 +351,12 @@ export function runNarrate(
   challenge: ChallengeOutput,
   log: Logger = silentLogger,
   grounding?: LayerGrounding,
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<NarrateOutput>> {
   const { system, user } = buildNarrate(profile, layer, hypothesised, confounders, challenge, grounding);
+  if (runsOnLocal("narrate", ctx.dataMode)) {
+    return runLocalStage("narrate", ctx, { system, user, schema: narrateOutputSchema, log });
+  }
   return runAnthropicStage("narrate", { system, user, schema: narrateOutputSchema, log });
 }
 
@@ -323,8 +368,15 @@ export function runNarrate(
 export function runFindingChallengeConfound(
   input: FindingChallengeInput,
   log: Logger = silentLogger,
+  // Sovereign routes the interactive challenge's Confounder in-boundary too, so a
+  // sovereign deployment makes no external call anywhere. outside_in and connected
+  // keep it on the external grounder seat exactly as before.
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<FindingChallengeConfound>> {
   const { system, user } = buildFindingChallengeConfound(input);
+  if (runsOnLocal("confound", ctx.dataMode)) {
+    return runLocalStage("confound", ctx, { system, user, schema: findingChallengeConfoundSchema, log });
+  }
   return runGeminiStage("confound", { system, user, schema: findingChallengeConfoundSchema, log });
 }
 
@@ -335,8 +387,12 @@ export function runFindingChallengeDecision(
   input: FindingChallengeInput,
   confound: FindingChallengeConfound,
   log: Logger = silentLogger,
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<FindingChallengeDecision>> {
   const { system, user } = buildFindingChallengeDecision(input, confound);
+  if (runsOnLocal("narrate", ctx.dataMode)) {
+    return runLocalStage("narrate", ctx, { system, user, schema: findingChallengeDecisionSchema, log });
+  }
   return runAnthropicStage("narrate", { system, user, schema: findingChallengeDecisionSchema, log });
 }
 
@@ -348,8 +404,12 @@ export function runScore(
   challenge: ChallengeOutput,
   log: Logger = silentLogger,
   grounding?: LayerGrounding,
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<ScoreOutput>> {
   const { system, user } = buildScore(profile, layer, narrate, confounders, challenge, grounding);
+  if (runsOnLocal("score", ctx.dataMode)) {
+    return runLocalStage("score", ctx, { system, user, schema: scoreOutputSchema, log });
+  }
   return runAnthropicStage("score", { system, user, schema: scoreOutputSchema, log });
 }
 
@@ -364,7 +424,11 @@ export function runEnrichment(
   narrate: NarrateOutput,
   log: Logger = silentLogger,
   grounding?: LayerGrounding,
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
 ): Promise<StageResult<EnrichmentOutput>> {
   const { system, user } = buildEnrichment(profile, layer, narrate, grounding);
+  if (runsOnLocal("hero", ctx.dataMode)) {
+    return runLocalStage("hero", ctx, { system, user, schema: enrichmentOutputSchema, log });
+  }
   return runAnthropicStage("hero", { system, user, schema: enrichmentOutputSchema, log });
 }

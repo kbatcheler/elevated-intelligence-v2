@@ -46,14 +46,43 @@ const MAX_SNIPPET_LEN = 6000;
 const MAX_REDIRECTS = 3;
 const USER_AGENT = "ElevatedIntelligenceBot/2.0 (+executive-intelligence; tenant grounding)";
 
-export async function fetchHomepageContext(rawUrl: string, log: Logger = silentLogger): Promise<HomepageContext> {
-  const tStart = Date.now();
-  const initialDomain = rawUrl
+// Derive the cleaned domain (no protocol, path or www) and the canonical URL to
+// request from arbitrary user input. Shared by the live fetch and the sovereign
+// no-fetch context so both describe the same target identically.
+export function cleanHomepageTarget(rawUrl: string): { domain: string; tryUrl: string } {
+  const domain = rawUrl
     .replace(/^https?:\/\//i, "")
     .replace(/\/.*$/, "")
     .replace(/^www\./i, "")
     .toLowerCase();
-  const tryUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${initialDomain}`;
+  const tryUrl = /^https?:\/\//i.test(rawUrl) ? rawUrl : `https://${domain}`;
+  return { domain, tryUrl };
+}
+
+// The honest sovereign homepage context. In sovereign mode the deployment must
+// not reach the public web at all, so the homepage is deliberately NOT fetched:
+// this returns the same shape a failed fetch would (ok:false, zero bytes, empty
+// snippet) with an honest reason and performs no network IO. The profile stage
+// then runs in-boundary on the local seat with no external grounding, and the
+// seed is honestly recorded as ungrounded.
+export function sovereignNoFetchHomepageContext(rawUrl: string): HomepageContext {
+  const { domain, tryUrl } = cleanHomepageTarget(rawUrl);
+  return {
+    ok: false,
+    domain,
+    finalUrl: tryUrl,
+    status: 0,
+    bytesFetched: 0,
+    bytesExtracted: 0,
+    durationMs: 0,
+    snippet: "",
+    errorReason: "sovereign mode: public web fetch disabled",
+  };
+}
+
+export async function fetchHomepageContext(rawUrl: string, log: Logger = silentLogger): Promise<HomepageContext> {
+  const tStart = Date.now();
+  const { domain: initialDomain, tryUrl } = cleanHomepageTarget(rawUrl);
 
   const empty = (status: number, reason: string, finalUrl = tryUrl, domain = initialDomain): HomepageContext => ({
     ok: false,

@@ -65,3 +65,10 @@ export * from "./pushIntelligence";
 // (uphold or revise). Never mutates or deletes the challenged finding.
 export * from "./findingChallenges";
 export * from "./diagnosisShareTokens";
+// Ingestion suite (Phase AE): per-tenant ingestion credentials for the public
+// Ingestion API and the MCP server, and per-source inbound webhook receivers
+// with their signing secrets sealed under the tenant key. Every ingestion path
+// lands on the one shared derive-and-discard persistence path; these tables hold
+// only credential hashes and ciphertext, never raw client data.
+export * from "./ingestionKeys";
+export * from "./webhookSources";

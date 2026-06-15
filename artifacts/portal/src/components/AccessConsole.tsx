@@ -2,16 +2,18 @@ import React, { useEffect, useState } from "react";
 import { PinsPanel } from "./admin/PinsPanel";
 import { UsersPanel } from "./admin/UsersPanel";
 import { OrgsPanel } from "./admin/OrgsPanel";
-import { Org } from "../types";
+import { IngestionPanel } from "./admin/IngestionPanel";
+import { Org, Tenant } from "../types";
 import { useAuth } from "../lib/AuthContext";
 import * as adminApi from "../lib/adminApi";
 
 export function AccessConsole() {
   const { logout } = useAuth();
-  const [tab, setTab] = useState<"pins" | "users" | "orgs">("pins");
+  const [tab, setTab] = useState<"pins" | "users" | "orgs" | "ingestion">("pins");
   
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgsState, setOrgsState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [tenants, setTenants] = useState<Tenant[]>([]);
 
   const fetchOrgs = async () => {
     const result = await adminApi.fetchOrgs();
@@ -24,14 +26,22 @@ export function AccessConsole() {
     setOrgsState(result.state);
   };
 
+  const fetchTenants = async () => {
+    const result = await adminApi.fetchTenants();
+    if ("unauthorized" in result) return logout();
+    if (result.state === "error") return;
+    setTenants(result.items);
+  };
+
   useEffect(() => {
     fetchOrgs();
+    fetchTenants();
   }, []);
 
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", padding: "48px 32px 96px" }}>
       <div style={{ marginBottom: 32, display: "flex", gap: 16, borderBottom: "1px solid var(--border)" }}>
-        {(["pins", "users", "orgs"] as const).map(t => (
+        {(["pins", "users", "orgs", "ingestion"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -57,6 +67,7 @@ export function AccessConsole() {
         {tab === "pins" && <PinsPanel orgs={orgs} />}
         {tab === "users" && <UsersPanel />}
         {tab === "orgs" && <OrgsPanel orgs={orgs} refreshOrgs={fetchOrgs} />}
+        {tab === "ingestion" && <IngestionPanel tenants={tenants} />}
       </div>
     </div>
   );

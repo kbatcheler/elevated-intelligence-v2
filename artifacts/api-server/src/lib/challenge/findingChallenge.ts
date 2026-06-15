@@ -12,6 +12,7 @@ import {
 import {
   layerContentSchema,
   profileSchema,
+  resolveCortexDataMode,
   runFindingChallengeConfound,
   runFindingChallengeDecision,
   silentLogger,
@@ -19,6 +20,7 @@ import {
   type FindingChallengeInput,
   type LayerDescriptor,
   type Logger,
+  type StageContext,
   type StageTelemetry,
 } from "@workspace/cortex";
 import { appendEntryTx } from "../provenance/ledger";
@@ -241,8 +243,17 @@ export async function runFindingChallenge(params: RunChallengeParams): Promise<R
 
   const telemetry: StageTelemetry[] = [];
 
+  // The interactive challenge reuses the same seats as a layer build, so it
+  // honours the deployment-wide sovereign regime: under sovereign both calls run
+  // in-boundary on the local seat, so a sovereign deployment makes no external
+  // call anywhere. When CORTEX_DATA_MODE is unset this is outside_in and the two
+  // calls take the external path exactly as before.
+  const stageCtx: StageContext = {
+    dataMode: resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in",
+  };
+
   // The Confounder seat re-tests the objection against evidence.
-  const confound = await runFindingChallengeConfound(input, log);
+  const confound = await runFindingChallengeConfound(input, log, stageCtx);
   telemetry.push(confound.telemetry);
   await recordModelUsageSafe(
     { tenantId, runId: null, stage: "challenge_confound", layerKey, telemetry: confound.telemetry },
@@ -254,7 +265,7 @@ export async function runFindingChallenge(params: RunChallengeParams): Promise<R
   }
 
   // The Synthesist seat decides uphold-or-revise.
-  const decision = await runFindingChallengeDecision(input, confound.output, log);
+  const decision = await runFindingChallengeDecision(input, confound.output, log, stageCtx);
   telemetry.push(decision.telemetry);
   await recordModelUsageSafe(
     { tenantId, runId: null, stage: "challenge_synthesis", layerKey, telemetry: decision.telemetry },
