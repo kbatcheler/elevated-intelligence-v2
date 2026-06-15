@@ -56,9 +56,7 @@ import {
   type PipelineSubStageName,
 } from "@workspace/db";
 import { refreshConnectedTenant } from "../connectors/connectedRefresh";
-import { CryptoShreddedError } from "../security/errors";
-import { decryptSignalValue } from "../security/signalCrypto";
-import { getTenantKey } from "../security/tenantKeyService";
+import { readDecryptedSignalsForMachine } from "../security/signalRead";
 import { appendEntry } from "../provenance/ledger";
 import { getAlerter } from "../alerts/alerter";
 import { captureError } from "../observability/sentryReporter";
@@ -784,56 +782,16 @@ async function runLayers(
 // it carries no raw client content, because nothing reversible is ever stored in
 // derived_signals in the first place.
 async function loadLayerGrounding(tenantId: string): Promise<Map<string, LayerGrounding>> {
-  // Crypto-shred gate. If the tenant key is revoked, its signals are unreadable
-  // by anyone, including this in-boundary machine read: fail loud rather than
-  // ground a diagnosis on nothing.
-  const keyRow = await getTenantKey(tenantId);
-  if (keyRow && keyRow.status === "revoked") {
-    throw new CryptoShreddedError(
-      tenantId,
-      "tenant key revoked; derived signals are unreadable until re-provisioned and refreshed",
-    );
-  }
-
-  const rows = await db
-    .select({
-      layerKey: derivedSignalsTable.layerKey,
-      signalKey: derivedSignalsTable.signalKey,
-      value: derivedSignalsTable.value,
-      window: derivedSignalsTable.window,
-      sourceConnectorKey: derivedSignalsTable.sourceConnectorKey,
-      computedAt: derivedSignalsTable.computedAt,
-    })
-    .from(derivedSignalsTable)
-    .where(eq(derivedSignalsTable.tenantId, tenantId))
-    .orderBy(asc(derivedSignalsTable.layerKey), asc(derivedSignalsTable.signalKey));
-
-  if (rows.length === 0) {
-    return new Map<string, LayerGrounding>();
-  }
-
-  // There is ciphertext to ground on, so an active tenant key must exist. A
-  // missing key row (ciphertext with no key) is as unreadable as a revoked one:
-  // fail loud, and never decrypt on the strength of the envelope's embedded keyRef.
-  if (!keyRow || keyRow.status !== "active") {
-    throw new CryptoShreddedError(
-      tenantId,
-      "no active tenant key for stored signals; grounding is unreadable until re-provisioned and refreshed",
-    );
-  }
-  const activeKeyRef = keyRow.kmsKeyRef;
-
-  // Decrypt every signal under the tenant's active key. This is the only place the
-  // plaintext math is recovered for grounding, and it runs in-boundary; the
-  // de-identified result is what flows on to the external seats. A revoked or
-  // missing key, a keyRef that does not match the active key, or a legacy
-  // plaintext row, throws and fails the run loudly.
-  const decrypted = await Promise.all(
-    rows.map(async (r) => ({ r, value: await decryptSignalValue(r.value, activeKeyRef) })),
-  );
+  // The in-boundary machine read decrypts the tenant's signals under its active
+  // key and fails loud on a revoked or missing key (the crypto-shred gate lives
+  // in that shared helper, so the grounding read and the Phase X benchmark read
+  // can never drift apart). We then group the de-identified math by the layer each
+  // signal feeds; nothing reversible is ever stored in derived_signals, so the
+  // grounding carries no raw client content.
+  const rows = await readDecryptedSignalsForMachine(tenantId);
 
   const byLayer = new Map<string, LayerGrounding>();
-  for (const { r, value } of decrypted) {
+  for (const r of rows) {
     let grounding = byLayer.get(r.layerKey);
     if (!grounding) {
       grounding = { layerKey: r.layerKey, signals: [] };
@@ -841,10 +799,10 @@ async function loadLayerGrounding(tenantId: string): Promise<Map<string, LayerGr
     }
     grounding.signals.push({
       signalKey: r.signalKey,
-      value,
+      value: r.value,
       ...(r.window ? { window: r.window } : {}),
       ...(r.sourceConnectorKey ? { sourceConnectorKey: r.sourceConnectorKey } : {}),
-      ...(r.computedAt ? { computedAt: r.computedAt.toISOString() } : {}),
+      ...(r.computedAt ? { computedAt: r.computedAt } : {}),
     });
   }
   return byLayer;

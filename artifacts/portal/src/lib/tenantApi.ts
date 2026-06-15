@@ -1,5 +1,6 @@
 import type {
   Architecture,
+  BenchmarkConsentState,
   CommittedAction,
   LayerRegistryEntry,
   OverviewLayer,
@@ -135,6 +136,35 @@ export async function setActionStatus(
     if (res.status === 401) return { unauthorized: true };
     if (!res.ok) return { error: await readError(res) };
     return { ok: true };
+  } catch {
+    return { error: "failed" };
+  }
+}
+
+// ── Phase X: benchmark consent (default-off participation) ──
+export type ConsentOutcome =
+  | { unauthorized: true }
+  | { ok: true; optIn: boolean; changed: boolean }
+  | { error: string };
+
+export const fetchBenchmarkConsent = (tenantId: string) =>
+  getDetail<BenchmarkConsentState>(`/api/tenants/${tenantId}/benchmark-consent`);
+
+export async function setBenchmarkConsent(
+  tenantId: string,
+  optIn: boolean,
+  reason?: string,
+): Promise<ConsentOutcome> {
+  try {
+    const res = await fetch(`/api/tenants/${tenantId}/benchmark-consent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ optIn, reason }),
+    });
+    if (res.status === 401) return { unauthorized: true };
+    if (!res.ok) return { error: await readError(res) };
+    const data = (await res.json()) as { optIn: boolean; changed: boolean };
+    return { ok: true, optIn: data.optIn, changed: data.changed };
   } catch {
     return { error: "failed" };
   }

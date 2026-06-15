@@ -2,6 +2,7 @@ import app from "./app";
 import { startAlertNotifier } from "./lib/alerts/notifier";
 import { ensureProviderOrgAndOwner } from "./lib/auth/bootstrap";
 import { startBackupArchive } from "./lib/backups/backupLoop";
+import { startBenchmarkRecompute } from "./lib/benchmarks/benchmarkLoop";
 import { startConnectorMaintenance } from "./lib/connectors/oauthRefresh";
 import { logger } from "./lib/logger";
 import { startRetentionPurge } from "./lib/retention/retention";
@@ -47,6 +48,12 @@ async function start(): Promise<void> {
   // provenance ledger to durable object storage, skipping honestly when nothing
   // changed. Started only here so importing the app in tests never starts a timer.
   startBackupArchive(logger);
+
+  // Start the in-process benchmark recompute loop (Phase X). Each tick rebuilds
+  // the opted-in cohorts and their percentile distributions from de-identified
+  // math, never writing a stat below the k-anonymity floor. Started only here so
+  // importing the app in tests never starts a timer.
+  startBenchmarkRecompute(logger);
 }
 
 void start();

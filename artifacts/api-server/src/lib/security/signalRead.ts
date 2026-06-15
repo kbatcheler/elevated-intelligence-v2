@@ -4,15 +4,9 @@ import { CryptoShreddedError } from "./errors";
 import { decryptSignalValue } from "./signalCrypto";
 import { getTenantKey } from "./tenantKeyService";
 
-// The human read of a connected tenant's raw signal values. It is a SEPARATE
-// entry point from the pipeline's in-boundary machine grounding read
-// (orchestrator.loadLayerGrounding): the machine read grounds the model on
-// de-identified math and is exempt from break-glass by construction, while this
-// read returns the raw values to a person and is reachable only under an active
-// break-glass grant, enforced and logged by its caller. Like the machine read it
-// fails loud on a revoked or missing key, never returning an empty default.
-
-export interface HumanSignalRow {
+// One decrypted derived-signal row, exactly the finite math the pipeline stored:
+// a scalar or a numeric vector, with its layer, key, window, source, and time.
+export interface DecryptedSignalRow {
   layerKey: string;
   signalKey: string;
   value: number | number[];
@@ -21,9 +15,22 @@ export interface HumanSignalRow {
   computedAt: string;
 }
 
-export async function readDecryptedSignalsForHuman(tenantId: string): Promise<HumanSignalRow[]> {
+// Back-compat name for the break-glass human read shape (unchanged callers).
+export type HumanSignalRow = DecryptedSignalRow;
+
+// The shared decrypt core. Two distinct authorization boundaries open the same
+// envelopes under the tenant's active key, and they MUST agree on the crypto-shred
+// gate and the fail-loud behavior, so that logic lives here once rather than being
+// copied per caller:
+//   - the in-boundary MACHINE read (model grounding, and the Phase X benchmark
+//     recompute), exempt from break-glass by construction, and
+//   - the break-glass HUMAN read, reachable only under an active grant that its
+//     caller enforces and logs.
+// It never returns an empty or default value to paper over a revoked or missing
+// key: an unreadable signal is a loud failure, not a silent gap.
+async function decryptTenantSignals(tenantId: string): Promise<DecryptedSignalRow[]> {
   // Crypto-shred gate: a revoked tenant key makes the signals unreadable by
-  // anyone, a human included. Fail loud rather than return an empty list.
+  // anyone, a human or a machine. Fail loud rather than return an empty list.
   const keyRow = await getTenantKey(tenantId);
   if (keyRow && keyRow.status === "revoked") {
     throw new CryptoShreddedError(
@@ -70,4 +77,25 @@ export async function readDecryptedSignalsForHuman(tenantId: string): Promise<Hu
       computedAt: r.computedAt.toISOString(),
     })),
   );
+}
+
+// The break-glass HUMAN read: it returns the raw values to a PERSON and is
+// reachable only under an active break-glass grant, enforced and logged by its
+// caller. It is a separate entry point from the machine read by intent, even
+// though both share the decrypt core: the boundary is the authorization, not the
+// bytes.
+export async function readDecryptedSignalsForHuman(tenantId: string): Promise<HumanSignalRow[]> {
+  return decryptTenantSignals(tenantId);
+}
+
+// The in-boundary MACHINE read: the same de-identified math, fed to a computation
+// (the pipeline's model grounding, or the Phase X benchmark recompute), exempt
+// from break-glass by construction. The result must stay inside the boundary; it
+// is never routed to a person. Fails loud on a revoked or missing key exactly as
+// the human read does, so a cross-tenant batch caller can catch per tenant and
+// skip a crypto-shredded one rather than failing the whole run.
+export async function readDecryptedSignalsForMachine(
+  tenantId: string,
+): Promise<DecryptedSignalRow[]> {
+  return decryptTenantSignals(tenantId);
 }

@@ -52,3 +52,7 @@ export * from "./retentionEvents";
 // Backups and disaster recovery audit (Phase U): one row per real provenance
 // ledger archive written to durable object storage.
 export * from "./backupEvents";
+// Benchmarking and the data network effect (Phase X): consent log, cohorts, and
+// percentile stats. The cohort and stat tables carry NO tenant reference, so no
+// join can reverse a published stat to a contributing tenant.
+export * from "./benchmarks";

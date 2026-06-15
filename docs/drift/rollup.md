@@ -1,21 +1,22 @@
-# Drift rollup: Phases A through W
+# Drift rollup: Phases A through X
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-Last updated after Phase W (the outcome loop and value realized, the opening phase of Stage 4,
-Differentiation and Moat, the last phase of the owner-authorized U-V-W run: the track record becomes a
-graded history. A numeric prediction is snapshotted at commit time, real measured outcomes are recorded
-against it with an honest measured-versus-modelled basis, value identified is summed against value
-realized, and a simple hits-over-resolved calibration grades the system, kept loose because milestone
-AJ supersedes it with a Brier-scored ledger. The platform never invents a number: a predicted dollar
-value is parsed only from a currency-anchored impact, a baseline is snapshotted only from a real scalar
-derived signal, a measurement is `basis=measured` only when a real signal backs it, and an empty record
-returns a null calibration score. Typecheck and build are green, the full suite is green at 593 tests,
-and the long-dash sweep is zero on both sides over all 108 public text and jsonb columns. Phase W is the
-last phase before milestone X (benchmarking), so the U-V-W run STOPS here for owner review; do not
-auto-advance into Phase X.)
+Last updated after Phase X (benchmarking and the data network effect, a security milestone: a tenant
+turns one private figure into a cross-tenant benchmark WITHOUT exposing any other tenant's raw data or
+identity. The published benchmark tables hold no raw values and no tenant references at all, so a cohort
+is a population and a stat is a distribution, never a roster or a list of the numbers that produced it;
+the only tenant-scoped audit path in the feature is consent. The recompute reads each opted-in tenant's
+decrypted scalar signals through the machine grounding read, skipping and counting any unreadable
+tenant rather than failing the run, suppresses any cohort below the k-anonymity floor, and publishes a
+small-but-eligible cohort with disclosed bounded noise clamped to preserve the p25 <= p50 <= p75
+ordering. Consent is default off, the modelled peer benchmark is kept alongside the verified cohort and
+never conflated with it, and a below-k cohort shows an honest lock rather than a fabricated comparison.
+Typecheck and build are green, the full suite is green at 627 tests, and the long-dash sweep is zero on
+both sides over all 118 public text and jsonb columns. Phase X is a security milestone, so execution
+STOPS here for owner review; do not auto-advance into Phase Y.)
 
 ## Phase verdicts
 
@@ -44,6 +45,7 @@ auto-advance into Phase X.)
 | U | Backups and Disaster Recovery | Pass | no (gated, Stage 3; autonomous U-V-W run) |
 | V | Verification and the Build-Report Append (closes Stage 3) | Pass | no (gated, Stage 3; autonomous U-V-W run) |
 | W | Outcome Loop and Value Realized (opens Stage 4) | Pass | no (gated, Stage 4; autonomous U-V-W run; hard stop after W before milestone X) |
+| X | Benchmarking and the Data Network Effect | Pass | yes (security milestone; hard stop for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -94,6 +96,14 @@ auto-advance into Phase X.)
   and DELETE on the table at the database-role level is a deployment-time hardening
   left to the operator. Integrity control today is the hash chain plus the serialized
   append.
+- Benchmark cohort read does not re-gate stale stats against the current config (X, non-blocking).
+  The live `buildLayerCohort` read trusts the most recent `benchmark_stats` rows and does not re-filter
+  them against the CURRENT `BENCHMARK_MIN_COHORT`/noise configuration, so if an operator tightens the
+  floor between recomputes, a stat computed under the looser floor could be served until the next
+  recompute supersedes it. Logged, not built, to keep the milestone in scope: the recompute always
+  re-applies the current config, the window is bounded by the recompute cadence, and a stricter floor
+  only ever makes the next recompute MORE conservative. A future hardening can re-gate at read time or
+  force a recompute on a config change.
 
 ## Live but runtime-only or cosmetic
 
@@ -359,8 +369,42 @@ auto-advance into Phase X.)
   is `measured` only when a real finite scalar derived signal backs it; a missing or non-scalar signal
   is a loud `400 signal_not_found`, never a silent downgrade to `modelled`. `missed` is set only on a
   final measurement, so an in-flight action below its prediction reads `on_track`, never a spurious miss.
+- Benchmark tables hold no raw data and no tenant identity (X). `benchmark_cohorts` and
+  `benchmark_stats` have no tenant column and carry only counts and percentiles, so a cohort is a
+  population and a stat is a distribution, never a roster or a list of the numbers behind it. The
+  recompute audit `benchmark_events` is identity-free; the ONLY tenant-scoped audit path in the feature
+  is `benchmark_consent_events`. This is the defining privacy guarantee of the milestone, enforced
+  structurally rather than by policy.
+- k-anonymity floor plus disclosed bounded noise (X). A cohort below `BENCHMARK_MIN_COHORT` (default 5)
+  publishes no stat, so a distribution can never be reconstructed from a cohort too small to hide an
+  individual; a cohort in `[k, noiseBand)` (`BENCHMARK_NOISE_BAND`, default 20) is published with
+  bounded noise tied to a fraction of the IQR, clamped to preserve `p25 <= p50 <= p75`, flagged
+  `noised` and surfaced as "privacy protected". A labelled privacy control over a real distribution,
+  never an invented number.
+- Machine grounding read, skip-and-count on unreadable (X). The recompute reads each opted-in tenant's
+  decrypted scalar signals through the MACHINE grounding read extracted from the orchestrator path, not
+  the break-glass human read; a revoked or missing key is caught per tenant, skipped, and counted in
+  `skipped_tenant_count`, so one crypto-shredded tenant never fails the whole run or corrupts a cohort.
+- Modelled peer benchmark kept alongside the verified cohort, never replaced (X). The two bases are
+  visually and structurally distinct (a "Verified cohort" pill versus the modelled tiles), so a
+  modelled estimate is never presented as a verified cohort fact. Consent is default off and the
+  client-viewer seat is read-only on it (server 403, the UI hides the control without relying on that
+  for authorization).
 
 ## No faked output, any phase
+
+Phase X added no faked output and no faked telemetry. A benchmark figure is computed from persisted,
+de-identified cohort math or it is not shown: a cohort below the k-anonymity floor publishes no stat and
+the requesting tenant sees an honest lock, never a fabricated distribution, and the bounded noise on a
+small-but-eligible cohort is a disclosed privacy control over a real distribution (flagged `noised`,
+clamped to preserve `p25 <= p50 <= p75`), never an invented number. The published benchmark tables hold
+no raw values and no tenant references at all, so no peer identity or peer value can leak; the live read
+positions only the requester's OWN figure against the de-identified cohort. An unreadable tenant is
+skipped and counted rather than silently dropped or guessed, the modelled peer benchmark is kept visibly
+separate from the verified cohort so neither is mistaken for the other, and the consent toggle reflects
+the persisted state and flips only after the server confirms. No test was made to pass by weakening an
+assertion. The 627-test suite and the two-sided long-dash sweep are reported at their real current
+totals. Phase W below holds, and the earlier phases under it.
 
 Phase W added no faked output and no faked telemetry. Every figure the value counter and the calibration
 badge show is computed in the pure `outcomeMath` module from already-persisted numbers, so the summary

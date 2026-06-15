@@ -7,6 +7,7 @@ import { architectureRouter } from "./routes/architecture";
 import { agentRouter } from "./routes/agent";
 import { authRouter } from "./routes/auth";
 import { backupsRouter } from "./routes/backups";
+import { benchmarksRouter } from "./routes/benchmarks";
 import { clientRouter } from "./routes/client";
 import { captureError } from "./lib/observability/sentryReporter";
 import { healthRouter } from "./routes/health";
@@ -66,6 +67,12 @@ app.use("/api/operations", requireAuth, requireOwner, operationsRouter);
 // triggering a ledger archive and reading the backup audit are provider-owner
 // concerns, never visible to a client or portfolio seat.
 app.use("/api/backups", requireAuth, requireOwner, backupsRouter);
+
+// Owner-only benchmarking control API (Phase X). Triggering a recompute and
+// reading the recompute audit are provider-owner concerns. The per-tenant consent
+// routes live on the tenants router instead, fenced by requireTenantAccess, since
+// changing a tenant's own participation is a tenant-scoped action.
+app.use("/api/benchmarks", requireAuth, requireOwner, benchmarksRouter);
 
 // The client-admin onboarding surface. requireAuth runs here; the router itself
 // restricts every route to the client-admin role and forces the invite scope to

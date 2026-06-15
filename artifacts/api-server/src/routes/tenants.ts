@@ -1,6 +1,8 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { Router } from "express";
 import {
+  benchmarkConsentEventsTable,
+  benchmarkStatsTable,
   committedActionsTable,
   db,
   derivedSignalsTable,
@@ -16,6 +18,8 @@ import {
 import { z } from "zod";
 import { createAgentCredential } from "../lib/agent/agentCredential";
 import { isOwner, isProvider } from "../lib/auth/access";
+import { getBenchmarkMinCohort } from "../lib/benchmarks/benchmarks";
+import { segmentKeyFor } from "../lib/benchmarks/benchmarkMath";
 import { logger } from "../lib/logger";
 import {
   computeOutcomeSummary,
@@ -26,9 +30,147 @@ import {
 import { parsePredictedValueUsd } from "../lib/outcomes/predictedValue";
 import { assertSeedWithinBudget, BudgetExceededError } from "../lib/pipeline/budget";
 import { seedTenant } from "../lib/pipeline/orchestrator";
+import { readDecryptedSignalsForMachine } from "../lib/security/signalRead";
 import { requireTenantAccess } from "../middleware/auth";
 
 export const tenantsRouter: Router = Router();
+
+// ── Phase X: a tenant's own cohort benchmark for a layer ────────────────────
+// Either an unlocked verified-cohort distribution (the layer's metrics, each with
+// the tenant's own value positioned against the cohort percentiles) or a lock
+// (the cohort has not yet reached the k-anonymity floor). NEVER a contributor
+// list: the only tenant value present is the requester's OWN, read in-boundary
+// from their own data.
+interface CohortMetric {
+  signalKey: string;
+  window: string | null;
+  // The requester's own value for this metric, or null when they have no scalar
+  // for it (or their key is crypto-shredded). Their own data, never a peer's.
+  self: number | null;
+  p25: number;
+  p50: number;
+  p75: number;
+  // Distinct tenants behind this distribution (always >= the k floor).
+  sampleCount: number;
+  // True when bounded privacy noise was applied; the portal labels it honestly.
+  noised: boolean;
+}
+interface CohortBenchmark {
+  basis: "verified_cohort";
+  sector: string;
+  revenueBand: string;
+  metrics: CohortMetric[];
+}
+interface CohortLock {
+  sector: string;
+  revenueBand: string;
+  // Opted-in peers currently sharing the requester's segment (the requester
+  // included), counted live at read time, and the k floor it must reach.
+  currentCount: number;
+  unlocksAt: number;
+}
+
+// Build the cohort view for one tenant and layer. Returns both null when the
+// tenant has not opted in or has no eligible segment: benchmarking is strictly
+// consensual and structurally de-identified. The recompute already enforced the
+// k floor when it wrote stats, so the presence of any stat row for this segment
+// and layer means it is unlocked; the lock path counts live opted-in peers so a
+// tenant sees an honest, immediate "growing cohort" number before the next run.
+async function buildLayerCohort(
+  tenantId: string,
+  layerKey: string,
+): Promise<{ cohortBenchmark: CohortBenchmark | null; cohortLock: CohortLock | null }> {
+  const tRows = await db
+    .select({
+      optIn: tenantsTable.benchmarkOptIn,
+      sector: tenantsTable.sector,
+      revenueBand: tenantsTable.revenueBand,
+    })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+  const t = tRows[0];
+  if (!t || !t.optIn) return { cohortBenchmark: null, cohortLock: null };
+  const seg = segmentKeyFor(t.sector, t.revenueBand);
+  if (!seg) return { cohortBenchmark: null, cohortLock: null };
+
+  const stats = await db
+    .select()
+    .from(benchmarkStatsTable)
+    .where(
+      and(
+        eq(benchmarkStatsTable.cohortSegmentKey, seg.segmentKey),
+        eq(benchmarkStatsTable.layerKey, layerKey),
+      ),
+    );
+
+  if (stats.length > 0) {
+    // Position the requester's OWN value in each band. An in-boundary machine
+    // read of their own data; a crypto-shredded tenant simply has no self marker
+    // (caught, not fatal). Dedupe to one latest scalar per (signal, window), the
+    // same shape the recompute pools on, so self lines up with the distribution.
+    const selfByKey = new Map<string, { value: number; computedAt: string }>();
+    try {
+      const rows = await readDecryptedSignalsForMachine(tenantId);
+      for (const r of rows) {
+        if (r.layerKey !== layerKey) continue;
+        if (typeof r.value !== "number" || !Number.isFinite(r.value)) continue;
+        const k = r.signalKey + "\u0000" + (r.window ?? "");
+        const prev = selfByKey.get(k);
+        if (!prev || r.computedAt > prev.computedAt) {
+          selfByKey.set(k, { value: r.value, computedAt: r.computedAt });
+        }
+      }
+    } catch {
+      // self markers stay null; the cohort distribution still shows.
+    }
+    const metrics: CohortMetric[] = stats.map((s) => {
+      const self = selfByKey.get(s.signalKey + "\u0000" + (s.window ?? ""));
+      return {
+        signalKey: s.signalKey,
+        window: s.window,
+        self: self ? self.value : null,
+        p25: Number(s.p25),
+        p50: Number(s.p50),
+        p75: Number(s.p75),
+        sampleCount: s.sampleCount,
+        noised: s.noised,
+      };
+    });
+    return {
+      cohortBenchmark: {
+        basis: "verified_cohort",
+        sector: seg.sector,
+        revenueBand: seg.revenueBand,
+        metrics,
+      },
+      cohortLock: null,
+    };
+  }
+
+  // Locked: no stat cleared the floor for this layer yet. Count live opted-in
+  // peers sharing this exact normalized segment so the lock shows a real,
+  // current number, not a stale cohort row. Normalization is in JS, so match in
+  // JS over the opted-in set rather than trusting a raw-string GROUP BY.
+  const optedIn = await db
+    .select({ sector: tenantsTable.sector, revenueBand: tenantsTable.revenueBand })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.benchmarkOptIn, true));
+  let currentCount = 0;
+  for (const o of optedIn) {
+    const os = segmentKeyFor(o.sector, o.revenueBand);
+    if (os && os.segmentKey === seg.segmentKey) currentCount += 1;
+  }
+  return {
+    cohortBenchmark: null,
+    cohortLock: {
+      sector: seg.sector,
+      revenueBand: seg.revenueBand,
+      currentCount,
+      unlocksAt: getBenchmarkMinCohort(),
+    },
+  };
+}
 
 // The tenants the caller may see. Provider seats see every tenant; client and
 // portfolio seats see only the tenants their org is bound to through
@@ -574,12 +716,21 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
       return;
     }
 
+    // Phase X: the real cohort benchmark sits ALONGSIDE the modelled peerBenchmark,
+    // never replacing it. cohortBenchmark is the verified-cohort distribution (basis
+    // "verified_cohort") when the cohort has cleared the k floor; cohortLock is the
+    // honest "growing cohort" state below it; both null when the tenant has not
+    // opted in. No contributor identity is ever returned.
+    const { cohortBenchmark, cohortLock } = await buildLayerCohort(id, key);
+
     res.json({
       tenantId: layer.tenantId,
       layerKey: layer.layerKey,
       content: layer.content,
       heroPanel: layer.heroPanel,
       peerBenchmark: layer.peerBenchmark,
+      cohortBenchmark,
+      cohortLock,
       supplementBlocks: layer.supplementBlocks,
       confounders: layer.confounders,
       verifiedClaims: layer.verifiedClaims,
@@ -592,6 +743,110 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
     next(err);
   }
 });
+
+// ── Phase X: per-tenant benchmark consent (tenant-scoped) ───────────────────
+// Reading and changing a tenant's participation in the data network is a
+// tenant-scoped action: requireTenantAccess has already fenced the tenant for
+// the seat. Consent is default-off and every change is logged to an append-only
+// audit, so "consent state is logged" is structural, not a promise.
+tenantsRouter.get(
+  "/tenants/:id/benchmark-consent",
+  requireTenantAccess,
+  async (req, res, next) => {
+    try {
+      const id = String(req.params.id);
+      const rows = await db
+        .select({ optIn: tenantsTable.benchmarkOptIn })
+        .from(tenantsTable)
+        .where(eq(tenantsTable.id, id))
+        .limit(1);
+      if (!rows[0]) {
+        res.status(404).json({ error: "tenant_not_found" });
+        return;
+      }
+      // The consent audit for this tenant, newest first. It carries who changed
+      // the state and why, never any benchmark figure.
+      const events = await db
+        .select()
+        .from(benchmarkConsentEventsTable)
+        .where(eq(benchmarkConsentEventsTable.tenantId, id))
+        .orderBy(desc(benchmarkConsentEventsTable.createdAt));
+      res.json({ optIn: rows[0].optIn, events });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+const benchmarkConsentSchema = z.object({
+  optIn: z.boolean(),
+  reason: z.string().max(2000).optional(),
+});
+
+// Set a tenant's benchmark participation. A client-viewer is a read-only seat and
+// cannot change consent (the same posture as committing an action). The opt state
+// and the audit row are written in ONE transaction, and an unchanged state writes
+// no audit row (honest: nothing changed).
+tenantsRouter.post(
+  "/tenants/:id/benchmark-consent",
+  requireTenantAccess,
+  async (req, res, next) => {
+    const parsed = benchmarkConsentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_input" });
+      return;
+    }
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    if (user.role === "client-viewer") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    try {
+      const id = String(req.params.id);
+      const next_ = parsed.data.optIn;
+      const result = await db.transaction(async (tx) => {
+        const rows = await tx
+          .select({ optIn: tenantsTable.benchmarkOptIn })
+          .from(tenantsTable)
+          .where(eq(tenantsTable.id, id))
+          .limit(1);
+        const current = rows[0];
+        if (!current) return { notFound: true as const };
+        if (current.optIn === next_) {
+          // No change: do not write a spurious audit row.
+          return { optIn: current.optIn, changed: false as const };
+        }
+        await tx
+          .update(tenantsTable)
+          .set({ benchmarkOptIn: next_ })
+          .where(eq(tenantsTable.id, id));
+        await tx.insert(benchmarkConsentEventsTable).values({
+          tenantId: id,
+          action: next_ ? "opt_in" : "opt_out",
+          authorityUserId: user.id,
+          authorityRole: user.role,
+          reason: parsed.data.reason ?? null,
+        });
+        return { optIn: next_, changed: true as const };
+      });
+      if ("notFound" in result) {
+        res.status(404).json({ error: "tenant_not_found" });
+        return;
+      }
+      logger.info(
+        { tenantId: id, optIn: result.optIn, changed: result.changed, authorityUserId: user.id },
+        "benchmark consent set",
+      );
+      res.json({ optIn: result.optIn, changed: result.changed });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // The body of a commit: the real action fields captured from the layer at the
 // moment a user commits to it. predictedImpact, basis and confidence come

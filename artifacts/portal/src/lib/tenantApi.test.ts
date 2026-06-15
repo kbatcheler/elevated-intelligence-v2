@@ -3,6 +3,7 @@ import {
   commitAction,
   fetchActions,
   fetchArchitecture,
+  fetchBenchmarkConsent,
   fetchLayers,
   fetchRuns,
   fetchSignals,
@@ -10,6 +11,7 @@ import {
   fetchTenantLayer,
   fetchTenants,
   setActionStatus,
+  setBenchmarkConsent,
 } from "./tenantApi";
 
 type FetchResult = { ok: boolean; status: number; json?: () => Promise<unknown> };
@@ -152,5 +154,42 @@ describe("writes", () => {
   it("a 404 on a status update is a plain error", async () => {
     mockFetch({ ok: false, status: 404, json: async () => ({ error: "not_found" }) });
     expect(await setActionStatus("t1", "missing", "done")).toEqual({ error: "not_found" });
+  });
+});
+
+describe("benchmark consent", () => {
+  it("fetchBenchmarkConsent returns the persisted opt state and audit", async () => {
+    const payload = { optIn: true, events: [{ id: "e1", action: "opt_in" }] };
+    const fn = mockFetch({ ok: true, status: 200, json: async () => payload });
+    expect(await fetchBenchmarkConsent("t1")).toEqual({ state: "ready", data: payload });
+    expect(fn).toHaveBeenCalledWith("/api/tenants/t1/benchmark-consent");
+  });
+
+  it("setBenchmarkConsent posts the opt state and returns the confirmed change", async () => {
+    const fn = mockFetch({ ok: true, status: 200, json: async () => ({ optIn: true, changed: true }) });
+    expect(await setBenchmarkConsent("t1", true, "joining the cohort")).toEqual({
+      ok: true,
+      optIn: true,
+      changed: true,
+    });
+    expect(fn).toHaveBeenCalledWith(
+      "/api/tenants/t1/benchmark-consent",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("setBenchmarkConsent reports an unchanged no-op honestly", async () => {
+    mockFetch({ ok: true, status: 200, json: async () => ({ optIn: false, changed: false }) });
+    expect(await setBenchmarkConsent("t1", false)).toEqual({ ok: true, optIn: false, changed: false });
+  });
+
+  it("a forbidden read-only seat surfaces as an error, not a silent success", async () => {
+    mockFetch({ ok: false, status: 403, json: async () => ({ error: "forbidden" }) });
+    expect(await setBenchmarkConsent("t1", true)).toEqual({ error: "forbidden" });
+  });
+
+  it("a 401 on a consent write surfaces as unauthorized", async () => {
+    mockFetch({ ok: false, status: 401 });
+    expect(await setBenchmarkConsent("t1", true)).toEqual({ unauthorized: true });
   });
 });

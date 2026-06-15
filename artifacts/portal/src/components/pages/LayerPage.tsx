@@ -14,6 +14,7 @@ import {
 } from "../primitives";
 import { heroFor } from "../heroes/registry";
 import { LayerSections } from "../layer/sections";
+import { BenchmarkConsent } from "../layer/BenchmarkConsent";
 
 type State =
   | { kind: "loading" }
@@ -114,6 +115,10 @@ function LayerBody({
   entry: LayerRegistryEntry | null;
 }) {
   const Hero = heroFor(entry?.archetype);
+  // The benchmark-variant layer is the only surface where participation in the
+  // verified cohort is meaningful, so the default-off consent control lives here,
+  // directly beneath its hero. The tenant id comes from the persisted detail.
+  const isBenchmarkLayer = entry?.archetype === "Performance scorecard, benchmark variant";
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
@@ -137,6 +142,7 @@ function LayerBody({
         </span>
       )}
       <Hero entry={entry} detail={detail} />
+      {isBenchmarkLayer && <BenchmarkConsent tenantId={detail.tenantId} />}
       <LayerSections detail={detail} feeds={entry?.feeds ?? []} />
       <ReasoningStrip
         run={run}

@@ -1544,3 +1544,80 @@ new `outcome_measurements.note`); zero new npm dependencies. The architect `eval
 PASS. The drift report is `phase-W.md`; the drift index and the rollup are updated to "A through W".
 Phase W is the last phase before milestone X (benchmarking), so this is a HARD STOP for owner review;
 execution does not auto-advance into Phase X.
+
+## Phase X: benchmarking and the data network effect (security milestone)
+
+Phase X turns one tenant's private math into a cross-tenant benchmark without ever exposing another
+tenant's raw data or identity. A tenant that opts in sees where its own figure sits inside a
+de-identified distribution of its cohort (sector by revenue band); below the k-anonymity floor it sees
+an honest lock rather than a fabricated comparison. This is a security milestone, so a HARD STOP for
+owner review follows it.
+
+### The privacy posture (stated plainly)
+
+The published benchmark tables hold NO raw client values and NO tenant references of any kind. A
+`benchmark_cohorts` row is a population (a unique segment key, the normalized sector and revenue band,
+a member count, a computed-at). A `benchmark_stats` row is a distribution over that population (p25,
+p50, p75, a sample count, a `noised` flag), with no tenant column and no raw value. The recompute audit
+`benchmark_events` is identity-free by construction (action, cohort count, stat count, skipped-tenant
+count, the configured min cohort, the authorizing user and role). The ONLY tenant-scoped audit path in
+the whole feature is `benchmark_consent_events`, which records that a named tenant opted in or out and
+on whose authority. The live layer-detail read positions the REQUESTING tenant's own figure against the
+already-de-identified cohort stats, never against another tenant's value, and never returns a
+contributor list.
+
+### What was built
+
+Schema (pushed to dev Postgres, exported from `lib/db/src/schema/index.ts` via a new `benchmarks`
+module): `tenants.benchmark_opt_in` (boolean, default false), `benchmark_consent_events`,
+`benchmark_cohorts`, `benchmark_stats`, and `benchmark_events`.
+
+The recompute reads each opted-in tenant's decrypted scalar derived signals through the MACHINE
+grounding read extracted from the orchestrator path, not the break-glass human read. The single-tenant
+helper fails loud on a revoked or missing key; the batch caller catches that per tenant, SKIPS the
+tenant, and counts it in `skipped_tenant_count`, so one crypto-shredded tenant can never fail the whole
+run or silently corrupt a cohort. The pure benchmark math computes the percentiles over the pooled
+readings, suppresses any cohort below `BENCHMARK_MIN_COHORT` (default 5) so a distribution can never be
+reconstructed from a cohort too small to hide an individual, and publishes a cohort in
+`[minCohort, noiseBand)` (`BENCHMARK_NOISE_BAND`, default 20) with bounded random noise tied to a
+fraction of the IQR (0.1) and clamped so `p25 <= p50 <= p75` always holds, flagged `noised = true` and
+surfaced as "privacy protected". `runBenchmarkRecompute` is pure and supersedes the prior cohort and
+stat set; `startBenchmarkRecompute` runs from the server entrypoint only (no overlap, a swallowed tick
+failure, an unref'd timer, cadence `BENCHMARK_RECOMPUTE_INTERVAL_MS`, default 12 hours), mirroring the
+retention, notifier, and backup loops.
+
+Routes: tenant-access `GET`/`POST /api/tenants/:id/benchmark-consent` (the default-off toggle and its
+event history; a read-only client-viewer is refused 403; a consent change writes one audit row in the
+same transaction only when the state actually changes); the layer-detail read returns
+`cohortBenchmark | cohortLock` alongside the existing modelled `peerBenchmark` (both null unless the
+requester is opted in and eligible); and owner-only `POST /api/benchmarks/recompute`, `GET
+/api/benchmarks/events`, and `GET /api/benchmarks/status`. The portal renders the verified-cohort
+distribution band (p25/p50/p75 with the requester's own self marker, the sample count, a "Verified
+cohort" pill, the noised "privacy protected" note), the honest below-k lock, and the default-off
+consent toggle, keeping the modelled `peerBenchmark` and the tiles fallback separate so the two bases
+are never conflated.
+
+### The honesty boundaries
+
+A benchmark figure is computed from persisted, de-identified cohort math or it is not shown. The
+k-anonymity floor and the disclosed bounded noise are privacy controls over a real distribution, never
+invented numbers. The modelled `peerBenchmark` is kept alongside the verified `cohortBenchmark`, never
+replaced, and the two are visually and structurally distinct, so a modelled estimate is never presented
+as a verified cohort fact. The consent toggle reflects the persisted state and flips only after the
+server confirms; the UI hides the control from a client-viewer but does not rely on that for
+authorization (the server refuses with 403).
+
+### Verification
+
+Typecheck and build green (exit 0); full suite green at 627 tests (api-server 315 across 37 files
+including the new `benchmarkMath` unit tests and the benchmark integration tests, portal 177 across 14
+files including the extended `tenantApi` tests, cortex 84, connectors 29, edge-agent 10, db 8, scripts
+4); long-dash sweep zero on both sides (the source guard returns an empty violation list and a fresh
+`rg` over the authored tree returns zero, and a database-wide cast over all 118 public text and jsonb
+columns, now including the benchmark tables and `benchmark_consent_events.reason`, reports zero hits);
+zero new npm dependencies. The architect `evaluate_task` returned PASS, with one non-blocking hardening
+note (the live cohort read could re-gate stale stat rows against the current min-cohort and noise
+configuration; logged as drift, not built, because the recompute always re-applies the current config
+and a stricter floor only ever makes the next recompute more conservative). The drift report is
+`phase-X.md`; the drift index and the rollup are updated to "A through X". Phase X is a security
+milestone, so this is a HARD STOP for owner review; execution does not auto-advance into Phase Y.

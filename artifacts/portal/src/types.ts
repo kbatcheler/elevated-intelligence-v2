@@ -169,6 +169,58 @@ export interface PeerBenchmark {
   read?: string;
   source_urls: string[];
 }
+
+// ── Verified-cohort benchmark (Phase X) ──
+// The de-identified peer distribution for the tenant's own segment. It carries NO
+// peer identity and NO raw peer values: only percentile bands computed across a
+// cohort that has cleared the k-anonymity floor, plus the requester's OWN position
+// in each band. A locked cohort is one still forming below that floor.
+export interface CohortMetric {
+  signalKey: string;
+  window: string | null;
+  // The requester's own value for this metric, or null when they have no scalar
+  // for it (or their key is crypto-shredded). Their own data, never a peer's.
+  self: number | null;
+  p25: number;
+  p50: number;
+  p75: number;
+  // Distinct tenants behind this distribution (always at or above the k floor).
+  sampleCount: number;
+  // True when bounded privacy noise was applied; surfaced honestly, not hidden.
+  noised: boolean;
+}
+export interface CohortBenchmark {
+  basis: "verified_cohort";
+  sector: string;
+  revenueBand: string;
+  metrics: CohortMetric[];
+}
+export interface CohortLock {
+  sector: string;
+  revenueBand: string;
+  // Opted-in peers currently sharing the requester's segment (the requester
+  // included), and the k floor the cohort must reach to unlock.
+  currentCount: number;
+  unlocksAt: number;
+}
+
+// ── Benchmark consent (Phase X) ──
+// Participation is default-off and every change is appended to a tenant audit.
+export type BenchmarkConsentAction = "opt_in" | "opt_out";
+export interface BenchmarkConsentEvent {
+  id: string;
+  tenantId: string | null;
+  action: BenchmarkConsentAction;
+  authorityUserId: string | null;
+  authorityRole: string;
+  reason: string | null;
+  createdAt: string;
+}
+export interface BenchmarkConsentState {
+  optIn: boolean;
+  events: BenchmarkConsentEvent[];
+}
+
 export type SupplementKind = "context" | "risk" | "watchlist" | "quote" | "stat";
 export interface SupplementBlock {
   kind: SupplementKind;
@@ -214,6 +266,11 @@ export interface TenantLayerDetail {
   content: LayerContent;
   heroPanel: HeroPanel | null;
   peerBenchmark: PeerBenchmark | null;
+  // Phase X: the de-identified verified-cohort distribution when the segment has
+  // cleared the k floor, or an honest lock state while the cohort is still
+  // forming. Both null when the tenant has not opted in. Never a peer identity.
+  cohortBenchmark: CohortBenchmark | null;
+  cohortLock: CohortLock | null;
   supplementBlocks: { blocks: SupplementBlock[] } | null;
   confounders: Confounder[] | null;
   verifiedClaims: { items: VerifiedClaim[] } | null;

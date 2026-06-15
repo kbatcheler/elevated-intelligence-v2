@@ -1,4 +1,4 @@
-import { integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -29,6 +29,12 @@ export const tenantsTable = pgTable("tenants", {
   tagline: text("tagline"),
   status: tenantStatusEnum("status").notNull().default("seeding"),
   dataMode: tenantDataModeEnum("data_mode").notNull().default("outside_in"),
+  // Phase X consent: whether this tenant has explicitly opted in to contribute to
+  // and receive cohort benchmarks. Default off; flipped only through the consent
+  // route, which logs every change to benchmark_consent_events. Opting out removes
+  // the tenant from the next benchmark recompute (the recompute source query
+  // selects only opted-in tenants), so contribution stops without touching history.
+  benchmarkOptIn: boolean("benchmark_opt_in").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
@@ -49,6 +55,7 @@ export const insertTenantSchema = createInsertSchema(tenantsTable, {
   status: true,
   lastSeededAt: true,
   staleAfter: true,
+  benchmarkOptIn: true,
 });
 
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
