@@ -1,1 +1,2 @@
-- [Verifying gates and the dash sweep](verifying-gates.md) — gate workflow logs are lossy; run `pnpm run X >/tmp/x.out 2>&1; echo EXIT $?`, and the long-dash ban needs BOTH a source AND a DB sweep that read zero.
+- [Verifying gates and the dash sweep](verifying-gates.md) - gate workflow logs are lossy; run `pnpm run X >/tmp/x.out 2>&1; echo EXIT $?`, and the long-dash ban needs BOTH a source AND a DB sweep that read zero.
+- [V2 drift and build-report protocol](v2-drift-protocol.md) - per-phase gate/report steps; an audit/remediation pass AFTER a milestone is NOT a phase (dedicated doc, no fake Phase Y, no gate advance).

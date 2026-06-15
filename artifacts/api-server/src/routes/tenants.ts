@@ -31,6 +31,7 @@ import { parsePredictedValueUsd } from "../lib/outcomes/predictedValue";
 import { assertSeedWithinBudget, BudgetExceededError } from "../lib/pipeline/budget";
 import { seedTenant } from "../lib/pipeline/orchestrator";
 import { readDecryptedSignalsForMachine } from "../lib/security/signalRead";
+import { CryptoShreddedError, SignalEncryptionError } from "../lib/security/errors";
 import { requireTenantAccess } from "../middleware/auth";
 
 export const tenantsRouter: Router = Router();
@@ -104,7 +105,17 @@ async function buildLayerCohort(
       ),
     );
 
-  if (stats.length > 0) {
+  // Re-gate at read time against the CURRENT k-anonymity floor. Each stat row
+  // carries the distinct-tenant count behind it (sampleCount); the recompute
+  // enforced the floor in force when it wrote the row, but if an operator
+  // tightens BENCHMARK_MIN_COHORT between recomputes a row written under the
+  // looser floor would otherwise stay visible until the next run. Dropping it
+  // here can only ever be more conservative, never fabricate a cohort, and a
+  // segment left with no eligible stat falls through to the honest lock below.
+  const minCohort = getBenchmarkMinCohort();
+  const eligibleStats = stats.filter((s) => s.sampleCount >= minCohort);
+
+  if (eligibleStats.length > 0) {
     // Position the requester's OWN value in each band. An in-boundary machine
     // read of their own data; a crypto-shredded tenant simply has no self marker
     // (caught, not fatal). Dedupe to one latest scalar per (signal, window), the
@@ -121,10 +132,20 @@ async function buildLayerCohort(
           selfByKey.set(k, { value: r.value, computedAt: r.computedAt });
         }
       }
-    } catch {
-      // self markers stay null; the cohort distribution still shows.
+    } catch (err) {
+      // A crypto-shredded or otherwise unreadable key means the requester simply
+      // has no self marker for this metric: an honest null, not a fault to raise,
+      // and the cohort distribution still shows. Anything else is unexpected and
+      // is logged loudly here rather than silently masked, so a real bug in the
+      // read path cannot hide behind a blank-self benchmark.
+      if (!(err instanceof CryptoShreddedError) && !(err instanceof SignalEncryptionError)) {
+        logger.error(
+          { tenantId, layerKey, err: err instanceof Error ? err.message : String(err) },
+          "cohort self-marker read failed unexpectedly",
+        );
+      }
     }
-    const metrics: CohortMetric[] = stats.map((s) => {
+    const metrics: CohortMetric[] = eligibleStats.map((s) => {
       const self = selfByKey.get(s.signalKey + "\u0000" + (s.window ?? ""));
       return {
         signalKey: s.signalKey,
@@ -305,11 +326,30 @@ tenantsRouter.post("/tenants", async (req, res, next) => {
         .returning({ id: tenantsTable.id });
       tenantId = inserted[0]!.id;
     }
-    void seedTenant(url, { log: logger, mode, priorityOverride }).catch((err) => {
+    void seedTenant(url, { log: logger, mode, priorityOverride }).catch(async (err) => {
       logger.error(
         { url, err: err instanceof Error ? err.message : String(err) },
         "background tenant seed failed",
       );
+      // The orchestrator marks the tenant failed itself once its shell exists and
+      // a budget check or a layer fails, but a throw BEFORE that (e.g. the profile
+      // stage) would leave the route-created shell stuck "seeding" forever. Flip
+      // it to failed honestly, guarded to touch only a row still seeding so a
+      // terminal status the orchestrator already wrote is never clobbered.
+      try {
+        await db
+          .update(tenantsTable)
+          .set({ status: "failed", lastSeededAt: new Date() })
+          .where(and(eq(tenantsTable.id, tenantId), eq(tenantsTable.status, "seeding")));
+      } catch (cleanupErr) {
+        logger.error(
+          {
+            tenantId,
+            err: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+          },
+          "failed to mark stuck tenant failed after background seed error",
+        );
+      }
     });
     res.status(202).json({ tenantId, status: "seeding", mode });
   } catch (err) {
@@ -369,11 +409,28 @@ tenantsRouter.post("/tenants/:id/refresh", async (req, res, next) => {
     }
 
     await db.update(tenantsTable).set({ status: "seeding" }).where(eq(tenantsTable.id, tenantId));
-    void seedTenant(tenant.url, { log: logger, mode, priorityOverride }).catch((err) => {
+    void seedTenant(tenant.url, { log: logger, mode, priorityOverride }).catch(async (err) => {
       logger.error(
         { tenantId, err: err instanceof Error ? err.message : String(err) },
         "background tenant refresh failed",
       );
+      // Same honest-failed guarantee as create: a throw before the orchestrator
+      // writes its own terminal status would otherwise leave this tenant stuck
+      // "seeding". Guarded to touch only a row still seeding.
+      try {
+        await db
+          .update(tenantsTable)
+          .set({ status: "failed", lastSeededAt: new Date() })
+          .where(and(eq(tenantsTable.id, tenantId), eq(tenantsTable.status, "seeding")));
+      } catch (cleanupErr) {
+        logger.error(
+          {
+            tenantId,
+            err: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+          },
+          "failed to mark stuck tenant failed after background refresh error",
+        );
+      }
     });
     res.status(202).json({ tenantId, status: "seeding", mode });
   } catch (err) {

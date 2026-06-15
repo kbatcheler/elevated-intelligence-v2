@@ -432,3 +432,75 @@ describe("layer detail cohort wiring", () => {
     expect(JSON.stringify(body.cohortLock)).not.toContain(ids.layerTenant);
   });
 });
+
+describe("layer detail cohort re-gates against the current k floor", () => {
+  const SIGNAL = "rev-growth";
+
+  it("unlocks when a stat clears the current floor, then re-gates when the floor rises", async () => {
+    // Opt the layer tenant in (order-independent) and publish ONE identity-free
+    // stat for its segment with a sample of 7 distinct tenants, above the default
+    // k floor of 5. The stats table carries no tenant reference at all.
+    await db
+      .update(tenantsTable)
+      .set({ benchmarkOptIn: true })
+      .where(eq(tenantsTable.id, ids.layerTenant));
+    await db.insert(benchmarkStatsTable).values({
+      cohortSegmentKey: LAYER_SEGMENT,
+      layerKey: LAYER_KEY,
+      signalKey: SIGNAL,
+      window: null,
+      p25: "10",
+      p50: "20",
+      p75: "30",
+      sampleCount: 7,
+      noised: false,
+    });
+
+    const owner = await loginSession("owner");
+
+    // Default floor (5): the stat's sample of 7 clears it, so the cohort unlocks.
+    const unlocked = await api("/api/tenants/" + ids.layerTenant + "/layers/" + LAYER_KEY, {
+      session: owner,
+    });
+    expect(unlocked.status).toBe(200);
+    const unlockedBody = unlocked.json as {
+      cohortBenchmark: {
+        basis: string;
+        metrics: { signalKey: string; sampleCount: number; self: number | null }[];
+      } | null;
+      cohortLock: unknown;
+    };
+    expect(unlockedBody.cohortLock).toBeNull();
+    expect(unlockedBody.cohortBenchmark).not.toBeNull();
+    expect(unlockedBody.cohortBenchmark!.basis).toBe("verified_cohort");
+    const metric = unlockedBody.cohortBenchmark!.metrics.find((m) => m.signalKey === SIGNAL);
+    expect(metric).toBeDefined();
+    expect(metric!.sampleCount).toBe(7);
+    // This tenant has no derived signals of its own, so its self marker is an
+    // honest null rather than a fabricated position in the distribution.
+    expect(metric!.self).toBeNull();
+    // The published distribution is structurally identity-free.
+    expect(JSON.stringify(unlockedBody.cohortBenchmark)).not.toContain(ids.layerTenant);
+
+    // Raise the floor above the stored sample. A row written under the looser
+    // floor must NOT keep showing: the read re-gates it to the honest lock.
+    const prev = process.env.BENCHMARK_MIN_COHORT;
+    process.env.BENCHMARK_MIN_COHORT = "8";
+    try {
+      const regated = await api("/api/tenants/" + ids.layerTenant + "/layers/" + LAYER_KEY, {
+        session: owner,
+      });
+      expect(regated.status).toBe(200);
+      const regatedBody = regated.json as {
+        cohortBenchmark: unknown;
+        cohortLock: { unlocksAt: number } | null;
+      };
+      expect(regatedBody.cohortBenchmark).toBeNull();
+      expect(regatedBody.cohortLock).not.toBeNull();
+      expect(regatedBody.cohortLock!.unlocksAt).toBe(8);
+    } finally {
+      if (prev === undefined) delete process.env.BENCHMARK_MIN_COHORT;
+      else process.env.BENCHMARK_MIN_COHORT = prev;
+    }
+  });
+});

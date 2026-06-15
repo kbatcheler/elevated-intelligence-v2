@@ -25,7 +25,9 @@ code_execution):
 3. Build one `UNION ALL` of `SELECT '<t>' tbl, count(*) FROM public."<t>" x WHERE
    x::text ~ '<dashClass>'` per table (cast the whole row to text so every column,
    including jsonb, is checked).
-4. Expect 0 hits on all tables (currently 22).
+4. Expect 0 hits on all tables (schema has grown over time: as of the post-X audit,
+   32 public tables / 118 text and jsonb columns). `executeSql` returns CSV in its
+   `.output` string, so parse the CSV yourself; there is no structured rows field.
 
 **Why a row-cast sweep:** a past phase found long dashes only in a jsonb column
 (persisted raw model output) while every other table was clean; casting the whole

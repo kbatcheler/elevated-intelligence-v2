@@ -50,5 +50,20 @@ addendum. Follow this every phase so the docs stay consistent.
   deterministic sanitizer at every jsonb persist boundary. So a model-output persist
   path is the usual suspect when the DB sweep is non-zero.
 
+## Audit/remediation pass after a milestone (NOT a phase)
+An owner request to "audit/drift-report the system to date and action remediations"
+that arrives AFTER a milestone hard stop is not a new phase. Do NOT mint a fake next
+phase letter or advance any gate.
+- Write a dedicated doc, e.g. `docs/drift/audit-post-<lastphase>.md` (method, posture,
+  remediations actioned, accepted/deferred items with the operator action each needs,
+  evidence, verdict).
+- Move any now-resolved "Still live" item in `docs/drift/rollup.md` to "One-time or
+  resolved" and add a short header note; do NOT append a "Phase <id>" section to
+  `build-report-v2.md` (that is per-phase only).
+- Add ONE prose note line to `docs/drift/INDEX.md` Notes (not a verdict-table row).
+- Still run the gates, the two-sided dash sweep, and the architect evaluate_task.
+**Why:** the milestone is a hard stop for owner review; a remediation pass must not look
+like forward progress past it.
+
 ## Docs style
 INDEX/rollup/phase notes are verbose prose; match that register, not terse bullets.

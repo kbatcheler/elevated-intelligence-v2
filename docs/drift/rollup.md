@@ -18,6 +18,12 @@ Typecheck and build are green, the full suite is green at 627 tests, and the lon
 both sides over all 118 public text and jsonb columns. Phase X is a security milestone, so execution
 STOPS here for owner review; do not auto-advance into Phase Y.)
 
+An owner-requested post-X audit and remediation pass (2026-06-15) followed the milestone hard stop; it
+minted no phase and advanced no gate. It actioned three in-scope fixes in the benchmark cohort read path
+and re-confirmed the gates and the two-sided long-dash sweep. The full record is
+`docs/drift/audit-post-X.md`; the now-resolved benchmark re-gate item has moved from "Still live" to
+"One-time or resolved" below.
+
 ## Phase verdicts
 
 | Phase | Name | Verdict | Milestone |
@@ -96,14 +102,6 @@ STOPS here for owner review; do not auto-advance into Phase Y.)
   and DELETE on the table at the database-role level is a deployment-time hardening
   left to the operator. Integrity control today is the hash chain plus the serialized
   append.
-- Benchmark cohort read does not re-gate stale stats against the current config (X, non-blocking).
-  The live `buildLayerCohort` read trusts the most recent `benchmark_stats` rows and does not re-filter
-  them against the CURRENT `BENCHMARK_MIN_COHORT`/noise configuration, so if an operator tightens the
-  floor between recomputes, a stat computed under the looser floor could be served until the next
-  recompute supersedes it. Logged, not built, to keep the milestone in scope: the recompute always
-  re-applies the current config, the window is bounded by the recompute cadence, and a stricter floor
-  only ever makes the next recompute MORE conservative. A future hardening can re-gate at read time or
-  force a recompute on a config change.
 
 ## Live but runtime-only or cosmetic
 
@@ -119,6 +117,15 @@ STOPS here for owner review; do not auto-advance into Phase Y.)
 
 ## One-time or resolved
 
+- Benchmark cohort read now re-gates stale stats against the current k floor (X, resolved in the
+  post-X audit 2026-06-15). The Phase X non-blocking caveat was that `buildLayerCohort` trusted the
+  most recent `benchmark_stats` rows without re-filtering them against the CURRENT `BENCHMARK_MIN_COHORT`,
+  so a stat computed under a looser floor could be served until the next recompute superseded it.
+  Resolved: the read now computes the current floor, keeps only stats whose `sampleCount` meets it,
+  unlocks only on the surviving stats, and otherwise falls through to the existing honest lock that
+  counts live opted-in peers. A new integration test inserts a sample-of-7 stat, asserts it unlocks at
+  the default floor 5, then raises the floor to 8 and asserts it re-gates to a lock at `unlocksAt = 8`.
+  The read is now at least as conservative as the recompute. See `docs/drift/audit-post-X.md`.
 - Portal had zero automated tests (B). Deferred from B with `--passWithNoTests`.
   Closed after Phase D: the portal data layer is unit tested across both surfaces
   (auth and the Access console), with a mocked fetch covering every status-to-error
