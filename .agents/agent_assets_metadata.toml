@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "W3yblM_kVS8_sQ9Gbn9Fk"
+uri = "file://docs/drift/milestone-T.md"
+type = "text"
+title = "Milestone Drift Report: Phase T (A through T)"
