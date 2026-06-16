@@ -39,4 +39,13 @@ org_id = the bootstrapped provider org (`SELECT id FROM orgs WHERE type='provide
   not a special role.
 
 The dev DB is SHARED with the regression suite, so use unique emails and DELETE the seeded
-rows when finished; never assert on global counts.
+rows when finished; never assert on global counts. Delete users BEFORE their client org
+(users.org_id has an FK); deleting the org cascades its org_tenants bindings.
+
+## Verifying API-level fences from the browser
+To assert a server-side fence (e.g. tenant fencing) inside a Playwright test, navigate the
+browser DIRECTLY to the raw GET endpoint (e.g. `/api/tenants/:id/overview`). It is same-origin
+through the Vite `/api` proxy, so the httpOnly `ei_session` cookie rides along automatically,
+and the JSON body / status is visible to assert on. A client bound only to tenant A sees just A
+in `/api/tenants`, gets a 403 `{"error":"forbidden"}` on an unbound tenant's overview, and 200
+on its own. This needs no app secret and no XHR plumbing in the test.
