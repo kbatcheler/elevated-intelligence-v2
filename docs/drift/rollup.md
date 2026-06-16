@@ -4,6 +4,9 @@ A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
+A post-AI verification audit (2026-06-16) is recorded below the Phase AI summary; it advances no phase,
+so the rollup still spans Phases A through AI.
+
 Last updated after Phase AI (verification and the build-report append, the closing phase and milestone of
 Stage 5, Platform completion, and the end of the owner-authorized AE-through-AI sequence). Phase AI builds
 no product code: it maps every Stage 5 acceptance criterion to the existing tested evidence, re-runs the
@@ -37,6 +40,25 @@ items (the per-instance LAYER_CONCURRENCY operational fact and the Docker and li
 boundary) are added below. Phase AI, the final phase of Stage 5, then mapped every Stage 5 acceptance
 criterion to existing tested evidence and re-ran the gates green; its architect `evaluate_task` returned
 PASS. Phase AI now CLOSES Stage 5 and PAUSES at the milestone for owner review; it does not auto-advance.
+
+An owner-requested complete drift report (2026-06-16) followed the Phase AI milestone hard stop as a
+functional and end-to-end VERIFICATION pass, not a new phase: it drove the real application in a browser
+via the Playwright testing skill across the unauthenticated surfaces (the sign-in gate, the honest
+invalid-login state, and the public `/d/:token` share rendering an honest unavailable state outside the
+AuthProvider), an authenticated provider-owner smoke (real login through the form, the boot splash, the
+brief and layers, and the owner-only Admin, Security, and Spend consoles), and the role and tenant
+fences (a provider-member gets the honest NotFound on owner-only `/admin`, `/security`, `/spend` while
+the provider-allowed `/connections` renders; a client-admin gets NotFound on owner-only and
+provider-only routes, `/onboarding` renders, and tenant fencing holds with `/api/tenants` listing only
+the bound tenant, a 403 on an unbound tenant's overview, and 200 on the bound one). Because the owner
+secrets and SESSION_SECRET reach only the workflow processes, each flow seeded a dev `users` row with a
+self-generated scrypt hash, logged in through the real form, and was deleted after, leaving the shared
+dev database at baseline; forging a session cookie or minting a PIN is impossible from the test runtime
+and is recorded as a standing environmental fact. The gates were re-run green (typecheck, build, and the
+full suite unchanged at 888) and the two-sided long-dash sweep is zero (the source guard in the suite
+plus a fresh database-wide sweep over 144 text and jsonb columns across 37 base tables, of 39 total). No
+defect was found and no product code changed; the full record is `docs/drift/audit-post-AI.md`. This
+verification advances no gate and mints no phase; Phase AI remains the milestone hard stop.
 
 Earlier, updated after Phase AG (the curated custom-layer creation flow, the fourth phase of Stage 5,
 Platform completion, run under the owner-authorized AE-through-AI sequence; Phase AF paused at its own
