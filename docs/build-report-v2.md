@@ -2439,3 +2439,67 @@ dependencies. The architect `evaluate_task` returned PASS. The drift report is `
 index and the rollup are updated to "A through AI". Phase AI closes Stage 5 (Platform completion) and is
 the final milestone of the owner-authorized AE-through-AI sequence; the build now PAUSES at the Phase AI
 milestone for owner review and does not auto-advance.
+
+## Phase AJ: the Brier-scored calibration ledger (milestone)
+
+Phase AJ supersedes Phase W's loose calibration (a raw hits-over-resolved count) with a proper
+probabilistic scoring rule. The real Evaluator seat now states a likelihood for each binary,
+resolvable claim it makes; that probability is stored once at seed time and, when the claim later comes
+true or false, scored with the Brier score (the mean squared error of a probabilistic forecast: 0 is
+perfect, 1 is perfectly wrong, the always-0.5 forecaster exactly 0.25). The calibration surface reads
+every aggregate against that 0.25 baseline, labels a thin sample honestly, and shows the resolved
+ledger with misses always included. Zero new npm dependencies; ASCII hyphen only in source and in data;
+no fabricated telemetry; the Evaluator stays a SEAT (no model literal in source); and crucially no
+verdict-to-probability mapping, no fallback probabilities, and no title-based action linking.
+
+### What this phase built
+
+One `forecasts` table (the only schema change; the base-table count goes from 39 to 40) holds one row
+per probabilistic forecast across all five kinds (`action_outcome`, `risk_occurrence`,
+`anomaly_materiality`, `finding_survival`, `confounder_verdict`), with the honesty boundary in the
+column nullability: `probability` (numeric(5,4)) is set from the real Evaluator output at creation,
+while `outcome`, `resolvedAt`, `brierScore`, and `resolutionBasis` (its own enum of measured, modelled,
+owner) stay null until the forecast actually resolves. The foreign keys encode the lifecycle (tenant
+cascade, layer restrict, committed action and outcome measurement and resolving owner all set null), so
+the graded row outlives the operator who adjudicated it. The pure Brier math
+(`artifacts/api-server/src/lib/calibration/brierMath.ts`) is `(p - o)^2` with the probability clamped,
+a fixed 0.25 baseline, an empty-set null mean (never a fabricated zero), a per-segment aggregation, a
+ten-band calibration curve with null empty bands, an honest sample label, and a downward-only,
+threshold-gated, never-inflating confidence calibration; the honesty thresholds live in one
+`config.ts`. The cortex score stage gains an optional `forecasts[]` that the REAL Evaluator emits as
+genuine likelihoods (no synthesis from a verdict string), and the orchestrator persists them only after
+the real score stage succeeds, with `resolveBy` set to made-at plus the horizon. The resolution service
+is the single honest writer: an `action_outcome` forecast is linked to its committed action by an
+EXPLICIT id-or-anchor reference (never a title match), resolves automatically only on a TERMINAL outcome
+measurement (realized to 1, missed to 0; pending or on_track leaves it open) with the basis carried from
+the measurement, or resolves by an owner adjudication whose Brier score is computed server-side from the
+stored probability under an unresolved-row guard that prevents a double-resolve. The `/api/calibration`
+route (behind `requireAuth`) returns the headline Brier against the baseline, the curve, the per-layer,
+per-kind, and per-seat breakdowns with labels, the resolved and open counts, and the resolved ledger
+with misses always included; the summary is tenant-scoped for any seat that can reach the tenant and
+owner-only system-wide, and the owner-only resolve route maps to 200, 404, or 409. The display-only
+`computeLayerConfidenceAdvisory` reads a layer's own resolved forecasts and returns a disciplined
+confidence alongside the raw value and the evidence, never overwriting the raw pill. The portal
+`CalibrationPage` renders the headline with a plain-English explainer, a no-dependency calibration
+curve, the breakdown tables, honest sample labels, and the visible ledger, with distinct loading,
+empty, error, and ready states and a dash (never a zero) for a missing figure.
+
+### Verification
+
+Typecheck and build are green across the workspace (exit 0 on both; portal built, api-server bundled).
+The full suite is green at 923 tests (api-server 522 across 60 files, portal 240 across 19 files, cortex
+110 across 13 files, connectors 29 across 5 files, edge-agent 10 across 3 files, db 8, scripts 4), up 35
+from Phase AI's 888; the new tests are api-server `brierMath` (20) and `calibration.integration` (9)
+plus portal `calibrationApi` (6). The long-dash sweep is zero on both sides: the source guard is green
+over authored source including the Phase AJ Markdown, and a fresh database-wide cast over all 150 public
+text and jsonb columns across the 40 base tables (the `forecasts` table is the one added) reports zero
+hits. Zero new npm dependencies. The architect `evaluate_task` returned PASS, confirming the Brier math
+and aggregation, the honesty boundary (no probability synthesised from a verdict string or defaulted),
+the resolution path (no double-resolve, owner-only adjudication, explicit id-or-anchor action linking),
+and the route authorization, with the hard constraints holding. The accepted LOWs are source-reviewed
+and logged in `phase-AJ.md`: the score prompt that elicits the likelihoods runs only inside a real paid
+Evaluator call the suite does not run (the output schema carrying `forecasts[]` and the orchestrator
+persistence ARE test-proven through the real output shape), and the `CalibrationPage` React rendering
+(its `calibrationApi` client is unit-tested and its route is integration-tested). The drift report is
+`phase-AJ.md`; the drift index and the rollup are updated to "A through AJ". Phase AJ is a MILESTONE hard
+stop: the build now PAUSES at the AJ gate for owner review and does NOT auto-advance to Phase AK.

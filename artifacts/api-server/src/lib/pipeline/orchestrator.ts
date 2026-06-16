@@ -10,7 +10,7 @@
 // valid output records the error and aborts that layer loudly.
 
 import { randomUUID } from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   assembleLayerContent,
   deepStripDashes,
@@ -51,12 +51,14 @@ import {
 import {
   db,
   derivedSignalsTable,
+  forecastsTable,
   layersTable,
   PIPELINE_SUB_STAGES,
   tenantLayersTable,
   tenantPipelineRunsTable,
   tenantProfileTable,
   tenantsTable,
+  type InsertForecast,
   type PipelineSubStage,
   type PipelineSubStageName,
 } from "@workspace/db";
@@ -556,6 +558,40 @@ async function runLayer(
         target: [tenantLayersTable.tenantId, tenantLayersTable.layerKey],
         set: { ...row, generatedAt: new Date() },
       });
+
+    // Phase AJ. Persist the Evaluator's forecasts into the calibration ledger. A
+    // real build supersedes its prior UNRESOLVED forecasts for this layer
+    // (mirroring how a refresh supersedes derived signals) while never touching an
+    // already-resolved forecast, so re-seeding can neither duplicate the ledger nor
+    // erase graded history. The probability is the genuine model likelihood; the
+    // horizon becomes a concrete resolveBy. Nothing is synthesised: a layer that
+    // emitted no resolvable forecast clears its open set and writes none.
+    const forecastMadeAt = new Date();
+    const forecastRows: InsertForecast[] = score.forecasts.map((f) => ({
+      tenantId,
+      layerKey: layer.key,
+      runId: ctx.runId,
+      sourceStage: "score",
+      subjectSeat: f.subject_seat,
+      sourcePath: f.source_path ? stripDashes(f.source_path) : null,
+      statement: stripDashes(f.statement),
+      probability: String(f.probability),
+      kind: f.kind,
+      madeAt: forecastMadeAt,
+      resolveBy: new Date(forecastMadeAt.getTime() + f.horizon_days * 24 * 60 * 60 * 1000),
+    }));
+    await db
+      .delete(forecastsTable)
+      .where(
+        and(
+          eq(forecastsTable.tenantId, tenantId),
+          eq(forecastsTable.layerKey, layer.key),
+          isNull(forecastsTable.resolvedAt),
+        ),
+      );
+    if (forecastRows.length > 0) {
+      await db.insert(forecastsTable).values(forecastRows);
+    }
 
     // Provenance ledger: one tamper-evident, hash-chained entry per claim path,
     // recording only the source reference, never raw data. Verified and modelled

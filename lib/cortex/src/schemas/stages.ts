@@ -152,12 +152,62 @@ export const scoreClaimSchema = z.object({
   confidence: z.number().min(0).max(100),
   basis: scoreClaimBasis,
 });
+
+// Phase AJ. What kind of binary-resolvable prediction a forecast is. Each one
+// resolves true or false within its horizon: a recommended action realising its
+// predicted impact, a flagged risk occurring, an anomaly proving material, a
+// finding surviving scrutiny, or a Confounder verdict holding up under later
+// evidence.
+export const forecastKindEnum = z.enum([
+  "action_outcome",
+  "risk_occurrence",
+  "anomaly_materiality",
+  "finding_survival",
+  "confounder_verdict",
+]);
+export type ForecastKind = z.infer<typeof forecastKindEnum>;
+
+// The seat whose prediction a forecast belongs to, for the per-seat track
+// record. A role label, never a model identifier. The Evaluator owns its layer
+// forecasts; a confounder_verdict forecast is attributed to the Confounder whose
+// verdict it scores.
+export const forecastSeatEnum = z.preprocess(
+  (v) => (v === "Confounder" ? "Confounder" : "Evaluator"),
+  z.enum(["Evaluator", "Confounder"]),
+);
+
+// A single probabilistic forecast emitted by the real Evaluator call. The
+// probability is a genuine likelihood in [0,1]; the orchestrator turns
+// horizon_days into a concrete resolveBy timestamp at persistence time. No
+// probability is ever synthesised from a verdict string or defaulted to a
+// reflexive value: a layer with nothing objectively resolvable simply emits an
+// empty list.
+export const scoreForecastSchema = z.object({
+  kind: forecastKindEnum,
+  // The product role this forecast belongs to; defaults to the Evaluator.
+  subject_seat: forecastSeatEnum.optional().default("Evaluator"),
+  // The path into the content or confounders this forecast refers to, e.g.
+  // "actions[0]" or "confounders[1]". Optional for a layer-level statement.
+  source_path: clampedStr(160).optional(),
+  // The plain-English statement that will resolve true or false.
+  statement: clampedStr(600, 5),
+  // The genuine probability the statement resolves TRUE, in [0,1].
+  probability: z.number().min(0).max(1),
+  // The horizon in days within which the statement should resolve.
+  horizon_days: z.number().int().min(1).max(1095),
+});
+export type ScoreForecast = z.infer<typeof scoreForecastSchema>;
+
 export const scoreOutputSchema = z.object({
   // Capped below 100: the engine never asserts certainty.
   confidence: z.number().min(0).max(95),
   confidence_gap: z.number().min(0).max(100),
   gaps: cappedArray(gapSchema, 0, 12),
   claims: cappedArray(scoreClaimSchema, 0, 48),
+  // Phase AJ. The binary-resolvable forecasts this layer makes. Optional and
+  // defaulted to empty so a layer with nothing objectively resolvable, and every
+  // pre-AJ fixture, stays valid.
+  forecasts: cappedArray(scoreForecastSchema, 0, 12).optional().default([]),
 });
 export type ScoreOutput = z.infer<typeof scoreOutputSchema>;
 

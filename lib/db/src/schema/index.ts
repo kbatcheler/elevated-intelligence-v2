@@ -22,6 +22,10 @@ export * from "./committedActions";
 // The outcome loop (Phase W): one measurement row per committed action grading
 // what it actually realized against the prediction snapshotted at commit time.
 export * from "./outcomeMeasurements";
+// The Brier-scored calibration ledger (Phase AJ): one row per probabilistic
+// forecast the Evaluator makes, with its outcome and Brier score filled in on
+// resolution. Supersedes Phase W's loose calibration with a proper scoring rule.
+export * from "./forecasts";
 export * from "./claimBrokenReports";
 // Connectors and SOC 2 (V2). The catalogue, per-tenant connections and runs, the
 // "math, not records" derived signal store, the append-only provenance ledger,

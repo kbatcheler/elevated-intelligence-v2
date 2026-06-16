@@ -9,6 +9,7 @@ import { agentRouter } from "./routes/agent";
 import { authRouter } from "./routes/auth";
 import { backupsRouter } from "./routes/backups";
 import { benchmarksRouter } from "./routes/benchmarks";
+import { calibrationRouter } from "./routes/calibration";
 import { clientRouter } from "./routes/client";
 import { captureError } from "./lib/observability/sentryReporter";
 import { redactRoute } from "./lib/observability/redactRoute";
@@ -149,6 +150,12 @@ app.use("/api", ingestionAdminRouter);
 app.use("/api", uploadRouter);
 app.use("/api", securityRouter);
 app.use("/api", retentionRouter);
+
+// The Brier-scored calibration ledger (Phase AJ). Mounted under the shared
+// session gate above; the router scopes a tenant summary to seats that can reach
+// the tenant and fences the system-wide summary and owner adjudication to the
+// owner inside the handlers.
+app.use("/api/calibration", calibrationRouter);
 
 // The Portfolio Intelligence view (Phase Y). Mounted under the shared session
 // gate above; the router itself resolves scope from the session and refuses any

@@ -390,6 +390,16 @@ const SCORE_SHAPE = `
   ],
   "claims": [
     { "path": "causes[0]", "confidence": 0, "basis": "verified|modelled" }
+  ],
+  "forecasts": [
+    {
+      "kind": "action_outcome|risk_occurrence|anomaly_materiality|finding_survival|confounder_verdict",
+      "subject_seat": "Evaluator|Confounder",
+      "source_path": "actions[0]",
+      "statement": "the specific claim that will resolve true or false",
+      "probability": 0.0,
+      "horizon_days": 0
+    }
   ]
 }`;
 
@@ -418,6 +428,30 @@ export function buildScore(
         "claims weaken the diagnosis. Set confidence_gap to the additional confidence",
         "available if the open gaps were closed, and list those gaps with a kind and the",
         "points of lift each would add.",
+        "",
+        "Finally, emit forecasts: the predictions in this layer that will RESOLVE true or",
+        "false within a stated horizon, so the system can be scored against reality later.",
+        "Only forecast statements an observer could objectively check; skip anything vague",
+        "or unfalsifiable. For each one give:",
+        "  kind          - action_outcome (a recommended action realises its predicted",
+        "                  impact), risk_occurrence (a flagged risk happens),",
+        "                  anomaly_materiality (an anomaly proves material),",
+        "                  finding_survival (a headline finding holds up), or",
+        "                  confounder_verdict (a Confounder verdict proves correct),",
+        "  subject_seat  - Evaluator for your own layer forecasts; Confounder ONLY for a",
+        "                  confounder_verdict forecast that scores a verdict in CONFOUNDER",
+        "                  FINDINGS,",
+        "  source_path   - the path it refers to (actions[0], metrics[1], confounders[0]),",
+        "  statement     - the specific resolvable claim,",
+        "  probability   - your GENUINE probability it resolves true, a decimal in 0 to 1,",
+        "  horizon_days  - the number of days within which it should resolve.",
+        "",
+        "The probability must be your true belief and use the FULL range: a near-certainty",
+        "is 0.95, a coin-flip is 0.5, an unlikely-but-possible event is 0.15. Do NOT default",
+        "to 0.8 or any reflexive value, and never read a probability off a verdict word; a",
+        "ruled_out confounder is simply one you would assign a low probability of holding.",
+        "If the layer contains nothing objectively resolvable, return an empty forecasts",
+        "list rather than inventing a prediction.",
       ],
       profile,
       SCORE_SHAPE,

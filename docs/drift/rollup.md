@@ -1,13 +1,41 @@
-# Drift rollup: Phases A through AI
+# Drift rollup: Phases A through AJ
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
 per-phase reports for the full context; this is the at-a-glance comparison.
 
-A post-AI verification audit (2026-06-16) is recorded below the Phase AI summary; it advances no phase,
-so the rollup still spans Phases A through AI.
+A post-AI verification audit (2026-06-16) is recorded below the Phase AI summary; it advanced no phase.
+Phase AJ (the Brier-scored calibration ledger) then followed it, so the rollup now spans Phases A
+through AJ.
 
-Last updated after Phase AI (verification and the build-report append, the closing phase and milestone of
+Last updated after Phase AJ (the Brier-scored calibration ledger, a MILESTONE hard stop that supersedes
+Phase W's loose hits-over-resolved calibration with a proper probabilistic scoring rule). The real
+Evaluator seat now states a likelihood for each binary, resolvable claim it makes; one new `forecasts`
+table (the only schema change, taking the base-table count from 39 to 40) stores that probability once
+at seed time across five forecast kinds (`action_outcome`, `risk_occurrence`, `anomaly_materiality`,
+`finding_survival`, `confounder_verdict`), and the honesty boundary is the column nullability: the Brier
+score, outcome, resolved-at, and resolution basis stay null until the claim actually resolves. The pure
+Brier math (`(p - o)^2`, a fixed 0.25 always-0.5 baseline, an empty-set null mean, a ten-band
+calibration curve with null empty bands, an honest thin-sample label, and a downward-only,
+threshold-gated, never-inflating confidence calibration) is hand-pinned by unit tests. A forecast
+resolves exactly two honest ways: automatically from a TERMINAL outcome measurement on the committed
+action it was linked to by an EXPLICIT id-or-anchor reference (never a title match, realized to 1 and
+missed to 0, with the basis carried from the measurement), or by an owner adjudication whose Brier score
+is computed server-side under an unresolved-row guard that prevents a double-resolve. The
+`/api/calibration` route is tenant-scoped for any seat that can reach the tenant and owner-only
+system-wide, and surfaces the headline Brier against the baseline, the curve, the per-layer, per-kind,
+and per-seat breakdowns with sample labels, the resolved and open counts, and the resolved ledger with
+misses always included; the portal `CalibrationPage` renders it with distinct loading, empty, error, and
+ready states and a dash, never a fabricated zero, for a missing figure. Typecheck and build green; full
+suite green at 923 tests (api-server 522, portal 240, cortex 110, connectors 29, edge-agent 10, db 8,
+scripts 4; +35 from AI: api-server `brierMath` 20 and `calibration.integration` 9, portal
+`calibrationApi` 6); long-dash sweep zero on both sides over all 150 public text and jsonb columns
+across the 40 base tables; zero new npm dependencies. The architect `evaluate_task` returned PASS. The
+two new still-live items (the source-reviewed Evaluator forecast-probability prompt and the
+source-reviewed portal calibration page) are added below. Phase AJ is a MILESTONE hard stop: the build
+PAUSES at the AJ gate for owner review and does NOT auto-advance to Phase AK.
+
+Earlier, updated after Phase AI (verification and the build-report append, the closing phase and milestone of
 Stage 5, Platform completion, and the end of the owner-authorized AE-through-AI sequence). Phase AI builds
 no product code: it maps every Stage 5 acceptance criterion to the existing tested evidence, re-runs the
 gates fresh (typecheck and build green, the full suite green at 888 tests, the long-dash sweep zero on
@@ -252,6 +280,7 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 | AG | Curated Custom-Layer Creation Flow | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
 | AH | Cloud Portability | Pass | no (gated, Stage 5; autonomous AE-AF-AG-AH-AI run, pauses at the AI milestone) |
 | AI | Verification and the Build-Report Append (closes Stage 5) | Pass | yes (milestone hard stop; closes Stage 5, end of the autonomous AE-AF-AG-AH-AI run, paused for owner review) |
+| AJ | The Brier-Scored Calibration Ledger | Pass | yes (milestone hard stop; supersedes Phase W loose calibration, paused for owner review) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -390,6 +419,17 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   available-not-connected adapters (needs real credentials and a bucket the owner provisions), and
   `terraform apply` of `infra/gcp` plus the durable Postgres and PITR the platform owns. The
   provable-versus-owner-rerun split is in `phase-AH.md`.
+- The Evaluator forecast-probability PROMPT is source-reviewed, not run by the suite (AJ). The genuine
+  likelihoods that seed the calibration ledger are emitted only inside a real paid Evaluator call, which
+  the test suite deliberately does not run, so the prompt wording that elicits them is source-reviewed.
+  The score OUTPUT SCHEMA carrying `forecasts[]` and the orchestrator PERSISTENCE of emitted forecasts
+  ARE test-proven (the integration test drives the real output shape through the persist path); only the
+  elicitation prompt is unrun. Accepted as logged drift, mirroring the AC real-model-call and AF
+  sovereign real-endpoint items; a future injected-Evaluator test or a real seed can close it.
+- No portal-side rendering test for the calibration page (AJ). `CalibrationPage.tsx` is source-reviewed;
+  the `calibrationApi` client behind it IS unit-tested and the `/api/calibration` route IS
+  integration-tested, but there is no portal-side rendering test. Accepted as logged drift, mirroring the
+  AE, AF, and AG portal-panel items; a future lightweight portal test can close it.
 
 ## Live but runtime-only or cosmetic
 

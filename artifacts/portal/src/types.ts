@@ -399,6 +399,104 @@ export interface TenantLayerDetail {
   reducedMode: boolean;
   generatorModel: string;
   generatedAt: string;
+  // Phase AJ: a display-only confidence advisory disciplined by this layer's own
+  // Brier track record. Null when the content carries no numeric overall
+  // confidence. The raw confidence in content is never overwritten; the page
+  // shows the raw pill and an honest label, and only applies the disciplined
+  // value once the layer has cleared the resolved-sample threshold.
+  confidenceCalibration: LayerConfidenceAdvisory | null;
+}
+
+// ── Brier-scored calibration (Phase AJ) ──────────────────────────────────────
+// Every figure mirrors a real resolved-forecast computation server-side. A
+// forecast is a probability the real Evaluator stated; its outcome is read only
+// from a persisted measurement or an owner adjudication, never synthesised. The
+// Brier score is the mean squared error: 0 is perfect, 0.25 is the coin-flip
+// baseline, above 0.25 is worse than chance. Nothing here is fabricated; a thin
+// sample carries an honest label rather than a dressed-up track record.
+
+// The honest sample-size label: "established" once the resolved count clears the
+// threshold, otherwise "early, n resolved".
+export interface SampleLabel {
+  established: boolean;
+  label: string;
+}
+
+// The display-only advisory for a single layer's confidence pill.
+export interface LayerConfidenceAdvisory {
+  raw: number;
+  adjusted: number;
+  applied: boolean;
+  reason: "insufficient_sample" | "well_calibrated" | "overconfident_penalty";
+  penalty: number;
+  n: number;
+  brier: number | null;
+  threshold: number;
+  label: SampleLabel;
+}
+
+export interface CalibrationScope {
+  kind: "system" | "tenant";
+  tenantId: string | null;
+  tenantName: string | null;
+}
+
+export interface CalibrationHeadline {
+  meanBrier: number | null;
+  n: number;
+  label: SampleLabel;
+  beatsBaseline: boolean | null;
+}
+
+// One stated-probability band of the reliability curve. avgProbability and
+// observedFrequency are null for an empty band: no point is plotted for no data.
+export interface CalibrationBand {
+  lower: number;
+  upper: number;
+  n: number;
+  avgProbability: number | null;
+  observedFrequency: number | null;
+}
+
+export interface CalibrationSegment {
+  key: string;
+  meanBrier: number | null;
+  n: number;
+  label: SampleLabel;
+}
+
+// One resolved forecast in the visible ledger. The ledger always includes misses
+// (outcome 0); it is a track record, not a highlight reel.
+export interface CalibrationLedgerRow {
+  id: string;
+  tenantId: string;
+  tenantName: string | null;
+  layerKey: string;
+  kind: string;
+  subjectSeat: string;
+  statement: string;
+  sourcePath: string | null;
+  probability: number;
+  outcome: number;
+  brierScore: number | null;
+  resolutionBasis: string | null;
+  madeAt: string | null;
+  resolveBy: string | null;
+  resolvedAt: string | null;
+}
+
+export interface CalibrationSummary {
+  scope: CalibrationScope;
+  threshold: number;
+  baseline: number;
+  headline: CalibrationHeadline;
+  curve: CalibrationBand[];
+  byLayer: CalibrationSegment[];
+  byKind: CalibrationSegment[];
+  bySeat: CalibrationSegment[];
+  resolvedCount: number;
+  openCount: number;
+  ledger: CalibrationLedgerRow[];
 }
 
 // ── Pipeline runs (the boot splash + Intelligence Architecture read these) ──

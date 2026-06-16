@@ -23,6 +23,11 @@ import {
   serializeChallenge,
 } from "../lib/challenge/findingChallenge";
 import { isOwner, isProvider } from "../lib/auth/access";
+import {
+  linkForecastToCommittedAction,
+  resolveForecastsForMeasurement,
+} from "../lib/calibration/forecastResolution";
+import { computeLayerConfidenceAdvisory } from "../lib/calibration/layerConfidence";
 import { getBenchmarkMinCohort } from "../lib/benchmarks/benchmarks";
 import { segmentKeyFor } from "../lib/benchmarks/benchmarkMath";
 import { logger } from "../lib/logger";
@@ -708,6 +713,21 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
     // opted in. No contributor identity is ever returned.
     const { cohortBenchmark, cohortLock } = await buildLayerCohort(id, key);
 
+    // Phase AJ: a display-only confidence advisory disciplined by this layer's
+    // own Brier track record. The raw confidence in content is never overwritten;
+    // the advisory carries the adjusted value, the resolved sample, the layer
+    // Brier, and an honest label so the portal shows the raw pill until the layer
+    // has enough resolved forecasts to earn the disciplined one. Null when the
+    // content carries no numeric overall confidence.
+    const rawConfidence =
+      layer.content !== null &&
+      typeof layer.content === "object" &&
+      typeof (layer.content as { confidence?: unknown }).confidence === "number"
+        ? (layer.content as { confidence: number }).confidence
+        : null;
+    const confidenceCalibration =
+      rawConfidence === null ? null : await computeLayerConfidenceAdvisory(id, key, rawConfidence);
+
     res.json({
       tenantId: layer.tenantId,
       layerKey: layer.layerKey,
@@ -723,6 +743,7 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
       reducedMode: layer.reducedMode,
       generatorModel: layer.generatorModel,
       generatedAt: layer.generatedAt,
+      confidenceCalibration,
     });
   } catch (err) {
     next(err);
@@ -942,6 +963,12 @@ const commitActionSchema = z.object({
   // real scalar signal exists; outside-in commits leave the baseline null.
   baselineSignalKey: z.string().min(1).max(200).optional(),
   baselineWindow: z.string().min(1).max(200).optional(),
+  // Optional, Phase AJ: explicitly bind this commit to the action_outcome
+  // forecast it acts on, by the forecast's own id or its (layer, sourcePath)
+  // anchor. The link is always explicit so a forecast resolves against the
+  // action a user actually committed, never one inferred from a matching title.
+  forecastId: z.string().uuid().optional(),
+  forecastSourcePath: z.string().min(1).max(200).optional(),
 });
 
 const updateActionStatusSchema = z.object({
@@ -1022,7 +1049,22 @@ tenantsRouter.post("/tenants/:id/actions", requireTenantAccess, async (req, res,
         committedBy: user.id,
       })
       .returning();
-    res.status(201).json({ action: inserted[0] });
+    const action = inserted[0];
+    // Phase AJ: bind the action_outcome forecast to this committed action when
+    // the client named one explicitly. The link is what lets a later outcome
+    // measurement resolve the forecast and score it; an unbound commit simply
+    // leaves the forecast resolvable by owner adjudication.
+    let linkedForecastId: string | null = null;
+    if (d.forecastId || d.forecastSourcePath) {
+      linkedForecastId = await linkForecastToCommittedAction({
+        tenantId,
+        actionId: action.id,
+        layerKey: d.layerKey,
+        forecastId: d.forecastId ?? null,
+        sourcePath: d.forecastSourcePath ?? null,
+      });
+    }
+    res.status(201).json({ action, linkedForecastId });
   } catch (err) {
     next(err);
   }
@@ -1201,7 +1243,17 @@ tenantsRouter.post(
           recordedBy: user.id,
         })
         .returning();
-      res.status(201).json({ measurement: inserted[0] });
+      const measurement = inserted[0];
+      // Phase AJ: a terminal measurement (realized or missed) resolves every
+      // open forecast bound to this action and scores it. A pending or on_track
+      // measurement resolves nothing, so a forecast is never graded on a guess.
+      const resolvedForecasts = await resolveForecastsForMeasurement({
+        actionId,
+        measurementId: measurement.id,
+        status,
+        basis,
+      });
+      res.status(201).json({ measurement, resolvedForecasts });
     } catch (err) {
       next(err);
     }

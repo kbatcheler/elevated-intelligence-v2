@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import type {
   FindingChallenge,
+  LayerConfidenceAdvisory,
   LayerRegistryEntry,
   PipelineRun,
   TenantLayerDetail,
@@ -194,6 +195,9 @@ function LayerBody({
           Express build (reduced)
         </span>
       )}
+      {detail.confidenceCalibration && (
+        <ConfidenceCalibrationNote advisory={detail.confidenceCalibration} />
+      )}
       <Hero entry={entry} detail={detail} />
       {isBenchmarkLayer && <BenchmarkConsent tenantId={detail.tenantId} />}
       <LayerSections detail={detail} feeds={entry?.feeds ?? []} challenge={challenge} />
@@ -203,6 +207,63 @@ function LayerBody({
         generatorModel={detail.generatorModel}
         generatedAt={detail.generatedAt}
       />
+    </div>
+  );
+}
+
+// Phase AJ display-only confidence advisory. The raw Evaluator confidence pill is
+// never overwritten; this strip sits beside it and is honest about the layer's
+// Brier track record. Below the resolved-sample threshold it leads with the thin
+// label and applies no adjustment. Once established it states the layer Brier and
+// shows the disciplined value, but only when the track record actually pulls the
+// pill down (an overconfident layer with a poor score); a well-calibrated layer
+// is left untouched and never inflated.
+function ConfidenceCalibrationNote({ advisory }: { advisory: LayerConfidenceAdvisory }) {
+  const established = advisory.label.established;
+  const applied = advisory.applied;
+  const tone = !established ? "var(--slate-light)" : applied ? "var(--amber)" : "var(--teal)";
+  const background = !established
+    ? "var(--cream-dark)"
+    : applied
+      ? "var(--amber-faint)"
+      : "var(--cream-dark)";
+
+  const body = !established
+    ? "Confidence calibration is provisional for this layer (" +
+      advisory.label.label +
+      "). The stated confidence is shown as-is until at least " +
+      advisory.threshold +
+      " of its forecasts resolve."
+    : applied
+      ? "This layer's forecasts have a Brier score of " +
+        (advisory.brier === null ? "-" : advisory.brier.toFixed(3)) +
+        " (worse than the " +
+        "0.25 coin-flip baseline), so its displayed confidence is disciplined down by " +
+        advisory.penalty +
+        " point(s), from " +
+        Math.round(advisory.raw) +
+        "% to " +
+        Math.round(advisory.adjusted) +
+        "%. The raw stated confidence is unchanged underneath."
+      : "This layer's forecasts have a Brier score of " +
+        (advisory.brier === null ? "-" : advisory.brier.toFixed(3)) +
+        " (at or better than the 0.25 coin-flip baseline), so its stated confidence stands on its own track record. No adjustment applied.";
+
+  return (
+    <div
+      style={{
+        justifySelf: "stretch",
+        padding: "10px 14px",
+        borderRadius: 8,
+        fontSize: 13,
+        lineHeight: 1.5,
+        color: "var(--navy)",
+        background,
+        border: "1px solid " + tone,
+      }}
+    >
+      <span style={{ fontWeight: 600 }}>Confidence calibration</span>
+      <span style={{ marginLeft: 8, color: "var(--slate)" }}>{body}</span>
     </div>
   );
 }

@@ -62,6 +62,7 @@ export function TopNav() {
   if (user?.role === "provider-owner") {
     items.push({ to: "/security", label: "Security" });
     items.push({ to: "/spend", label: "Spend" });
+    items.push({ to: "/calibration", label: "Calibration" });
     items.push({ to: "/admin", label: "Admin" });
   }
 

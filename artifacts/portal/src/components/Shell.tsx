@@ -22,6 +22,7 @@ import { HeartbeatPage } from "./pages/HeartbeatPage";
 import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { BreakGlassPage } from "./pages/BreakGlassPage";
 import { SpendPage } from "./pages/SpendPage";
+import { CalibrationPage } from "./pages/CalibrationPage";
 import { SecurityConsole } from "./security/SecurityConsole";
 import { Onboarding } from "./Onboarding";
 import { EmptyState, PageWidth } from "./primitives";
@@ -119,6 +120,8 @@ function Routes({ role }: { role: UserRole }) {
       return isOwner ? <SecurityConsole /> : <NotFound />;
     case "/spend":
       return isOwner ? <SpendPage /> : <NotFound />;
+    case "/calibration":
+      return isOwner ? <CalibrationPage /> : <NotFound />;
     case "/admin":
       return isOwner ? <AccessConsole /> : <NotFound />;
     default:
