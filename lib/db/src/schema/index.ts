@@ -68,6 +68,20 @@ export * from "./pushIntelligence";
 // challenge of a specific finding and its Confounder + Synthesist re-reasoning
 // (uphold or revise). Never mutates or deletes the challenged finding.
 export * from "./findingChallenges";
+// The decision ledger (Phase AL): one row per board-grade decision (commit,
+// defer, reject) on a recommended action, with the system recommendation
+// snapshotted at decision time, the human rationale, the linked AJ forecast, and
+// one hash-chained provenance entry. "Overruled and right" is derivable from it.
+export * from "./decisionRecords";
+// On-demand pre-mortems (Phase AL): a real Confounder call attached to a
+// decision record, returning ranked failure modes and early-warning indicators.
+// The indicators are normalised so the Phase Z push evaluator can watch them.
+export * from "./preMortems";
+// As-of replay snapshots (Phase AM): one append-only row per layer build,
+// capturing the diagnosis content exactly as it was persisted at that moment, so
+// a past state can be reconstructed faithfully even though tenant_layers is
+// overwritten in place on every refresh.
+export * from "./tenantLayerSnapshots";
 export * from "./diagnosisShareTokens";
 // Ingestion suite (Phase AE): per-tenant ingestion credentials for the public
 // Ingestion API and the MCP server, and per-source inbound webhook receivers

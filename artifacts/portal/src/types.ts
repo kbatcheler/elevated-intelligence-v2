@@ -101,6 +101,13 @@ export interface PortfolioTenant {
   unrealizedValueUsd: number | null;
   overallConfidence: number | null;
   confidenceLayers: number;
+  // Phase AK: the tenant's Data Efficacy rollup (mean of its generated layers'
+  // indices) and its standing in the SEPARATE efficacy ranking. A null score is
+  // an honest dash (no generated layer), never a fabricated zero; efficacyRank
+  // orders by data quality, distinct from the value-based rank above.
+  efficacyScore: number | null;
+  efficacyLayers: number;
+  efficacyRank: number;
   openGaps: PortfolioOpenGaps;
   completeness: PortfolioCompleteness;
 }
@@ -405,6 +412,119 @@ export interface TenantLayerDetail {
   // shows the raw pill and an honest label, and only applies the disciplined
   // value once the layer has cleared the resolved-sample threshold.
   confidenceCalibration: LayerConfidenceAdvisory | null;
+  // Phase AK: the read-time Data Efficacy Index for this layer (how good the fuel
+  // was), or null when the layer has not been generated. Confidence says how sure
+  // the reasoning is; this says how good the data behind it was.
+  efficacyIndex: EfficacyIndex | null;
+}
+
+// ── Data Efficacy Index (Phase AK) ───────────────────────────────────────────
+// A 0-to-100 read-time index of how good the data behind a layer is, from five
+// named drivers. Mirrors the server EfficacyIndex shape exactly; nothing here is
+// stored, so it can never drift from the data it describes. A null driver value
+// is "not measured" (contributes zero but is shown as a dash), never a zero.
+export type EfficacyDriverKey =
+  | "coverage"
+  | "freshness"
+  | "verificationRate"
+  | "adversarialSurvival"
+  | "sourceDiversity";
+export type EfficacyDataMode = "outside_in" | "connected";
+export type EfficacyDriverStatus = "measured" | "not_measured";
+
+export interface EfficacyDriverResult {
+  key: EfficacyDriverKey;
+  label: string;
+  value: number | null;
+  status: EfficacyDriverStatus;
+  weight: number;
+  contributionPoints: number;
+  reason: string;
+}
+
+export interface EfficacyCheapestImprovement {
+  driver: EfficacyDriverKey;
+  label: string;
+  liftPoints: number;
+  hint: string;
+}
+
+export interface EfficacyIndex {
+  score: number;
+  drivers: EfficacyDriverResult[];
+  unknownWeight: number;
+  modeCeiling: number;
+  dataMode: EfficacyDataMode;
+  cheapestImprovement: EfficacyCheapestImprovement | null;
+}
+
+export interface LayerEfficacySummary {
+  layerKey: string;
+  layerName: string;
+  generated: boolean;
+  index: EfficacyIndex | null;
+}
+
+export interface TenantEfficacy {
+  dataMode: EfficacyDataMode;
+  modeCeiling: number;
+  rollup: { score: number | null; n: number };
+  layers: LayerEfficacySummary[];
+}
+
+// ── As-of replay (Phase AM) ──────────────────────────────────────────────────
+// A read-model over append-only, timestamped state: pick a past instant and see
+// what the system believed THEN, layer by layer, with the confidence and
+// data-efficacy it had earned by then, plus an honest diff of what has changed
+// since. Mirrors the server TenantAsOf shape exactly; nothing here is stored and
+// nothing edits history. A delta is a number only when both sides carry the
+// figure, otherwise null (the surface says "unavailable", never implies a zero).
+export interface AsOfLayerDiff {
+  hasCurrent: boolean;
+  contentChanged: boolean | null;
+  efficacyDelta: number | null;
+  confidenceDelta: number | null;
+  verifiedDelta: number | null;
+  modelledDelta: number | null;
+  confounderDelta: number | null;
+}
+
+export interface AsOfLayerView {
+  layerKey: string;
+  layerName: string;
+  // Whether a build existed for this layer at or before the as-of date. False is
+  // the honest "history unavailable" state, never a fabricated empty diagnosis.
+  available: boolean;
+  reason: string | null;
+  snapshotAt: string | null;
+  generatorModel: string | null;
+  reducedMode: boolean | null;
+  content: Record<string, unknown> | null;
+  heroPanel: Record<string, unknown> | null;
+  peerBenchmark: Record<string, unknown> | null;
+  supplementBlocks: Record<string, unknown> | null;
+  confounders: unknown[] | null;
+  verifiedClaims: Record<string, unknown> | null;
+  modelledClaims: Record<string, unknown> | null;
+  voiceQuality: Record<string, unknown> | null;
+  confidence: LayerConfidenceAdvisory | null;
+  efficacy: EfficacyIndex | null;
+  changedSince: AsOfLayerDiff;
+}
+
+export interface TenantAsOf {
+  tenantId: string;
+  tenantName: string;
+  dataMode: EfficacyDataMode;
+  asOf: string;
+  now: string;
+  hasHistory: boolean;
+  earliestSnapshotAt: string | null;
+  latestSnapshotAt: string | null;
+  layers: AsOfLayerView[];
+  ledger: { entriesAsOf: number; entriesCurrent: number };
+  decisionsSince: number;
+  outcomesSince: number;
 }
 
 // ── Brier-scored calibration (Phase AJ) ──────────────────────────────────────
@@ -1001,4 +1121,94 @@ export interface FindingChallenge {
   provenanceContentHash: string | null;
   isCurrentVersion: boolean | null;
   createdAt: string;
+}
+
+// ── Decision ledger + pre-mortem (Phase AL) ──
+// A board decision recorded against a recommended action: a commit (the action
+// was taken, also creating a committed action and binding its forecast), or a
+// defer or reject (the recommendation stays in the diagnosis, the audit captures
+// that it was deliberately not taken). Every figure on the timeline is read from
+// persisted state; "overruled and right" is derived at read time from the linked
+// forecast resolution, never stored as a flag that could drift.
+export type DecisionKind = "commit" | "defer" | "reject";
+export type OverruledStatus = "right" | "wrong" | "pending" | null;
+export type PreMortemStatus = "completed" | "failed";
+export type PreMortemIndicatorStatus = "active" | "triggered" | "cleared";
+
+export interface PreMortemFailureMode {
+  rank: number;
+  title: string;
+  mechanism: string;
+  likelihood: string;
+  earlyWarning: string;
+}
+
+export interface PreMortemIndicator {
+  id: string;
+  failureModeRank: number;
+  failureModeTitle: string;
+  label: string;
+  status: PreMortemIndicatorStatus;
+  triggeredAt: string | null;
+  clearedAt: string | null;
+}
+
+export interface PreMortem {
+  id: string;
+  status: PreMortemStatus;
+  failureModes: PreMortemFailureMode[];
+  residualRiskNote: string | null;
+  error: string | null;
+  provenanceContentHash: string | null;
+  indicators: PreMortemIndicator[];
+  createdAt: string;
+}
+
+export interface DecisionTimelineEntry {
+  id: string;
+  decidedAt: string;
+  decision: DecisionKind;
+  layerKey: string;
+  actionRef: string | null;
+  recommendedTitle: string;
+  recommendedDetail: string | null;
+  recommendedImpact: string | null;
+  recommendedValueUsd: number | null;
+  systemConfidence: number;
+  systemBasis: string;
+  recommendationVerified: boolean;
+  evidenceRefs: { claimPath: string; contentHash: string }[];
+  contradictsRecommendation: boolean;
+  rationale: string | null;
+  decidedByEmail: string | null;
+  provenanceContentHash: string;
+  committedActionId: string | null;
+  actionStatus: string | null;
+  realizedValueUsd: number | null;
+  measurementStatus: string | null;
+  forecastId: string | null;
+  forecastProbability: number | null;
+  forecastResolved: boolean;
+  forecastOutcome: 0 | 1 | null;
+  forecastBrierScore: number | null;
+  overruledStatus: OverruledStatus;
+  preMortems: PreMortem[];
+  cumulativeRealizedValueUsd: number;
+}
+
+export interface DecisionTimelineSummary {
+  totalDecisions: number;
+  commits: number;
+  defers: number;
+  rejects: number;
+  overruledRight: number;
+  overruledWrong: number;
+  overruledPending: number;
+  totalIdentifiedValueUsd: number;
+  totalRealizedValueUsd: number;
+}
+
+export interface DecisionTimeline {
+  entries: DecisionTimelineEntry[];
+  summary: DecisionTimelineSummary;
 }

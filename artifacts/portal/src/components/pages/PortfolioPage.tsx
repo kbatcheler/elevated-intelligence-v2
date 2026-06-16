@@ -195,6 +195,7 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
               <Th align="right">Identified</Th>
               <Th align="right">Realized</Th>
               <Th align="right">Confidence</Th>
+              <Th align="right">Data efficacy</Th>
               <Th align="left">Open gaps</Th>
               <Th align="right"> </Th>
             </tr>
@@ -237,6 +238,25 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
                   <span className="font-mono" style={{ color: "var(--slate)" }}>
                     {t.overallConfidence == null ? "-" : pct(t.overallConfidence)}
                   </span>
+                </Td>
+                <Td align="right">
+                  {t.efficacyScore == null ? (
+                    <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+                      -
+                    </span>
+                  ) : (
+                    <span
+                      title={`Data efficacy ${t.efficacyScore} of 100 across ${t.efficacyLayers} generated layer(s); #${t.efficacyRank} by data quality in this portfolio.`}
+                      style={{ display: "inline-flex", gap: 6, alignItems: "baseline" }}
+                    >
+                      <span className="font-mono" style={{ color: "var(--navy)", fontWeight: 600 }}>
+                        {t.efficacyScore}
+                      </span>
+                      <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+                        #{t.efficacyRank}
+                      </span>
+                    </span>
+                  )}
                 </Td>
                 <Td>
                   {t.openGaps.total === 0 ? (

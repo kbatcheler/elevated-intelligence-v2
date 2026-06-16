@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
 import type {
+  EfficacyIndex,
   FindingChallenge,
   LayerConfidenceAdvisory,
   LayerRegistryEntry,
   PipelineRun,
+  TenantEfficacy,
   TenantLayerDetail,
 } from "../../types";
 import { fetchLayers, fetchRuns, fetchTenantLayer } from "../../lib/tenantApi";
+import { fetchTenantEfficacy } from "../../lib/efficacyApi";
 import { fetchChallenges, groupChallengesByRef } from "../../lib/challengeApi";
 import { useAuth } from "../../lib/AuthContext";
 import { useTenant } from "../../lib/TenantContext";
@@ -20,7 +23,7 @@ import {
   SkeletonLines,
 } from "../primitives";
 import { heroFor } from "../heroes/registry";
-import { LayerSections, type ChallengeContext } from "../layer/sections";
+import { LayerSections, type ChallengeContext, type DecisionContext } from "../layer/sections";
 import { BenchmarkConsent } from "../layer/BenchmarkConsent";
 
 type State =
@@ -174,6 +177,16 @@ function LayerBody({
     onUnauthorized,
   };
 
+  // The same non-viewer seat that may challenge a finding may record a board
+  // decision (defer or reject) against a recommended action. The commit path
+  // lives elsewhere; this slot carries only the two contrarian calls.
+  const decision: DecisionContext = {
+    tenantId: detail.tenantId,
+    layerKey: detail.layerKey,
+    canDecide: canChallenge,
+    onUnauthorized,
+  };
+
   return (
     <div style={{ display: "grid", gap: 24 }}>
       {detail.reducedMode && (
@@ -198,9 +211,13 @@ function LayerBody({
       {detail.confidenceCalibration && (
         <ConfidenceCalibrationNote advisory={detail.confidenceCalibration} />
       )}
+      {detail.layerKey === "business-performance" && (
+        <TenantEfficacyRollup tenantId={detail.tenantId} />
+      )}
+      {detail.efficacyIndex && <EfficacyNote index={detail.efficacyIndex} />}
       <Hero entry={entry} detail={detail} />
       {isBenchmarkLayer && <BenchmarkConsent tenantId={detail.tenantId} />}
-      <LayerSections detail={detail} feeds={entry?.feeds ?? []} challenge={challenge} />
+      <LayerSections detail={detail} feeds={entry?.feeds ?? []} challenge={challenge} decision={decision} />
       <ReasoningStrip
         run={run}
         confounders={detail.confounders}
@@ -264,6 +281,165 @@ function ConfidenceCalibrationNote({ advisory }: { advisory: LayerConfidenceAdvi
     >
       <span style={{ fontWeight: 600 }}>Confidence calibration</span>
       <span style={{ marginLeft: 8, color: "var(--slate)" }}>{body}</span>
+    </div>
+  );
+}
+
+// Phase AK: the tenant-wide Data Efficacy rollup, shown on the business-
+// performance summary layer. The headline is the mean of every generated layer's
+// index, so the company's top page states how good the fuel behind its whole
+// diagnosis was, beside the per-layer index below. A tenant with no generated
+// layer rolls up to a dash, never a fabricated zero; outside-in mode names its
+// structurally lower ceiling honestly. Self-fetching so the page frame stays
+// thin, with distinct loading, ready, empty, and error states rather than a
+// silently hidden or invented figure.
+function TenantEfficacyRollup({ tenantId }: { tenantId: string }) {
+  const { logout } = useAuth();
+  const [state, setState] = useState<
+    { status: "loading" } | { status: "ready"; data: TenantEfficacy } | { status: "error" }
+  >({ status: "loading" });
+
+  useEffect(() => {
+    let alive = true;
+    setState({ status: "loading" });
+    fetchTenantEfficacy(tenantId).then((out) => {
+      if (!alive) return;
+      if ("unauthorized" in out) return void logout();
+      setState(out.state === "ready" ? { status: "ready", data: out.data } : { status: "error" });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, logout]);
+
+  const rollupStyle = {
+    justifySelf: "stretch" as const,
+    padding: "12px 14px",
+    borderRadius: 8,
+    fontSize: 13,
+    lineHeight: 1.5,
+    color: "var(--navy)",
+    background: "var(--cream-dark)",
+    border: "1px solid var(--slate-light)",
+    display: "flex",
+    alignItems: "baseline" as const,
+    gap: 12,
+    flexWrap: "wrap" as const,
+  };
+  if (state.status === "loading") {
+    return (
+      <div style={rollupStyle}>
+        <span style={{ fontWeight: 600 }}>Company data efficacy</span>
+        <span style={{ color: "var(--slate)" }}>Loading...</span>
+      </div>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <div style={rollupStyle}>
+        <span style={{ fontWeight: 600 }}>Company data efficacy</span>
+        <span style={{ color: "var(--slate)" }}>Efficacy unavailable right now</span>
+      </div>
+    );
+  }
+
+  const { rollup } = state.data;
+  const capped = state.data.modeCeiling < 100;
+
+  return (
+    <div style={rollupStyle}>
+      <span style={{ fontWeight: 600 }}>Company data efficacy</span>
+      {rollup.score === null ? (
+        <span style={{ color: "var(--slate)" }}>- (no generated layer to score yet)</span>
+      ) : (
+        <>
+          <span style={{ fontSize: 20, fontWeight: 700 }}>{rollup.score}</span>
+          <span style={{ color: "var(--slate)" }}>/ 100</span>
+          <span style={{ color: "var(--slate)" }}>
+            mean across {rollup.n} generated layer{rollup.n === 1 ? "" : "s"}
+          </span>
+        </>
+      )}
+      {capped && (
+        <span
+          title="Outside-in mode: the connector-grounded drivers (coverage, freshness) are structurally zero, so the index cannot reach 100. Connect data to raise the ceiling."
+          style={{ color: "var(--slate)" }}
+        >
+          ceiling {state.data.modeCeiling} (outside-in)
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Phase AK Data Efficacy Index. Confidence says how sure the reasoning is; this
+// says how good the fuel was. The 0-to-100 score is a weighted average over five
+// named drivers, each showing its own measurement and point contribution. A
+// driver that has nothing to measure yet reads a dash, never a fabricated zero.
+// In outside-in mode the connector-grounded drivers are structurally zero, so
+// the strip states the lower ceiling honestly rather than implying the data is
+// poor. The cheapest-improvement hint names the single best next lever.
+function EfficacyNote({ index }: { index: EfficacyIndex }) {
+  const pct = (v: number | null) => (v === null ? "-" : Math.round(v * 100) + "%");
+  const capped = index.modeCeiling < 100;
+
+  return (
+    <div
+      style={{
+        justifySelf: "stretch",
+        padding: "12px 14px",
+        borderRadius: 8,
+        fontSize: 13,
+        lineHeight: 1.5,
+        color: "var(--navy)",
+        background: "var(--cream-dark)",
+        border: "1px solid var(--slate-light)",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 600 }}>Data efficacy</span>
+        <span style={{ fontSize: 20, fontWeight: 700 }}>{index.score}</span>
+        <span style={{ color: "var(--slate)" }}>/ 100</span>
+        {capped && (
+          <span
+            title="Outside-in mode: the connector-grounded drivers (coverage, freshness) are structurally zero, so the index cannot reach 100. Connect data to raise the ceiling."
+            style={{ color: "var(--slate)" }}
+          >
+            ceiling {index.modeCeiling} ({index.dataMode === "outside_in" ? "outside-in" : "connected"})
+          </span>
+        )}
+        {index.unknownWeight > 0 && (
+          <span style={{ color: "var(--slate)" }}>
+            {Math.round(index.unknownWeight * 100)}% not yet measured
+          </span>
+        )}
+      </div>
+      <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+        {index.drivers.map((d) => (
+          <div
+            key={d.key}
+            style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}
+            title={d.reason}
+          >
+            <span style={{ minWidth: 150, fontWeight: 600 }}>{d.label}</span>
+            <span style={{ minWidth: 48 }}>{pct(d.value)}</span>
+            <span style={{ color: "var(--slate)" }}>
+              {d.status === "not_measured"
+                ? "not measured"
+                : "+" + d.contributionPoints + " pts (weight " + Math.round(d.weight * 100) + "%)"}
+            </span>
+            <span style={{ color: "var(--slate)" }}>{d.reason}</span>
+          </div>
+        ))}
+      </div>
+      {index.cheapestImprovement && (
+        <div style={{ marginTop: 8, color: "var(--navy)" }}>
+          <span style={{ fontWeight: 600 }}>Cheapest improvement: </span>
+          <span style={{ color: "var(--slate)" }}>
+            {index.cheapestImprovement.hint} (about +{index.cheapestImprovement.liftPoints} pts)
+          </span>
+        </div>
+      )}
     </div>
   );
 }

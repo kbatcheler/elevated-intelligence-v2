@@ -2,9 +2,11 @@ import { and, eq, inArray, type SQL } from "drizzle-orm";
 import {
   committedActionsTable,
   db,
+  decisionRecordsTable,
   orgsTable,
   orgTenantsTable,
   outcomeMeasurementsTable,
+  preMortemIndicatorsTable,
   pushEventsTable,
   pushRulesTable,
   tenantsTable,
@@ -22,6 +24,7 @@ import {
   evaluateSuppression,
   formatUsd,
   highValueDedupeKey,
+  premortemIndicatorDedupeKey,
   shortfallDedupeKey,
   type PushThresholds,
 } from "./pushMath";
@@ -42,7 +45,11 @@ import {
 // Delivery to a channel is a separate concern (pushNotifier drains the pending
 // rows), exactly as the Phase P notifier drains the operational alert seam.
 
-const RULE_TYPES: readonly PushRuleType[] = ["outcome_shortfall", "high_value_action"];
+const RULE_TYPES: readonly PushRuleType[] = [
+  "outcome_shortfall",
+  "high_value_action",
+  "premortem_indicator",
+];
 
 export interface PushEvaluationLogger {
   info(fields: Record<string, unknown>, msg: string): void;
@@ -105,6 +112,19 @@ function buildCandidates(
     status: MeasurementValue["status"];
     measuredAt: number;
     createdAt: number;
+  }[],
+  // Pre-mortem indicators already fenced to active/triggered on a COMMIT decision
+  // whose committed action is still open. Each is a real, watched early-warning
+  // sign for value genuinely at stake.
+  indicators: {
+    id: string;
+    tenantId: string;
+    status: "active" | "triggered";
+    failureModeTitle: string;
+    label: string;
+    recommendedTitle: string;
+    recommendedValueUsd: number | null;
+    systemConfidence: number;
   }[],
 ): Map<string, Map<PushRuleType, Candidate[]>> {
   const byTenant = new Map<string, Map<PushRuleType, Candidate[]>>();
@@ -190,6 +210,36 @@ function buildCandidates(
         ".",
       impactUsd: shortfall,
       confidence: action.confidence,
+    });
+  }
+
+  // Pre-mortem indicator: an early-warning sign on an open committed action. An
+  // active indicator surfaces once as a watch item; the same indicator notifies
+  // AGAIN when it transitions to triggered (its sign was actually observed). The
+  // dollars at stake are the decision's recommended value and the confidence is
+  // the system's confidence in the recommendation, both real persisted figures.
+  for (const ind of indicators) {
+    const actionTitle = stripDashes(ind.recommendedTitle);
+    const failureMode = stripDashes(ind.failureModeTitle);
+    const sign = stripDashes(ind.label);
+    const fired = ind.status === "triggered";
+    push("premortem_indicator", {
+      type: "premortem_indicator",
+      tenantId: ind.tenantId,
+      sourceType: "premortem_indicator",
+      sourceId: ind.id,
+      dedupeKey: premortemIndicatorDedupeKey(ind.id, ind.status),
+      title: (fired ? "Early warning fired: " : "Watch: ") + failureMode,
+      message:
+        (fired
+          ? "An early-warning sign was observed for committed action "
+          : "Watch for an early-warning sign on committed action ") +
+        actionTitle +
+        ": " +
+        sign +
+        ".",
+      impactUsd: ind.recommendedValueUsd,
+      confidence: ind.systemConfidence,
     });
   }
 
@@ -316,6 +366,39 @@ export async function runPushEvaluation(deps: {
     .innerJoin(committedActionsTable, eq(outcomeMeasurementsTable.actionId, committedActionsTable.id))
     .where(inArray(committedActionsTable.tenantId, tenantIds));
 
+  // Pre-mortem indicators worth watching: active or triggered, on a COMMIT
+  // decision whose committed action is still open. A cleared indicator, a defer or
+  // reject decision, or a done/dismissed action is excluded by the join, so the
+  // evaluator only ever surfaces a live watch against value still at stake.
+  const indicatorRows = await db
+    .select({
+      id: preMortemIndicatorsTable.id,
+      tenantId: preMortemIndicatorsTable.tenantId,
+      status: preMortemIndicatorsTable.status,
+      failureModeTitle: preMortemIndicatorsTable.failureModeTitle,
+      label: preMortemIndicatorsTable.label,
+      recommendedTitle: decisionRecordsTable.recommendedTitle,
+      recommendedValueUsd: decisionRecordsTable.recommendedValueUsd,
+      systemConfidence: decisionRecordsTable.systemConfidence,
+    })
+    .from(preMortemIndicatorsTable)
+    .innerJoin(
+      decisionRecordsTable,
+      eq(preMortemIndicatorsTable.decisionRecordId, decisionRecordsTable.id),
+    )
+    .innerJoin(
+      committedActionsTable,
+      eq(decisionRecordsTable.committedActionId, committedActionsTable.id),
+    )
+    .where(
+      and(
+        inArray(preMortemIndicatorsTable.tenantId, tenantIds),
+        inArray(preMortemIndicatorsTable.status, ["active", "triggered"]),
+        eq(decisionRecordsTable.decision, "commit"),
+        inArray(committedActionsTable.status, ["committed", "in_progress"]),
+      ),
+    );
+
   const candidatesByTenant = buildCandidates(
     actionRows.map((a) => ({
       id: a.id,
@@ -333,6 +416,16 @@ export async function runPushEvaluation(deps: {
       status: m.status,
       measuredAt: m.measuredAt.getTime(),
       createdAt: m.createdAt.getTime(),
+    })),
+    indicatorRows.map((i) => ({
+      id: i.id,
+      tenantId: i.tenantId,
+      status: i.status === "triggered" ? ("triggered" as const) : ("active" as const),
+      failureModeTitle: i.failureModeTitle,
+      label: i.label,
+      recommendedTitle: i.recommendedTitle,
+      recommendedValueUsd: toNum(i.recommendedValueUsd),
+      systemConfidence: i.systemConfidence,
     })),
   );
 

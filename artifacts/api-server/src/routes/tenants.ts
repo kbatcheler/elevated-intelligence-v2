@@ -5,11 +5,13 @@ import {
   benchmarkStatsTable,
   committedActionsTable,
   db,
+  decisionRecordsTable,
   derivedSignalsTable,
   edgeAgentsTable,
   layersTable,
   orgTenantsTable,
   outcomeMeasurementsTable,
+  preMortemIndicatorsTable,
   tenantLayersTable,
   tenantPipelineRunsTable,
   tenantProfileTable,
@@ -24,10 +26,22 @@ import {
 } from "../lib/challenge/findingChallenge";
 import { isOwner, isProvider } from "../lib/auth/access";
 import {
-  linkForecastToCommittedAction,
+  linkForecastToCommittedActionTx,
   resolveForecastsForMeasurement,
 } from "../lib/calibration/forecastResolution";
+import {
+  loadRecommendationSnapshot,
+  recordDecisionTx,
+  recordStandaloneDecision,
+  snapshotLayerEvidence,
+  type RecommendationSnapshot,
+} from "../lib/decisions/decisionRecord";
+import { runDecisionPreMortem } from "../lib/decisions/preMortem";
+import { getDecisionTimeline } from "../lib/decisions/timeline";
+import { buildTenantAsOf } from "../lib/replay/asOf";
+import { buildDiligencePack, renderDiligencePackHtml } from "../lib/diligence/pack";
 import { computeLayerConfidenceAdvisory } from "../lib/calibration/layerConfidence";
+import { loadLayerEfficacy, loadTenantEfficacy } from "../lib/efficacy/efficacyService";
 import { getBenchmarkMinCohort } from "../lib/benchmarks/benchmarks";
 import { segmentKeyFor } from "../lib/benchmarks/benchmarkMath";
 import { logger } from "../lib/logger";
@@ -728,6 +742,14 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
     const confidenceCalibration =
       rawConfidence === null ? null : await computeLayerConfidenceAdvisory(id, key, rawConfidence);
 
+    // Phase AK: the read-time Data Efficacy Index for this layer, derived from
+    // the same persisted state (coverage of connected feeds, signal freshness,
+    // the verified/modelled claim split, the Confounder verdicts, source
+    // diversity) and the tenant's data mode. It sits ALONGSIDE the confidence
+    // advisory: confidence is how sure the reasoning is, efficacy is how good the
+    // fuel was. Nothing is stored; it cannot drift from the data it describes.
+    const efficacyIndex = await loadLayerEfficacy(id, key);
+
     res.json({
       tenantId: layer.tenantId,
       layerKey: layer.layerKey,
@@ -744,11 +766,87 @@ tenantsRouter.get("/tenants/:id/layers/:key", requireTenantAccess, async (req, r
       generatorModel: layer.generatorModel,
       generatedAt: layer.generatedAt,
       confidenceCalibration,
+      efficacyIndex,
     });
   } catch (err) {
     next(err);
   }
 });
+
+// Phase AK: the tenant-level Data Efficacy rollup, every generated layer's index
+// plus the simple mean across them. The business-performance layer summary and
+// the Board Pack read this for the one tenant headline; the per-layer indices
+// are the same read-time computation the layer detail returns. A tenant with no
+// generated layer rolls up to a null score (an honest dash), never a zero.
+tenantsRouter.get("/tenants/:id/efficacy", requireTenantAccess, async (req, res, next) => {
+  try {
+    const tenantId = String(req.params.id);
+    const efficacy = await loadTenantEfficacy(tenantId);
+    if (!efficacy) {
+      res.status(404).json({ error: "tenant_not_found" });
+      return;
+    }
+    res.json({ efficacy });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Phase AM: the as-of replay read-model. Given a tenant and a past instant (the
+// `at` query, an ISO timestamp), reconstruct what the system believed THEN, layer
+// by layer, with the confidence and data-efficacy it had earned by then, plus a
+// diff of what has changed since. It reads only the append-only snapshot ledger
+// and timestamped state, so it reconstructs history faithfully and can never edit
+// it. A missing or unparseable `at` is a 400; an unknown tenant is a 404.
+tenantsRouter.get("/tenants/:id/as-of", requireTenantAccess, async (req, res, next) => {
+  try {
+    const tenantId = String(req.params.id);
+    const at = typeof req.query.at === "string" ? req.query.at : "";
+    const asOf = new Date(at);
+    if (at.length === 0 || Number.isNaN(asOf.getTime())) {
+      res.status(400).json({ error: "invalid_as_of_date" });
+      return;
+    }
+    const replay = await buildTenantAsOf(tenantId, asOf);
+    if (!replay) {
+      res.status(404).json({ error: "tenant_not_found" });
+      return;
+    }
+    res.json({ asOf: replay });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Phase AM: the diligence pack export. A single brand-styled HTML document with
+// the current 14-layer diagnosis, the data-efficacy and calibration record, the
+// board decision audit timeline, the outcome track record, and a provenance
+// integrity attestation, assembled from the same persisted state the live
+// surfaces read. It is served inline as a self-contained document; it exports
+// history, it never writes it.
+tenantsRouter.get(
+  "/tenants/:id/diligence-pack.html",
+  requireTenantAccess,
+  async (req, res, next) => {
+    try {
+      const tenantId = String(req.params.id);
+      const pack = await buildDiligencePack(tenantId);
+      if (!pack) {
+        res.status(404).json({ error: "tenant_not_found" });
+        return;
+      }
+      const safeName = pack.tenant.name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "tenant";
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="diligence-pack-${safeName}.html"`,
+      );
+      res.send(renderDiligencePackHtml(pack));
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // ── Phase AA: Interactive Challenge (tenant-scoped) ─────────────────────────
 // A seat challenges ONE finding in a layer's diagnosis; the engine re-reasons it
@@ -969,6 +1067,15 @@ const commitActionSchema = z.object({
   // action a user actually committed, never one inferred from a matching title.
   forecastId: z.string().uuid().optional(),
   forecastSourcePath: z.string().min(1).max(200).optional(),
+  // Optional, Phase AL: the path into the layer content this commit acts on,
+  // e.g. "actions[0]". Snapshotted on the decision record so the board audit
+  // binds to the exact recommendation, and reused as the forecast anchor when no
+  // explicit forecast reference is given. The committed-action fields above
+  // remain the recommendation snapshot regardless.
+  actionRef: z.string().min(1).max(200).optional(),
+  // Optional, Phase AL: the human's reason for committing. Recorded on the
+  // decision record; always dash-sanitised.
+  rationale: z.string().max(4000).optional(),
 });
 
 const updateActionStatusSchema = z.object({
@@ -1031,40 +1138,104 @@ tenantsRouter.post("/tenants/:id/actions", requireTenantAccess, async (req, res,
         baselineAt = row.computedAt;
       }
     }
-    const inserted = await db
-      .insert(committedActionsTable)
-      .values({
-        tenantId,
-        layerKey: d.layerKey,
+    // The decision record's recommendation snapshot is read SERVER-SIDE from the
+    // live layer content when the commit names an actionRef, so the audit binds to
+    // the recommendation the system actually made, never the client's description
+    // of it. A bad ref fails the whole commit (no half-written action), since a
+    // commit that misnames its recommendation is a data-integrity fault, not a
+    // benign one. A freeform commit with no actionRef keeps the client snapshot,
+    // honestly marked unverified.
+    let decisionSnapshot: RecommendationSnapshot;
+    let recommendationVerified: boolean;
+    if (d.actionRef) {
+      const loaded = await loadRecommendationSnapshot(tenantId, d.layerKey, d.actionRef);
+      if (loaded.kind === "layer_not_found") {
+        res.status(404).json({ error: "layer_not_found" });
+        return;
+      }
+      if (loaded.kind === "finding_not_found") {
+        res.status(404).json({ error: "action_not_found" });
+        return;
+      }
+      if (loaded.kind === "not_an_action") {
+        res.status(422).json({ error: "not_an_action" });
+        return;
+      }
+      decisionSnapshot = loaded.snapshot;
+      recommendationVerified = true;
+    } else {
+      decisionSnapshot = {
         title: d.title,
         detail: d.detail ?? null,
-        predictedImpact: d.predictedImpact ?? null,
-        predictedValueUsd: predicted === null ? null : predicted.toFixed(2),
-        baselineMetric,
-        baselineAt,
-        timing: d.timing ?? null,
-        actionOwner: d.owner ?? null,
-        basis: d.basis,
+        impact: d.predictedImpact ?? null,
+        predictedValueUsd: predicted,
         confidence: d.confidence,
-        committedBy: user.id,
-      })
-      .returning();
-    const action = inserted[0];
-    // Phase AJ: bind the action_outcome forecast to this committed action when
-    // the client named one explicitly. The link is what lets a later outcome
-    // measurement resolve the forecast and score it; an unbound commit simply
-    // leaves the forecast resolvable by owner adjudication.
-    let linkedForecastId: string | null = null;
-    if (d.forecastId || d.forecastSourcePath) {
-      linkedForecastId = await linkForecastToCommittedAction({
-        tenantId,
-        actionId: action.id,
-        layerKey: d.layerKey,
-        forecastId: d.forecastId ?? null,
-        sourcePath: d.forecastSourcePath ?? null,
-      });
+        basis: d.basis,
+      };
+      recommendationVerified = false;
     }
-    res.status(201).json({ action, linkedForecastId });
+    // Snapshot the provenance refs grounding the layer's diagnosis at commit time,
+    // so the audit shows the evidence the recommendation rested on. References
+    // only; an empty array is honest for a layer with no graded claims.
+    const evidenceRefs = await snapshotLayerEvidence(tenantId, d.layerKey);
+
+    // A commit creates the committed action, binds its forecast, AND records a
+    // board-grade decision record, all atomically: every commit yields exactly
+    // one decision, and the decision's provenance entry cannot exist without the
+    // action it records. The forecast anchor falls back to the actionRef when no
+    // explicit forecast reference is given, so the decision snapshots the right
+    // forecast even for the common path.
+    const sourcePath = d.forecastSourcePath ?? d.actionRef ?? null;
+    const { action, linkedForecastId, decisionRecordId } = await db.transaction(async (tx) => {
+      const insertedRows = await tx
+        .insert(committedActionsTable)
+        .values({
+          tenantId,
+          layerKey: d.layerKey,
+          title: d.title,
+          detail: d.detail ?? null,
+          predictedImpact: d.predictedImpact ?? null,
+          predictedValueUsd: predicted === null ? null : predicted.toFixed(2),
+          baselineMetric,
+          baselineAt,
+          timing: d.timing ?? null,
+          actionOwner: d.owner ?? null,
+          basis: d.basis,
+          confidence: d.confidence,
+          committedBy: user.id,
+        })
+        .returning();
+      const created = insertedRows[0];
+      // Phase AJ: bind the action_outcome forecast to this committed action when
+      // a reference (explicit or the action anchor) names one. The link is what
+      // lets a later outcome measurement resolve the forecast and score it; an
+      // unbound commit simply leaves the forecast resolvable by owner adjudication.
+      let linkedId: string | null = null;
+      if (d.forecastId || sourcePath) {
+        linkedId = await linkForecastToCommittedActionTx(tx, {
+          tenantId,
+          actionId: created.id,
+          layerKey: d.layerKey,
+          forecastId: d.forecastId ?? null,
+          sourcePath: d.forecastSourcePath ?? d.actionRef ?? null,
+        });
+      }
+      const record = await recordDecisionTx(tx, {
+        tenantId,
+        layerKey: d.layerKey,
+        actionRef: d.actionRef ?? null,
+        decision: "commit",
+        committedActionId: created.id,
+        decidedBy: user.id,
+        snapshot: decisionSnapshot,
+        recommendationVerified,
+        evidenceRefs,
+        rationale: d.rationale ?? null,
+        forecastId: linkedId,
+      });
+      return { action: created, linkedForecastId: linkedId, decisionRecordId: record.id };
+    });
+    res.status(201).json({ action, linkedForecastId, decisionRecordId });
   } catch (err) {
     next(err);
   }
@@ -1085,6 +1256,184 @@ tenantsRouter.get("/tenants/:id/actions", requireTenantAccess, async (req, res, 
     next(err);
   }
 });
+
+// ── Phase AL: the decision ledger ───────────────────────────────────────────
+// A commit is recorded by the actions route above (it also creates the action and
+// binds the forecast). This route records the OTHER two board decisions, a defer
+// or a reject: the recommendation stays in the diagnosis, but the audit captures
+// that it was deliberately not taken, by whom, and why.
+const standaloneDecisionSchema = z.object({
+  layerKey: z.string().min(1).max(100),
+  actionRef: z.string().min(1).max(200),
+  decision: z.enum(["defer", "reject"]),
+  rationale: z.string().min(1).max(4000),
+});
+
+tenantsRouter.post("/tenants/:id/decisions", requireTenantAccess, async (req, res, next) => {
+  const parsed = standaloneDecisionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_input" });
+    return;
+  }
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ error: "unauthenticated" });
+    return;
+  }
+  // Recording a decision is a write; a client-viewer is a read-only seat here too,
+  // the same posture as committing an action.
+  if (user.role === "client-viewer") {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  try {
+    const result = await recordStandaloneDecision({
+      tenantId: String(req.params.id),
+      layerKey: parsed.data.layerKey,
+      actionRef: parsed.data.actionRef,
+      decision: parsed.data.decision,
+      rationale: parsed.data.rationale,
+      decidedBy: user.id,
+    });
+    if (result.kind === "layer_not_found") {
+      res.status(404).json({ error: "layer_not_found" });
+      return;
+    }
+    if (result.kind === "finding_not_found") {
+      res.status(404).json({ error: "action_not_found" });
+      return;
+    }
+    if (result.kind === "not_an_action") {
+      res.status(422).json({ error: "not_an_action" });
+      return;
+    }
+    res.status(201).json({ decisionRecord: result.record });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Run an on-demand pre-mortem against a recorded decision: a REAL Confounder
+// cortex call that imagines the decision has failed and names the ranked failure
+// modes and the early-warning indicator to watch for each. Spends model calls, so
+// a client-viewer cannot trigger it (the same posture as challenging a finding). A
+// failed model call returns an honest failed pre-mortem, never a fabricated one.
+tenantsRouter.post(
+  "/tenants/:id/decisions/:decisionId/pre-mortem",
+  requireTenantAccess,
+  async (req, res, next) => {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    if (user.role === "client-viewer") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    try {
+      const result = await runDecisionPreMortem({
+        tenantId: String(req.params.id),
+        decisionRecordId: String(req.params.decisionId),
+        userId: user.id,
+        log: logger,
+      });
+      if (result.kind === "decision_not_found") {
+        res.status(404).json({ error: "decision_not_found" });
+        return;
+      }
+      if (result.kind === "profile_missing") {
+        res.status(409).json({ error: "profile_missing" });
+        return;
+      }
+      if (result.kind === "layer_not_found") {
+        res.status(404).json({ error: "layer_not_found" });
+        return;
+      }
+      res.status(201).json({ preMortem: result.preMortem });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// The board-grade decision audit timeline: every decision newest first, the advice
+// as it stood at decision time, the pre-mortems attached, the linked forecast and
+// committed-action outcome, and the running realised value. A read, so any tenant
+// seat may see it.
+tenantsRouter.get(
+  "/tenants/:id/decisions/timeline",
+  requireTenantAccess,
+  async (req, res, next) => {
+    try {
+      const timeline = await getDecisionTimeline(String(req.params.id));
+      res.json(timeline);
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+// Report the OBSERVED state of a pre-mortem indicator. This is the human marking
+// what they actually saw, never a fabricated breach: "triggered" records that the
+// early-warning sign was observed (stamping triggeredAt), "cleared" that the
+// concern has passed (stamping clearedAt), and "active" returns it to a plain
+// watch. The push evaluator surfaces an active or triggered indicator on an open
+// commit; a cleared one is dropped. A write, so a client-viewer cannot mark it.
+const indicatorStatusSchema = z.object({
+  status: z.enum(["active", "triggered", "cleared"]),
+});
+
+tenantsRouter.post(
+  "/tenants/:id/pre-mortem-indicators/:indicatorId/status",
+  requireTenantAccess,
+  async (req, res, next) => {
+    const parsed = indicatorStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_input" });
+      return;
+    }
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ error: "unauthenticated" });
+      return;
+    }
+    if (user.role === "client-viewer") {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    try {
+      const now = new Date();
+      const status = parsed.data.status;
+      // The timestamps reflect the observed transition honestly: triggeredAt is
+      // set only when the sign was observed, clearedAt only when cleared, and both
+      // reset when the indicator returns to a plain watch.
+      const patch =
+        status === "triggered"
+          ? { status, triggeredAt: now, clearedAt: null }
+          : status === "cleared"
+            ? { status, clearedAt: now }
+            : { status, triggeredAt: null, clearedAt: null };
+      const updated = await db
+        .update(preMortemIndicatorsTable)
+        .set(patch)
+        .where(
+          and(
+            eq(preMortemIndicatorsTable.id, String(req.params.indicatorId)),
+            eq(preMortemIndicatorsTable.tenantId, String(req.params.id)),
+          ),
+        )
+        .returning();
+      if (updated.length === 0) {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      res.json({ indicator: updated[0] });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 // Advance a committed action through its honest lifecycle. This records the
 // human's progress, not a fabricated result.

@@ -2503,3 +2503,350 @@ persistence ARE test-proven through the real output shape), and the `Calibration
 (its `calibrationApi` client is unit-tested and its route is integration-tested). The drift report is
 `phase-AJ.md`; the drift index and the rollup are updated to "A through AJ". Phase AJ is a MILESTONE hard
 stop: the build now PAUSES at the AJ gate for owner review and does NOT auto-advance to Phase AK.
+
+## Phase AK: the Data Efficacy Index
+
+### What this phase built
+
+Phase AK opens Stage 6 (the final stage) under owner authorization, the AJ milestone pause having been
+cleared to run the Stage 6 sequence (AK, AL, AM, AN) linearly. It answers a question the confidence band
+does not: confidence is how sure the reasoning is, efficacy is how good the data feeding it is. A
+per-layer, per-tenant 0-to-100 Data Efficacy Index is computed entirely at READ time from already-persisted
+state (no schema is added; the base-table count stays 40), mirroring the Phase O `connectionHealth` pattern
+so the index can never drift from the data it describes. The index is a weighted average of five named
+drivers, with the weights and tunables in one documented, env-overridable config
+(`artifacts/api-server/src/lib/efficacy/config.ts`, defaults coverage 0.25, freshness 0.15, verification
+rate 0.25, adversarial survival 0.15, source diversity 0.20, summing to 1.0 and renormalized; per-weight
+`EFFICACY_WEIGHT_*` overrides, a freshness half-life `EFFICACY_FRESHNESS_THRESHOLD_SECONDS` default 86400
+and max-age multiple default 4, and a diversity target default 5, with a `feedAliasMap` that bridges the
+registry feed labels to connector families so the coverage denominator is honest about which feeds are even
+connectable). The pure `efficacyMath.ts` composes the index: a null driver is `not_measured`, shown as a
+dash and accruing disclosed `unknownWeight` rather than counted as a zero; the outside-in ceiling is
+enforced in the math (the connector-grounded drivers coverage and freshness are mode-capped to zero
+contribution in `outside_in` so the score can never exceed `modeCeiling = round((1 - coverageWeight -
+freshnessWeight) * 100)`, while connected reaches 100), so a stray connected signal can never lift an
+outside-in layer past its ceiling; `cheapestImprovement` names the single highest-lift next lever; and
+`rollupEfficacy` means the per-layer scores or returns null for an empty set. The read-time service
+(`efficacyService.ts`) mirrors `connectionHealth` and stores nothing: a pure `buildLayerEfficacy` wires the
+database reads (declared feeds, verified-versus-modelled claim counts, confounder verdicts, reduced-mode
+flag, derived-signal source keys and `computedAt`) into the math, and `loadLayerEfficacy`,
+`loadTenantEfficacy` (the rollup, mean across generated layers), and `loadEfficacyForTenants` (the
+portfolio batch) run the queries. The layer-detail route returns `efficacyIndex` beside the confidence
+band, `GET /api/tenants/:id/efficacy` (behind `requireTenantAccess`) returns the tenant rollup, the
+portfolio board rows carry `efficacyScore`/`efficacyLayers`, and `portfolioMath` adds an `efficacyRank`
+(the best-fuelled company leads, a null score sorts last) as a second ordering on the value-ranked board.
+The portal adds the efficacy types, a framework-free `efficacyApi.ts` client (401 to an unauthorized
+state, a payload without a rollup and a layers array treated as malformed), and the surfaces:
+`TenantEfficacyRollup` and a per-layer `EfficacyNote` on `LayerPage` (the cheapest-improvement hint and the
+outside-in ceiling shown when capped), the Board Pack tenant summary, and the Portfolio efficacy column,
+each with distinct loading, ready, and error states and a dash, never a fabricated zero, for a not-measured
+figure.
+
+### Verification
+
+Typecheck and build are green across the workspace (exit 0 on both; portal built, api-server bundled). The
+full suite is green at 956 tests (api-server 549 across 62 files, portal 246 across 20 files, cortex 110
+across 13 files, connectors 29 across 5 files, edge-agent 10 across 3 files, db 8, scripts 4), up 33 from
+Phase AJ's 923; the new tests are api-server `efficacyMath` (19) and `efficacyService` (7) plus one added
+`portfolioMath` case, and portal `efficacyApi` (6). The long-dash sweep is zero on both sides: the source
+guard is green over authored source including the Phase AK Markdown, and a fresh database-wide cast over
+all 150 public text and jsonb columns across the 40 base tables (no schema is added in AK) reports zero
+hits. Zero new npm dependencies. The architect `evaluate_task` returned PASS after one remediation round
+that addressed three findings: the outside-in mode ceiling is now enforced in both the pure math and the
+read-time service (the mode-capped drivers forced to zero contribution so a stray connected signal can
+never lift a layer past its ceiling), the portal efficacy surfaces carry distinct honest states and a dash
+rather than a fabricated zero, and the env-override behaviour of the five weights is covered by the tests;
+the review confirmed the index computes from real drivers, the drivers and the hint render, connecting a
+feed or resolving a confounder moves the score, outside-in and connected differ honestly, and the hard
+constraints hold. The accepted LOWs are source-reviewed and logged in `phase-AK.md`: the read-time SQL
+loaders and the efficacy routes have no dedicated integration test (the pure driver wiring, the index math,
+and the portfolio ranking behind them ARE unit-tested), and the portal efficacy rendering (its `efficacyApi`
+client is unit-tested). The drift report is `phase-AK.md`; the drift index and the rollup are updated to
+"A through AK". Phase AK is not a milestone; the build advances to Phase AL (the decision ledger and
+pre-mortem).
+
+## Phase AL: the decision ledger and pre-mortem
+
+### What this phase built
+
+Phase AL is the second phase of Stage 6 (the final stage), run under the owner authorization that cleared
+the AJ milestone pause to execute the AK-AL-AM-AN sequence linearly. It turns the platform from an advisor
+that talks into an advisor that is held to account: where Phase AK measured how good the DATA feeding a
+layer is, Phase AL records what a board DECIDES against the intelligence and grades those decisions over
+time. Three things land together on three new tables (`decision_records`, `pre_mortems`,
+`pre_mortem_indicators`, taking the base-table count from 40 to 43): a decision ledger, an on-demand
+pre-mortem, and a board-grade decision audit timeline. The decision ledger holds one hash-chained row per
+commit, defer, or reject (`decision_kind`), snapshotting the system recommendation and its confidence and
+basis AT THAT MOMENT (`recommendationHash` binds the row to the exact recommendation it acted on), the
+provenance refs grounding the layer at decision time (`evidenceRefs`, references into the append-only
+ledger, never raw evidence, an empty array the honest state for an ungraded outside-in layer), whether
+that snapshot was read SERVER-SIDE or came from the client (`recommendationVerified`), the human's
+rationale (hashed into the provenance digest, never embedded raw), the linked AJ forecast, and whether the
+decision contradicted the advice (`contradictsRecommendation`, computed once at decision time). A decision
+is a recorded human act, so it ALWAYS appends exactly one provenance entry; `recordDecisionTx`
+(`lib/decisions/decisionRecord.ts`) runs inside the caller's transaction, hashes the canonical
+recommendation and the canonical evidence set into the entry, and inserts the row. Two honesty gaps from
+the first architect review are closed here: the commit route (`POST /tenants/:id/actions`) now reads the
+recommendation server-side by `actionRef` BEFORE the write transaction (`loadRecommendationSnapshot`,
+returning `404 layer_not_found`, `404 action_not_found`, `422 not_an_action` before any action is written)
+and snapshots the verified SERVER recommendation so a board audit can never present a client-typed action
+as a system one (a freeform no-ref commit keeps the client snapshot, honestly `recommendationVerified=false`),
+and `snapshotLayerEvidence` captures the latest ledger entry per claimPath under the layer EXCLUDING the
+decision, challenge, and pre-mortem meta prefixes so the audit shows exactly what grounded the advice even
+after the layer is refreshed. The on-demand pre-mortem (`lib/decisions/preMortem.ts`, `runDecisionPreMortem`)
+mirrors the Phase AA interactive challenge: a REAL Confounder cortex call (`runPreMortem`, with its prompt
+and strict output schema in `lib/cortex/src`), real billed telemetry through `recordModelUsageSafe`, and an
+honest completed-or-failed lifecycle. A completed run writes, in a single transaction, the ranked failure
+modes (each `{ rank, title, mechanism, likelihood, earlyWarning }`), the residual-risk note, one
+hash-chained provenance entry, and one watched indicator per failure mode in `pre_mortem_indicators`; a
+failed run writes an honest `failed` row with the error and the real telemetry and NO provenance and NO
+indicators, never a fabricated forecast of doom. The indicators are wired to the Phase Z `premortem_indicator`
+push rule (`pushEvaluator.ts`, `pushMath.ts`) with a `premortemIndicatorDedupeKey(indicatorId, status)` so a
+status change mints a fresh notification while an unchanged active indicator never notifies twice, and the
+owner or provider moves an indicator through `active`, `triggered`, and `cleared`. The board-grade audit
+timeline (`lib/decisions/timeline.ts`, `getDecisionTimeline`) joins the ledger to its pre-mortems and
+indicators, the committed action each commit created, that action's latest graded outcome, and the AJ
+forecast it concerns, computing every figure from persisted state: the running realised value
+(`runningRealizedValue`, pure) is the cumulative sum of only terminal graded measurements in chronological
+order (a pending decision carries the prior cumulative forward, never a projection), and "overruled and
+right" (`deriveOverruledStatus`, pure) is derived at read time, never stored, so a contradicting decision
+reads `right` when its `action_outcome` forecast later resolves FALSE, `wrong` when it resolves TRUE, and
+honestly `pending` until then. The routes (all behind `requireTenantAccess`, a client-viewer forbidden from
+recording a decision or spending a Confounder call) are `POST /tenants/:id/decisions` (defer or reject),
+`POST /tenants/:id/decisions/:decisionId/pre-mortem`, `GET /tenants/:id/decisions/timeline`, and
+`POST /tenants/:id/pre-mortem-indicators/:indicatorId/status`, plus the upgraded commit route. The portal
+adds the decision, pre-mortem, indicator, and timeline types, a framework-free `decisionApi.ts` client (401
+to an unauthorized state), and the `DecisionsPage` and `DecisionControl` surfaces (the recommendation at the
+time with a verified-or-unverified pill, the evidence-ref count, the pre-mortems and their watched
+indicators, the overruled verdict, and the running realised value), each with distinct loading, ready,
+empty, and error states and a dash, never a fabricated zero, for a missing figure.
+
+### Verification
+
+Typecheck and build are green across the workspace (exit 0 on both; portal built, api-server bundled). The
+full suite is green at 1005 tests (api-server 581 across 65 files, portal 263 across 21 files, cortex 110
+across 13 files, connectors 29 across 5 files, edge-agent 10 across 3 files, db 8, scripts 4), up 49 from
+Phase AK's 956; the new tests are api-server `decisionRecord` (5, the recommendation and evidence
+canonicalisation and hashing and the `contradictsRecommendation` derivation), `timeline` (10, the pure
+`runningRealizedValue` and `deriveOverruledStatus` math), and the `decisions.integration` suite (17,
+against live Postgres with real hash-chained provenance: the commit server-snapshot overriding a wrong
+client description, the exact latest-per-claimPath evidence snapshot with the meta entries excluded, the
+commit and defer guard paths failing before any write, the no-ref unverified commit, the defer snapshot and
+overruled mark, the timeline read with seeded pre-mortems and the overruled verdict, the pre-mortem and
+indicator route guards, and the indicator status transitions), plus portal `decisionApi` (17). The
+long-dash sweep is zero on both sides: the source guard is green over authored source including the Phase AL
+Markdown, and a fresh database-wide cast over all 169 public text and jsonb columns across the 43 base
+tables (three tables added in AL) reports zero hits. Zero new npm dependencies (the pre-mortem reuses the
+existing Confounder seat). The architect `evaluate_task` returned PASS after one remediation round that
+closed two blocking gaps: the decision now snapshots the provenance evidence the recommendation rested on
+(`evidenceRefs` plus `recommendationVerified`, `snapshotLayerEvidence` keeping the latest entry per
+claimPath and excluding the meta prefixes, the canonical evidence set hashed into the decision's provenance
+entry), and the commit route reads the recommendation server-side by `actionRef` before the write
+transaction (the 404 and 422 guards before any write) and snapshots the verified server recommendation; the
+re-review confirmed the ledger is hash-chained and binds to the exact recommendation and evidence, the
+pre-mortem is a real Confounder call with an honest completed-or-failed lifecycle whose indicators feed the
+push rule, the timeline derives the running realised value and the overruled verdict from persisted state,
+and the hard constraints hold. The accepted LOWs are source-reviewed and logged in `phase-AL.md`: the
+on-demand pre-mortem's real Confounder call runs only inside a real paid model call the suite does not run
+(the route guards, the failed-run row, the indicator wiring, and the timeline rendering of a seeded
+completed pre-mortem ARE tested), and the portal decision surfaces (`DecisionsPage`, `DecisionControl`) are
+source-reviewed (the `decisionApi` client behind them is unit-tested). The drift report is `phase-AL.md`;
+the drift index and the rollup are updated to "A through AL". Phase AL is not a milestone; the build
+advances to Phase AM (the as-of replay and the diligence pack).
+
+## Phase AM: the as-of replay and the diligence pack
+
+### What this phase built
+
+Phase AM is the third phase of Stage 6 (the final stage), run under the owner authorization that cleared the
+AJ milestone pause to execute the AK-AL-AM-AN sequence linearly. It gives the platform a memory and a way to
+hand that memory to an outsider. Two things land together on ONE new table (`tenant_layer_snapshots`, taking
+the base-table count from 43 to 44): an as-of replay read-model and a diligence pack export. The as-of
+snapshot ledger exists because `tenant_layers` is upserted in place, so a refresh overwrites the prior
+narrative, claim split, and confounder verdicts; without an immutable per-build ledger a past diagnosis
+could not be reconstructed and an as-of view would have to fabricate it. `tenant_layer_snapshots` holds one
+APPEND-ONLY row per layer build, written ATOMICALLY with the `tenant_layers` upsert in the same transaction
+and at the same instant from the SAME dash-stripped row: the content fields mirror the live row,
+`rawConfidence` is captured for the confidence advisory, `contentHash` is a sha256 over a canonical
+stable-key serialisation of the content payload (the fingerprint the diff compares), `dataMode` and `feeds`
+are the build-time mode and feed list, and `signalMeta` is the connected-signal metadata that grounded the
+build (per source, its connector key and `computedAt`, the same de-identified pair already in
+`derived_signals`, never raw content). The efficacy index is deliberately NOT stored; it is recomputed at
+read time from the snapshot's own inputs so it can never drift. `buildTenantAsOf` reconstructs a tenant's
+state as of a past instant from append-only, timestamped state only: per layer the latest snapshot at or
+before the date (a layer with no build by then is honestly unavailable, never a fabricated empty diagnosis),
+the efficacy recomputed from that snapshot's captured mode, feeds, claims, confounders, and signal metadata
+(so a later refresh that delete-replaces the live `derived_signals` cannot rewrite a past connected build's
+coverage or freshness), and the confidence advisory recomputed from the forecasts resolved by the as-of
+date. The diff is snapshot to snapshot (`diffLayerSummaries`, pure): content-changed by hash, every delta
+current minus as-of and null (never zero) unless both sides carry the figure, plus honest tenant-level
+growth (ledger depth as of the date versus now, decisions and outcomes since). The diligence pack
+(`buildDiligencePack`, `renderDiligencePackHtml`) is a single self-contained brand-styled HTML document
+assembled from the same persisted state the live surfaces read (`loadTenantEfficacy`, `getDecisionTimeline`,
+`verifyChain`, the calibration aggregate, the confidence advisory): the current 14-layer diagnosis with
+verified counts beside modelled counts, the efficacy and calibration record with the honest mode ceiling and
+sample label, the board-grade decision audit timeline with the overruled verdict off the exact
+`deriveOverruledStatus` contract, the outcome track record (value identified versus realized), and a
+provenance integrity attestation that flags a broken chain rather than asserting integrity, with every
+tenant-controlled string HTML-escaped. The render is a PURE function built by hand with zero new
+dependencies. Both surfaces are read-only over append-only state and state plainly that history cannot be
+edited through them. The routes (behind `requireTenantAccess`, both GET) are `GET /tenants/:id/as-of?at=<ISO>`
+(400 on a bad date, 404 on an unknown tenant) and `GET /tenants/:id/diligence-pack.html` (inline
+self-contained HTML). The portal adds the as-of types, a framework-free `replayApi.ts` client, and the
+`AsOfReplayPage`, `DiligencePackPage`, and updated `BoardPackPage` surfaces, each with distinct loading,
+ready, empty, and error states and a dash, never a fabricated zero, for a missing figure.
+
+### Verification
+
+Typecheck and build are green across the workspace (exit 0 on both; portal built, api-server bundled). The
+full suite is green at 1034 tests (api-server 610 across 69 files, portal 263 across 21 files, cortex 110
+across 13 files, connectors 29 across 5 files, edge-agent 10 across 3 files, db 8, scripts 4), up 29 from
+Phase AL's 1005; the new tests are api-server `asOfMath` (9), `contentHash` (7), `asOf.integration` (7,
+against live Postgres), and `pack` (6). The long-dash sweep is zero on both sides: the source guard is green
+over authored source including the Phase AM Markdown, and a fresh database-wide cast over all 183 public
+text and jsonb columns across the 44 base tables (one table added in AM) reports zero hits. Zero new npm
+dependencies. The architect `evaluate_task` returned PASS after two remediation rounds; the final round
+closed a connected-signal supersession blocker: the as-of efficacy originally recomputed its
+connector-grounded drivers from the live `derived_signals`, which a refresh delete-replaces, so a refresh
+after the as-of date erased the signals that grounded a past connected build and understated its coverage
+and freshness; the fix captures the build-time signal metadata on the snapshot (a `signalMeta` jsonb column
+of de-identified `{ sourceConnectorKey, computedAt }` references, never raw content) and the as-of efficacy
+recomputes from it, with a regression proving a post-as-of refresh cannot erase a past build's coverage or
+freshness. The re-review confirmed the as-of read-model reads only append-only timestamped state and edits
+nothing, the efficacy and confidence are recomputed honestly from what the build held, the diff is null
+rather than zero when a side is absent, the diligence pack assembles from persisted state and flags a broken
+chain rather than asserting integrity, and the hard constraints hold. The accepted LOWs are source-reviewed
+and logged in `phase-AM.md`: the diligence pack data assembly and the two read routes have no dedicated
+integration test (the as-of read-model is integration-tested, the pack render is unit-tested, and the
+services behind the assembly are tested), and the portal as-of and diligence surfaces including the
+`replayApi` client (the read-model and the render behind them are tested). The drift report is `phase-AM.md`;
+the drift index and the rollup are updated to "A through AM". Phase AM is not a milestone; the build advances
+to Phase AN (the final verification and consolidated report that closes Stage 6 and the whole build).
+
+## Phase AN: the final verification and the consolidated report (closes Stage 6 and the whole build)
+
+### What this phase closed
+
+Phase AN is the fourth and last phase of Stage 6, the final stage, run under the same owner authorization
+that cleared the AJ milestone pause to execute the AK-AL-AM-AN sequence linearly. It builds NO product
+feature and changes no product code. Its deliverables are a fresh full re-verification that every Stage 6
+guarantee and every load-bearing invariant of the whole build still holds and is pinned by a test that turns
+red when broken, and this consolidated report that records, for an outside reader, the scoring design, the
+efficacy index weights, the decision and forecast schemas, and the honest-labelling rules that run through
+the entire system.
+
+### Verification
+
+The configured workflows were re-run fresh in the protocol order, with typecheck and build never run
+concurrently with the test suite. Typecheck is clean across the workspace (exit 0). Build is clean (exit 0;
+the portal builds to 1765 transformed modules, the api-server bundles to `dist/index.mjs`). The full suite is
+green at 1034 tests with zero failures (api-server 610 across 69 files, portal 263 across 21 files, cortex
+110 across 13 files, connectors 29 across 5 files, edge-agent 10 across 3 files, db 8, scripts 4); the only
+stderr lines are warn-level logs emitted by tests that deliberately exercise failure paths (an alert-delivery
+failure, a Sentry report that reports failed without throwing, a push digest whose tenant access was revoked
+since the event was recorded), each of those tests passing. The long-dash sweep is zero on both sides: the
+source guard is green over all authored source including this Phase AN Markdown, and a fresh database-wide
+cast over all 183 public text and jsonb columns across the 44 base tables reports zero hits. Zero new npm
+dependencies across the whole build. The architect `evaluate_task` returned PASS with no remediation rounds
+and no blockers, confirming over the Stage 6 source that each invariant is genuinely pinned by a test that
+would turn red if it broke, that there is no blocker to closing the whole build, and that this report's scope
+is complete.
+
+### The scoring design
+
+Three measures are kept deliberately distinct so none can launder the others, and the separation is the
+honesty boundary. CONFIDENCE says how sure the reasoning is about a claim; it is the cortex Evaluator's
+assessment, tempered downward (never upward) by the calibration record. DATA EFFICACY says how good the fuel
+behind a layer was; it is a structural property of the inputs (are feeds present, are signals fresh, are
+claims verified or only modelled, did findings survive challenge, are sources diverse), independent of how
+confident the narrative sounds. CALIBRATION says whether the system's past probabilities matched reality; it
+is the Brier-scored track record that resolves over time. A layer can be confident on thin data (high
+confidence, low efficacy), or grounded but unproven (high efficacy, early calibration), and the surfaces
+state each honestly rather than collapsing them into one flattering number.
+
+The DATA EFFICACY INDEX (Phase AK) is a 0-to-100 weighted average over five named drivers, computed at read
+time from persisted state (no stored score that could drift): coverage (feeds present versus the layer's
+declared feeds), freshness (the newest derived signal's age against the cadence), verification rate (verified
+versus modelled claims), adversarial survival (confounders ruled out versus total), and source diversity
+(distinct sources behind the diagnosis). A driver with genuinely nothing to measure is null, contributes
+zero, and is DISCLOSED as unmeasured (the index reports the share of weight that is unmeasured) rather than
+quietly renormalised away, because hiding missing evidence would flatter the score. Each driver shows its own
+contribution in points, and the index names the single cheapest improvement (the driver whose lift per unit
+of effort is highest, with an imperative hint). Outside-in and connected modes differ HONESTLY: an
+outside-in tenant's connector-grounded drivers (coverage, freshness) are structurally zero, so its mode
+ceiling is below 100 and the index says why, which is the honest demo-to-pilot number; a connected tenant can
+reach 100.
+
+The BRIER-SCORED CALIBRATION LEDGER (Phase AJ) scores every binary, resolvable forecast with the proper
+scoring rule `(p - o)^2` over a clamped probability, against a fixed 0.25 baseline (the score of always
+saying 0.5). An empty set is a null mean, never a fabricated zero. A ten-band calibration curve buckets
+forecasts by predicted probability with null empty bands, and below a per-segment resolved-count threshold
+(`CALIBRATION_MIN_RESOLVED_PER_SEGMENT`, default 10) the surface carries an honest "early, n resolved" label
+rather than a premature verdict. The calibration feeds confidence in one direction only: it can pull a
+layer's confidence DOWN when the track record is worse than claimed, never inflate it.
+
+### The efficacy index weights
+
+The driver weights live in one documented configuration (`artifacts/api-server/src/lib/efficacy/config.ts`),
+env-overridable and renormalised to sum to 1 so the index is always a proper weighted average. The defaults
+are coverage 0.25, verification rate 0.25, source diversity 0.20, freshness 0.15, and adversarial survival
+0.15. Coverage and verification carry the most because "is the data even present" and "is the claim verified
+or only modelled" are the two questions a buyer asks first; freshness and adversarial survival temper that;
+source diversity rewards triangulation. Freshness uses a half-life decay against a cadence
+(`DEFAULT_FRESHNESS_THRESHOLD_SECONDS`, one day, mirroring the connector catalogue's default staleness
+window): a signal one threshold old reads 0.5, two thresholds old reads 0.25, and anything past the maximum
+multiple (`DEFAULT_FRESHNESS_MAX_MULTIPLE`, four) reads 0 rather than an ever-smaller positive number. Source
+diversity reads a full 1.0 at a target of five distinct sources and scales linearly below it. The feed-to-
+family bridge is a documented, no-schema map: a feed counts as covered when a derived signal for the layer
+comes from a connector in one of the feed's mapped families, and a feed with no mapped family (for example
+open "News") is reported as not measurable from connectors rather than silently guessed as covered or as a
+permanent miss.
+
+### The decision and forecast schemas
+
+A DECISION RECORD (Phase AL, `decision_records`) is a recorded HUMAN act and always appends exactly one
+hash-chained provenance entry. It persists the decision kind (commit, defer, or reject), the actor and time,
+a snapshot of the system recommendation as it stood at decision time (title, detail, impact, predicted value,
+confidence, basis) bound by a `recommendationHash` over a stable ASCII canonicalisation so a later refresh
+can never silently re-point the audit, whether that snapshot was read and verified server-side or came from
+the client (`recommendationVerified`), the evidence refs grounding the layer at decision time (references
+into the append-only provenance ledger, never raw evidence; an empty array is the honest state for an
+ungraded outside-in layer), the rationale (hashed into the provenance digest, never stored raw), the linked
+forecast, and `contradictsRecommendation` (computed once at decision time). A pre-mortem (`pre_mortems`,
+`pre_mortem_indicators`) attaches a real Confounder cortex call's ranked failure modes and one watched
+early-warning indicator per mode, with an honest completed-or-failed lifecycle.
+
+A FORECAST (Phase AJ, `forecasts`) carries its honesty boundary in its column nullability. `probability`
+(numeric(5,4)) is set at creation from the REAL Evaluator output; `outcome`, `resolvedAt`, `brierScore`, and
+`resolutionBasis` (an enum of measured, modelled, owner) stay NULL until the forecast actually resolves, so
+an unresolved row can never carry a fabricated score. Five kinds are scored (action_outcome,
+risk_occurrence, anomaly_materiality, finding_survival, confounder_verdict). An action_outcome forecast links
+to its committed action by an explicit id-or-anchor reference (never a title match) and resolves
+automatically only on a terminal outcome measurement, or by an owner adjudication computed server-side under
+an unresolved-row guard that prevents a double-resolve. The AM as-of snapshot ledger (`tenant_layer_snapshots`)
+sits beside these: one append-only row per layer build capturing the build-time content, content hash, data
+mode, feeds, and the de-identified connected-signal metadata, so a past state can be reconstructed faithfully
+without editing history.
+
+### The honest-labelling rules
+
+The rules that run through the whole system, end to end: a figure is computed from persisted state or it is
+not shown (never fabricated telemetry, health, or output); modelled findings are always labelled beside
+verified ones and the distinction is never collapsed; a missing figure renders as a dash, never a zero, so a
+surface never implies a move from or to zero; loading, empty, and error states are honest and distinct; an
+unconfigured external seam (the GCP secret store, the GCS archive store, the cloud or customer KMS, an
+unimplemented connector) reports "available, not connected" and fails loudly and lazily on first use rather
+than crashing the boot or faking a result; a crypto-shredded tenant read fails with a typed error rather than
+returning empty or plaintext, and a raw human signal read requires an active break-glass grant that is
+audited; the provenance ledger is append-only and a verify reports a broken chain at its entry rather than
+asserting integrity; and the ASCII-hyphen rule holds in source AND in data, enforced by a source guard and a
+database-wide row sweep that both read zero before any phase is done. No secret VALUE is ever persisted to a
+database column or to `.replit`; only references and one-way hashes are stored.
+
+### Close
+
+The whole Elevated Intelligence V2 build is complete: Stages 1 through 6 (Phases A through AN) are gated and
+verified, the full suite is green at 1034 tests, the two-sided long-dash sweep is zero, and zero new npm
+dependencies were added across the build. Phase AN is the closing milestone of Stage 6 and of the whole
+build; the drift index and the rollup record the build as closed at "A through AN", and there is no next
+phase.

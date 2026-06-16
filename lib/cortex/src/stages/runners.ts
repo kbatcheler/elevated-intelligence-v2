@@ -25,6 +25,7 @@ import {
   buildFindingChallengeDecision,
   type FindingChallengeInput,
 } from "../prompts/findingChallenge";
+import { buildPreMortem, type PreMortemInput } from "../prompts/preMortem";
 import type { LayerDescriptor, LayerGrounding } from "../prompts/shared";
 import { profileSchema, type ProfileOutput } from "../schemas/profile";
 import {
@@ -49,6 +50,7 @@ import {
   type FindingChallengeConfound,
   type FindingChallengeDecision,
 } from "../schemas/findingChallenge";
+import { preMortemOutputSchema, type PreMortemOutput } from "../schemas/preMortem";
 import type { StageResult, StageTelemetry } from "./types";
 import type { ZodType } from "zod/v4";
 
@@ -394,6 +396,23 @@ export function runFindingChallengeDecision(
     return runLocalStage("narrate", ctx, { system, user, schema: findingChallengeDecisionSchema, log });
   }
   return runAnthropicStage("narrate", { system, user, schema: findingChallengeDecisionSchema, log });
+}
+
+// On-demand pre-mortem (Phase AL). It reuses the Confounder seat and routing
+// exactly as the interactive challenge does, so its telemetry and cost record as
+// a Confounder call and a sovereign deployment makes no external call. It is a
+// single finding-scoped call (no Synthesist follow-up): the structured failure
+// modes are the product, persisted directly.
+export function runPreMortem(
+  input: PreMortemInput,
+  log: Logger = silentLogger,
+  ctx: StageContext = DEFAULT_STAGE_CONTEXT,
+): Promise<StageResult<PreMortemOutput>> {
+  const { system, user } = buildPreMortem(input);
+  if (runsOnLocal("confound", ctx.dataMode)) {
+    return runLocalStage("confound", ctx, { system, user, schema: preMortemOutputSchema, log });
+  }
+  return runGeminiStage("confound", { system, user, schema: preMortemOutputSchema, log });
 }
 
 export function runScore(

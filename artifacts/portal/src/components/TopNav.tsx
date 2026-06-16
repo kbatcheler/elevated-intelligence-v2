@@ -26,6 +26,9 @@ const PRIMARY: NavItem[] = [
   { to: "/heartbeat", label: "Heartbeat" },
   { to: "/reasoning", label: "Architecture" },
   { to: "/actions", label: "Actions" },
+  { to: "/decisions", label: "Decisions" },
+  { to: "/as-of", label: "Replay" },
+  { to: "/diligence", label: "Diligence" },
 ];
 
 const PERSPECTIVES: { value: Perspective; label: string }[] = [

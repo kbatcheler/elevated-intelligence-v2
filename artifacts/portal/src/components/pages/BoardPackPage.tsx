@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Check, Copy, Printer, Share2 } from "lucide-react";
-import type { MintedShareToken, OverviewLayer, ShareToken } from "../../types";
+import type { MintedShareToken, OverviewLayer, ShareToken, TenantEfficacy } from "../../types";
 import { fetchOverview } from "../../lib/tenantApi";
+import { fetchTenantEfficacy } from "../../lib/efficacyApi";
 import { fetchShareTokens, mintShareToken, revokeShareToken } from "../../lib/sellabilityApi";
 import { useAuth } from "../../lib/AuthContext";
 import { useTenant } from "../../lib/TenantContext";
@@ -97,6 +98,10 @@ export function BoardPackPage() {
 
       {isProvider && currentId && <ShareLinks tenantId={currentId} />}
 
+      {currentId && state.kind === "ready" && generated.length > 0 && (
+        <BoardEfficacy tenantId={currentId} />
+      )}
+
       <div style={{ marginTop: 28 }}>
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
@@ -123,6 +128,101 @@ export function BoardPackPage() {
         )}
       </div>
     </PageWidth>
+  );
+}
+
+// Phase AK: the tenant-level Data Efficacy rollup on the Board Pack. The headline
+// is the mean of the generated layers' indices (how good the fuel behind this
+// company's diagnosis was), distinct from confidence (how sure the reasoning is).
+// A tenant with no generated layer rolls up to a dash, never a fabricated zero;
+// outside-in mode states its structurally lower ceiling honestly. Self-fetching,
+// mirroring ShareLinks, so the main assembly stays thin, with distinct loading,
+// ready, empty, and error states rather than a silently hidden or fabricated
+// figure.
+function BoardEfficacy({ tenantId }: { tenantId: string }) {
+  const { logout } = useAuth();
+  const [state, setState] = useState<
+    { status: "loading" } | { status: "ready"; data: TenantEfficacy } | { status: "error" }
+  >({ status: "loading" });
+
+  useEffect(() => {
+    let alive = true;
+    setState({ status: "loading" });
+    fetchTenantEfficacy(tenantId).then((out) => {
+      if (!alive) return;
+      if ("unauthorized" in out) return void logout();
+      setState(out.state === "ready" ? { status: "ready", data: out.data } : { status: "error" });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId, logout]);
+
+  const frameStyle = {
+    padding: 18,
+    marginTop: 20,
+    display: "flex",
+    alignItems: "baseline" as const,
+    gap: 14,
+    flexWrap: "wrap" as const,
+  };
+  if (state.status === "loading") {
+    return (
+      <section className="card" style={frameStyle}>
+        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+          Data efficacy
+        </span>
+        <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+          Loading...
+        </span>
+      </section>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <section className="card" style={frameStyle}>
+        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+          Data efficacy
+        </span>
+        <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+          Efficacy unavailable right now
+        </span>
+      </section>
+    );
+  }
+
+  const { rollup } = state.data;
+  const capped = state.data.modeCeiling < 100;
+
+  return (
+    <section className="card" style={frameStyle}>
+      <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+        Data efficacy
+      </span>
+      {rollup.score == null ? (
+        <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+          - (no generated layer to score)
+        </span>
+      ) : (
+        <>
+          <span className="font-mono" style={{ fontSize: 24, fontWeight: 600, color: "var(--navy)" }}>
+            {rollup.score}
+          </span>
+          <span style={{ color: "var(--slate)" }}>/ 100</span>
+          <span style={{ fontSize: 13, color: "var(--slate-light)" }}>
+            mean across {rollup.n} generated layer{rollup.n === 1 ? "" : "s"}
+          </span>
+        </>
+      )}
+      {capped && (
+        <span
+          title="Outside-in mode: the connector-grounded drivers (coverage, freshness) are structurally zero, so the index cannot reach 100. Connect data to raise the ceiling."
+          style={{ fontSize: 13, color: "var(--slate-light)" }}
+        >
+          ceiling {state.data.modeCeiling} (outside-in)
+        </span>
+      )}
+    </section>
   );
 }
 

@@ -22,6 +22,7 @@ import {
   VerdictPill,
 } from "../primitives";
 import { ChallengeControl } from "./ChallengeControl";
+import { DecisionControl } from "./DecisionControl";
 
 // The wiring a finding card needs to offer the Interactive Challenge (Phase AA):
 // the tenant and layer to address, the prior challenges grouped by finding ref,
@@ -56,6 +57,36 @@ export function FindingChallengeSlot({
       prior={prior}
       canChallenge={ctx.canChallenge}
       onChallenged={ctx.onChallenged}
+      onUnauthorized={ctx.onUnauthorized}
+    />
+  );
+}
+
+// The wiring a recommended-action card needs to record a board decision against
+// it (Phase AL): the tenant and layer, and whether this seat may decide. Absent
+// (undefined) on any surface that does not enable deciding, and rendered only for
+// a non-viewer seat, so a viewer sees no dead affordance. A commit is recorded by
+// committing the action; only the defer and reject calls live on this slot.
+export interface DecisionContext {
+  tenantId: string;
+  layerKey: string;
+  canDecide: boolean;
+  onUnauthorized: () => void;
+}
+
+export function DecisionActionSlot({
+  ctx,
+  actionRef,
+}: {
+  ctx: DecisionContext | undefined;
+  actionRef: string;
+}) {
+  if (!ctx || !ctx.canDecide) return null;
+  return (
+    <DecisionControl
+      tenantId={ctx.tenantId}
+      layerKey={ctx.layerKey}
+      actionRef={actionRef}
       onUnauthorized={ctx.onUnauthorized}
     />
   );
@@ -263,7 +294,15 @@ function Challengers({ hypotheses, challenge }: { hypotheses: LayerHypothesis[];
 }
 
 // ── Actions with predicted recovery ─────────────────────────────────────────
-function Actions({ actions, challenge }: { actions: LayerAction[]; challenge?: ChallengeContext }) {
+function Actions({
+  actions,
+  challenge,
+  decision,
+}: {
+  actions: LayerAction[];
+  challenge?: ChallengeContext;
+  decision?: DecisionContext;
+}) {
   if (!actions || actions.length === 0) return null;
   return (
     <section>
@@ -282,6 +321,7 @@ function Actions({ actions, challenge }: { actions: LayerAction[]; challenge?: C
               {a.owner && <Field label="Owner" value={a.owner} />}
             </div>
             <FindingChallengeSlot ctx={challenge} findingRef={`actions[${i}]`} />
+            <DecisionActionSlot ctx={decision} actionRef={`actions[${i}]`} />
           </Card>
         ))}
       </div>
@@ -426,10 +466,12 @@ export function LayerSections({
   detail,
   feeds,
   challenge,
+  decision,
 }: {
   detail: TenantLayerDetail;
   feeds: string[];
   challenge?: ChallengeContext;
+  decision?: DecisionContext;
 }) {
   const supplements = detail.supplementBlocks?.blocks ?? [];
   return (
@@ -439,7 +481,7 @@ export function LayerSections({
       <Causes causes={detail.content.causes} challenge={challenge} />
       <Confounders confounders={detail.confounders} />
       <Challengers hypotheses={detail.content.hypotheses} challenge={challenge} />
-      <Actions actions={detail.content.actions} challenge={challenge} />
+      <Actions actions={detail.content.actions} challenge={challenge} decision={decision} />
       <Gaps gaps={detail.content.gaps} />
       <Benchmark peer={detail.peerBenchmark} />
       <Supplements blocks={supplements} />

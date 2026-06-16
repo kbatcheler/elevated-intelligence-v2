@@ -22,13 +22,16 @@ import { usersTable } from "./users";
 // New enums on purpose, never reusing alert_notification_status, so the two
 // lifecycles can diverge without entangling.
 
-// The kinds of breach a rule watches. Only the two below are implemented in this
-// phase; both are computed entirely from already-persisted state (a graded
-// outcome measurement, a committed action), never fabricated. More kinds are a
-// later phase and an additive enum value, not a reinterpretation of these.
+// The kinds of breach a rule watches. All are computed entirely from
+// already-persisted state (a graded outcome measurement, a committed action, an
+// active pre-mortem early-warning indicator), never fabricated. More kinds are
+// an additive enum value, not a reinterpretation of these. premortem_indicator
+// (Phase AL) surfaces an active early-warning indicator on an open committed
+// decision so the board is proactively reminded to watch the risk it names.
 export const pushRuleTypeEnum = pgEnum("push_rule_type", [
   "outcome_shortfall",
   "high_value_action",
+  "premortem_indicator",
 ]);
 
 // Where a delivered digest goes. in_app is the always-available default (the

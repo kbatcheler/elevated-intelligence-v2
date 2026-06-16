@@ -55,12 +55,14 @@ import {
   layersTable,
   PIPELINE_SUB_STAGES,
   tenantLayersTable,
+  tenantLayerSnapshotsTable,
   tenantPipelineRunsTable,
   tenantProfileTable,
   tenantsTable,
   type InsertForecast,
   type PipelineSubStage,
   type PipelineSubStageName,
+  type SnapshotSignalMeta,
 } from "@workspace/db";
 import { refreshConnectedTenant } from "../connectors/connectedRefresh";
 import { readDecryptedSignalsForMachine } from "../security/signalRead";
@@ -72,6 +74,7 @@ import { claimNextSeedJob, enqueueSeedLayers, layerConcurrency, markSeedJob } fr
 import { runnableLayerCondition } from "../layers/customLayer";
 import { isReducedLayer } from "./reduceDecision";
 import { recordModelUsageSafe } from "./usage";
+import { hashLayerContent } from "../replay/contentHash";
 
 export interface SeedOptions {
   log: Logger;
@@ -405,7 +408,7 @@ async function executeEnrichment(
 async function runLayer(
   tenantId: string,
   profile: ProfileOutput,
-  layer: LayerDescriptor,
+  layer: RegistryEntry,
   opts: SeedOptions,
   // Connected-mode derived-signal grounding for this layer. Undefined in
   // outside_in mode, where it must change nothing: the runners append a
@@ -551,13 +554,84 @@ async function runLayer(
       generatorModel,
     });
 
-    await db
-      .insert(tenantLayersTable)
-      .values({ tenantId, layerKey: layer.key, ...row })
-      .onConflictDoUpdate({
-        target: [tenantLayersTable.tenantId, tenantLayersTable.layerKey],
-        set: { ...row, generatedAt: new Date() },
+    const builtAt = new Date();
+
+    // Phase AM. The live tenant_layers upsert overwrites the prior diagnosis in
+    // place, so the immutable as-of snapshot of this exact build must be written
+    // ATOMICALLY with it: a crash between the two would overwrite history without
+    // preserving it, defeating the no-edit guarantee this snapshot ledger exists
+    // to hold. Both writes share one transaction and one builtAt instant. The
+    // snapshot is written from the SAME dash-stripped row (byte-identical to the
+    // live row, inheriting its dash-cleanliness). The content hash is the
+    // fingerprint the as-of diff compares; rawConfidence is captured so the as-of
+    // confidence advisory can be recomputed against the forecasts resolved by the
+    // requested date. The snapshot is inserted, never updated.
+    const rawConfidence =
+      assembled.content !== null &&
+      typeof assembled.content === "object" &&
+      typeof (assembled.content as { confidence?: unknown }).confidence === "number"
+        ? (assembled.content as { confidence: number }).confidence
+        : null;
+    // The data mode and feed list in effect for THIS build, snapshotted so the
+    // as-of efficacy is recomputed with the inputs the build actually had, never
+    // the tenant's current mode or the layer's current feeds.
+    const snapshotDataMode = dataMode === "outside_in" ? "outside_in" : "connected";
+    // The connected-signal metadata that grounded THIS build (the connector
+    // source and computedAt of each derived signal), captured so the as-of
+    // efficacy recomputes coverage, freshness, and source diversity from what the
+    // build actually had. The live derived_signals are delete-replaced on every
+    // refresh (persistDerivedSignalSet), so reading them on a past date would
+    // understate or null a past connected build. This carries only the same
+    // de-identified references already in derived_signals (a connector key and a
+    // timestamp), never raw client content; an outside_in build has no grounding
+    // and records an honest empty set.
+    const snapshotSignalMeta: SnapshotSignalMeta[] = (grounding?.signals ?? []).map((s) => {
+      const t = s.computedAt ? Date.parse(s.computedAt) : NaN;
+      return {
+        sourceConnectorKey: s.sourceConnectorKey ?? null,
+        computedAt: Number.isFinite(t) ? t : null,
+      };
+    });
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(tenantLayersTable)
+        .values({ tenantId, layerKey: layer.key, ...row, generatedAt: builtAt })
+        .onConflictDoUpdate({
+          target: [tenantLayersTable.tenantId, tenantLayersTable.layerKey],
+          set: { ...row, generatedAt: builtAt },
+        });
+      await tx.insert(tenantLayerSnapshotsTable).values({
+        tenantId,
+        layerKey: layer.key,
+        runId: ctx.runId,
+        snapshotAt: builtAt,
+        content: row.content,
+        heroPanel: row.heroPanel,
+        peerBenchmark: row.peerBenchmark,
+        supplementBlocks: row.supplementBlocks,
+        confounders: row.confounders,
+        verifiedClaims: row.verifiedClaims,
+        modelledClaims: row.modelledClaims,
+        voiceQuality: row.voiceQuality,
+        reducedMode: reduced,
+        dataMode: snapshotDataMode,
+        feeds: layer.feeds,
+        signalMeta: snapshotSignalMeta,
+        generatorModel,
+        rawConfidence,
+        contentHash: hashLayerContent({
+          content: row.content,
+          heroPanel: row.heroPanel,
+          peerBenchmark: row.peerBenchmark,
+          supplementBlocks: row.supplementBlocks,
+          confounders: row.confounders,
+          verifiedClaims: row.verifiedClaims,
+          modelledClaims: row.modelledClaims,
+          voiceQuality: row.voiceQuality,
+          reducedMode: reduced,
+        }),
       });
+    });
 
     // Phase AJ. Persist the Evaluator's forecasts into the calibration ledger. A
     // real build supersedes its prior UNRESOLVED forecasts for this layer
@@ -688,7 +762,14 @@ async function runLayer(
   }
 }
 
-async function loadRegistry(): Promise<LayerDescriptor[]> {
+// A runnable registry entry: the cortex descriptor plus the layer's declared
+// feed set. The orchestrator snapshots these feeds so the as-of efficacy is
+// recomputed against the feeds the build actually expected, never the layer's
+// current feeds. The extra field is structurally a LayerDescriptor, so the pure
+// cortex stages still receive exactly the descriptor contract they declare.
+type RegistryEntry = LayerDescriptor & { feeds: string[] };
+
+async function loadRegistry(): Promise<RegistryEntry[]> {
   // Phase AG approval gate. A layer enters the seed fan-out only when it is
   // canonical (the default 14, approved by definition) OR a custom layer an owner
   // has approved (approvedAt set). An unapproved custom layer never runs the
@@ -701,6 +782,7 @@ async function loadRegistry(): Promise<LayerDescriptor[]> {
       name: layersTable.name,
       description: layersTable.description,
       diagnosticQuestion: layersTable.diagnosticQuestion,
+      feeds: layersTable.feeds,
     })
     .from(layersTable)
     .where(runnableLayerCondition())
@@ -839,7 +921,7 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
 async function runLayers(
   tenantId: string,
   profile: ProfileOutput,
-  registry: LayerDescriptor[],
+  registry: RegistryEntry[],
   opts: SeedOptions,
   groundingByLayer?: Map<string, LayerGrounding>,
   // The grounding regime for this seed. outside_in (the default) leaves every

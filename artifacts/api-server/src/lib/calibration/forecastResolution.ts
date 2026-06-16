@@ -11,6 +11,12 @@ import { db, forecastsTable, type ForecastRow } from "@workspace/db";
 import { stripDashes } from "@workspace/cortex";
 import { brierScore } from "./brierMath";
 
+// A database transaction handle, as drizzle hands it to a `db.transaction`
+// callback. Typed structurally so the forecast link can run inside a caller's
+// transaction (the Phase AL commit, which binds the forecast and writes the
+// decision record atomically) without importing drizzle's internal tx type.
+type ForecastTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 // Map an outcome measurement's derived status to a binary forecast outcome. Only
 // a terminal status resolves a forecast: a realized action resolves its outcome
 // forecast TRUE (1), a missed action resolves it FALSE (0). A pending or
@@ -31,13 +37,16 @@ export function outcomeFromMeasurementStatus(status: string): 0 | 1 | null {
 // unresolved forecast is eligible; the most recent matching one wins when an
 // anchor is reused. Returns the linked forecast id, or null when nothing
 // eligible matched.
-export async function linkForecastToCommittedAction(args: {
-  tenantId: string;
-  actionId: string;
-  layerKey: string;
-  forecastId?: string | null;
-  sourcePath?: string | null;
-}): Promise<string | null> {
+export async function linkForecastToCommittedActionTx(
+  tx: ForecastTx,
+  args: {
+    tenantId: string;
+    actionId: string;
+    layerKey: string;
+    forecastId?: string | null;
+    sourcePath?: string | null;
+  },
+): Promise<string | null> {
   const { tenantId, actionId, layerKey, forecastId, sourcePath } = args;
   const conditions = [
     eq(forecastsTable.tenantId, tenantId),
@@ -53,7 +62,7 @@ export async function linkForecastToCommittedAction(args: {
   } else {
     return null;
   }
-  const candidates = await db
+  const candidates = await tx
     .select({ id: forecastsTable.id })
     .from(forecastsTable)
     .where(and(...conditions))
@@ -61,11 +70,24 @@ export async function linkForecastToCommittedAction(args: {
     .limit(1);
   const target = candidates[0];
   if (!target) return null;
-  await db
+  await tx
     .update(forecastsTable)
     .set({ committedActionId: actionId })
     .where(and(eq(forecastsTable.id, target.id), isNull(forecastsTable.committedActionId)));
   return target.id;
+}
+
+// Link in its own transaction, for callers (the original commit path before the
+// decision record, and any caller that needs no broader atomic scope) that are
+// not already inside one.
+export async function linkForecastToCommittedAction(args: {
+  tenantId: string;
+  actionId: string;
+  layerKey: string;
+  forecastId?: string | null;
+  sourcePath?: string | null;
+}): Promise<string | null> {
+  return db.transaction((tx) => linkForecastToCommittedActionTx(tx, args));
 }
 
 // Resolve every still-open forecast linked to a committed action, from the

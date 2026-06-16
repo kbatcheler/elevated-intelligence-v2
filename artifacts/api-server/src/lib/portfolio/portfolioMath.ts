@@ -59,6 +59,12 @@ export interface PortfolioTenantInput {
   // The already-computed outcome summary for this tenant (computeOutcomeSummary
   // over its committed actions and their measurements).
   outcomes: OutcomeSummary;
+  // Phase AK: the tenant's Data Efficacy rollup (mean of its generated layers'
+  // indices), or null when no layer has been generated. Optional so a caller
+  // that has not computed efficacy still type-checks; absent reads as null (an
+  // honest dash on the board), never a fabricated zero.
+  efficacyScore?: number | null;
+  efficacyLayers?: number;
 }
 
 export interface OpenGapCounts {
@@ -99,12 +105,23 @@ export interface PortfolioTenantMetrics {
   // layer has been generated. confidenceLayers is how many contributed.
   overallConfidence: number | null;
   confidenceLayers: number;
+  // Phase AK: the tenant's Data Efficacy rollup (mean of its generated layers'
+  // 0-100 indices), or null when no layer has been generated. efficacyLayers is
+  // how many contributed. A null score sorts last in the efficacy ranking.
+  efficacyScore: number | null;
+  efficacyLayers: number;
   openGaps: OpenGapCounts;
   completeness: PortfolioCompleteness;
 }
 
 export interface RankedPortfolioTenant extends PortfolioTenantMetrics {
   rank: number;
+  // The company's standing when the board is ranked by data efficacy (1 is the
+  // best-fuelled). A null efficacy score ranks last; the company name is the
+  // stable tiebreak. This is a SEPARATE ordering from the value-based rank, so a
+  // user can read "who has the most value on the table" and "whose diagnosis
+  // rests on the best data" without one masquerading as the other.
+  efficacyRank: number;
 }
 
 export interface CommonGapPattern {
@@ -185,6 +202,11 @@ export function computeTenantPortfolioMetrics(input: PortfolioTenantInput): Port
   if (!hasLayerContent) missing.push("layer_content");
   if (!hasOutcomes) missing.push("outcomes");
 
+  const efficacyScore =
+    input.efficacyScore !== undefined && input.efficacyScore !== null && Number.isFinite(input.efficacyScore)
+      ? input.efficacyScore
+      : null;
+
   return {
     tenantId: input.tenantId,
     tenantName: input.tenantName,
@@ -197,9 +219,30 @@ export function computeTenantPortfolioMetrics(input: PortfolioTenantInput): Port
     unrealizedValueUsd,
     overallConfidence,
     confidenceLayers: confidences.length,
+    efficacyScore,
+    efficacyLayers: input.efficacyLayers ?? 0,
     openGaps: countGaps(input.layers),
     completeness: { hasLayerContent, hasOutcomes, missing },
   };
+}
+
+// Rank the portfolio by data efficacy: the best-fuelled company leads. A company
+// with no generated layer (efficacy null) sorts last regardless; the company
+// name is the stable final tiebreak. Returned as a map from tenant id to its
+// efficacy rank so the value-ordered board can carry the second ordering without
+// reordering itself.
+function efficacyRanks(metrics: readonly PortfolioTenantMetrics[]): Map<string, number> {
+  const sorted = [...metrics].sort((a, b) => {
+    const ae = a.efficacyScore;
+    const be = b.efficacyScore;
+    if (ae === null && be !== null) return 1;
+    if (ae !== null && be === null) return -1;
+    if (ae !== null && be !== null && ae !== be) return be - ae;
+    return a.tenantName.localeCompare(b.tenantName);
+  });
+  const ranks = new Map<string, number>();
+  sorted.forEach((m, i) => ranks.set(m.tenantId, i + 1));
+  return ranks;
 }
 
 // Rank the portfolio: the company with the most value still on the table leads.
@@ -208,6 +251,7 @@ export function computeTenantPortfolioMetrics(input: PortfolioTenantInput): Port
 // and the company name is the final, stable tiebreak so the order is
 // deterministic.
 export function rankPortfolio(metrics: readonly PortfolioTenantMetrics[]): RankedPortfolioTenant[] {
+  const effRanks = efficacyRanks(metrics);
   const sorted = [...metrics].sort((a, b) => {
     const au = a.unrealizedValueUsd;
     const bu = b.unrealizedValueUsd;
@@ -219,7 +263,7 @@ export function rankPortfolio(metrics: readonly PortfolioTenantMetrics[]): Ranke
     }
     return a.tenantName.localeCompare(b.tenantName);
   });
-  return sorted.map((m, i) => ({ ...m, rank: i + 1 }));
+  return sorted.map((m, i) => ({ ...m, rank: i + 1, efficacyRank: effRanks.get(m.tenantId) ?? i + 1 }));
 }
 
 const SEVERITY_RANK: Record<GapSeverity, number> = { high: 3, medium: 2, low: 1 };

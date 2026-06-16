@@ -14,6 +14,7 @@ import { PortfolioPage } from "./pages/PortfolioPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { ReasoningPage } from "./pages/ReasoningPage";
 import { ActionsPage } from "./pages/ActionsPage";
+import { DecisionsPage } from "./pages/DecisionsPage";
 import { AnomaliesPage } from "./pages/AnomaliesPage";
 import { WarRoomPage } from "./pages/WarRoomPage";
 import { AskDifferentDayPage } from "./pages/AskDifferentDayPage";
@@ -23,6 +24,8 @@ import { ConnectionsPage } from "./pages/ConnectionsPage";
 import { BreakGlassPage } from "./pages/BreakGlassPage";
 import { SpendPage } from "./pages/SpendPage";
 import { CalibrationPage } from "./pages/CalibrationPage";
+import { AsOfReplayPage } from "./pages/AsOfReplayPage";
+import { DiligencePackPage } from "./pages/DiligencePackPage";
 import { SecurityConsole } from "./security/SecurityConsole";
 import { Onboarding } from "./Onboarding";
 import { EmptyState, PageWidth } from "./primitives";
@@ -108,6 +111,12 @@ function Routes({ role }: { role: UserRole }) {
       return <ReasoningPage />;
     case "/actions":
       return <ActionsPage />;
+    case "/decisions":
+      return <DecisionsPage />;
+    case "/as-of":
+      return <AsOfReplayPage />;
+    case "/diligence":
+      return <DiligencePackPage />;
     case "/connections":
       return isProvider ? <ConnectionsPage /> : <NotFound />;
     case "/break-glass":

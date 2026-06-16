@@ -11,6 +11,7 @@ import {
   tenantsTable,
 } from "@workspace/db";
 import { isProvider } from "../lib/auth/access";
+import { loadEfficacyForTenants } from "../lib/efficacy/efficacyService";
 import { computeOutcomeSummary, toNum } from "../lib/outcomes/outcomeMath";
 import {
   summarizePortfolio,
@@ -95,6 +96,8 @@ portfolioRouter.get("/summary", async (req, res, next) => {
       res.json({ portfolio: summarizePortfolio(scope, []) });
       return;
     }
+
+    const efficacyByTenant = await loadEfficacyForTenants(tenantIds);
 
     const [tenantRows, layerRows, tenantLayerRows, actionRows, measurementRows] = await Promise.all([
       db
@@ -209,6 +212,7 @@ portfolioRouter.get("/summary", async (req, res, next) => {
         actionsByTenant.get(t.id) ?? [],
         measurementsByTenant.get(t.id) ?? [],
       );
+      const efficacy = efficacyByTenant.get(t.id) ?? { score: null, n: 0 };
       return {
         tenantId: t.id,
         tenantName: t.name,
@@ -216,6 +220,8 @@ portfolioRouter.get("/summary", async (req, res, next) => {
         dataMode: t.dataMode,
         layers,
         outcomes,
+        efficacyScore: efficacy.score,
+        efficacyLayers: efficacy.n,
       };
     });
 

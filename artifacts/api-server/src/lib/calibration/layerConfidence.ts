@@ -6,7 +6,7 @@
 // applies the disciplined value once the layer has cleared the resolved-sample
 // threshold. A layer with a thin or absent track record is left untouched.
 
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, lte } from "drizzle-orm";
 import { db, forecastsTable } from "@workspace/db";
 import {
   aggregateBrier,
@@ -29,6 +29,12 @@ export async function computeLayerConfidenceAdvisory(
   tenantId: string,
   layerKey: string,
   rawConfidence: number,
+  // Phase AM: when set, only forecasts RESOLVED at or before this instant are
+  // counted, so an as-of replay shows the confidence the layer had earned by that
+  // date, not the confidence it has earned since. lte(resolvedAt, asOf) also
+  // excludes unresolved forecasts, so the as-of path needs no separate null
+  // guard. Unset is the live path: every resolved forecast counts.
+  asOf?: Date,
 ): Promise<LayerConfidenceAdvisory> {
   const { minResolvedPerSegment: threshold } = calibrationConfig();
   const rows = await db
@@ -38,7 +44,7 @@ export async function computeLayerConfidenceAdvisory(
       and(
         eq(forecastsTable.tenantId, tenantId),
         eq(forecastsTable.layerKey, layerKey),
-        isNotNull(forecastsTable.resolvedAt),
+        asOf ? lte(forecastsTable.resolvedAt, asOf) : isNotNull(forecastsTable.resolvedAt),
       ),
     );
   const points: ResolvedForecastPoint[] = rows

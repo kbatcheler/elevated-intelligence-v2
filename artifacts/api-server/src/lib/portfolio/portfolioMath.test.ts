@@ -152,6 +152,42 @@ describe("rankPortfolio", () => {
     const ranked = rankPortfolio([a, b, c]);
     expect(ranked.map((r) => r.tenantId)).toEqual(["bravo", "charlie", "alpha"]);
   });
+
+  it("carries a SEPARATE efficacy ranking, best-fuelled first, nulls last", () => {
+    // Value order and efficacy order deliberately disagree: the company with the
+    // most value on the table has the weakest data, and vice versa.
+    const ranked = rankPortfolio([
+      computeTenantPortfolioMetrics(
+        tenant({
+          tenantId: "rich-thin",
+          outcomes: outcome({ valueIdentifiedUsd: 100000, actionsWithPrediction: 1 }),
+          efficacyScore: 30,
+          efficacyLayers: 2,
+        }),
+      ),
+      computeTenantPortfolioMetrics(
+        tenant({
+          tenantId: "poor-deep",
+          outcomes: outcome({ valueIdentifiedUsd: 10, actionsWithPrediction: 1 }),
+          efficacyScore: 90,
+          efficacyLayers: 3,
+        }),
+      ),
+      computeTenantPortfolioMetrics(
+        tenant({ tenantId: "ungenerated" }),
+      ),
+    ]);
+    // Value rank: rich-thin (most on the table), poor-deep, then ungenerated (null).
+    expect(ranked.map((r) => r.tenantId)).toEqual(["rich-thin", "poor-deep", "ungenerated"]);
+    expect(ranked.map((r) => r.rank)).toEqual([1, 2, 3]);
+    // Efficacy rank is its own ordering: poor-deep (90) leads, rich-thin (30),
+    // ungenerated (null efficacy) last.
+    const byId = new Map(ranked.map((r) => [r.tenantId, r]));
+    expect(byId.get("poor-deep")!.efficacyRank).toBe(1);
+    expect(byId.get("rich-thin")!.efficacyRank).toBe(2);
+    expect(byId.get("ungenerated")!.efficacyRank).toBe(3);
+    expect(byId.get("ungenerated")!.efficacyScore).toBeNull();
+  });
 });
 
 describe("detectCommonGapPatterns", () => {

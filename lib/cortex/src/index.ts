@@ -113,6 +113,7 @@ export {
   runEnrichment,
   runFindingChallengeConfound,
   runFindingChallengeDecision,
+  runPreMortem,
 } from "./stages/runners";
 
 // Interactive Challenge (Phase AA): the finding-scoped re-reasoning schemas,
@@ -126,6 +127,18 @@ export {
   type FindingChallengeOutcome,
 } from "./schemas/findingChallenge";
 export { type FindingChallengeInput } from "./prompts/findingChallenge";
+// On-demand pre-mortem (Phase AL): the decision-scoped failure-mode schema,
+// types, and prompt input. A pre-mortem imagines one decision's failure, never a
+// layer rebuild; it reuses the Confounder seat.
+export {
+  preMortemOutputSchema,
+  preMortemFailureModeSchema,
+  preMortemLikelihoodEnum,
+  type PreMortemOutput,
+  type PreMortemFailureMode,
+  type PreMortemLikelihood,
+} from "./schemas/preMortem";
+export { type PreMortemInput } from "./prompts/preMortem";
 export { assembleLayerContent, type AssembleResult } from "./stages/assemble";
 export { type StageResult, type StageTelemetry } from "./stages/types";
 

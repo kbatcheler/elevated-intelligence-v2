@@ -5,7 +5,7 @@
 // HTTP wiring lives in the evaluator, notifier and routes; this module is unit
 // tested in isolation with no database.
 
-export type PushRuleType = "outcome_shortfall" | "high_value_action";
+export type PushRuleType = "outcome_shortfall" | "high_value_action" | "premortem_indicator";
 
 export type SuppressionReason =
   | "disabled"
@@ -111,4 +111,12 @@ export function shortfallDedupeKey(measurementId: string): string {
 // how many evaluation ticks see it.
 export function highValueDedupeKey(actionId: string): string {
   return "high_value_action:" + actionId;
+}
+
+// The idempotency key for a pre-mortem indicator event. Anchored to the indicator
+// AND its status, so the watch surfaces once while active and notifies AGAIN when
+// the same indicator transitions to triggered (its early-warning sign was
+// observed). A cleared indicator is never a candidate, so it never keys here.
+export function premortemIndicatorDedupeKey(indicatorId: string, status: string): string {
+  return "premortem_indicator:" + status + ":" + indicatorId;
 }
