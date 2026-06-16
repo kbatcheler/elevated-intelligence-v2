@@ -1,3 +1,1 @@
-# Memory index
-
-- [Stage gate workflow quirks](stage-gate-workflow-quirks.md) - log-flush ordering, infra/ ASCII not CI-guarded, known flaky test, drift-protocol gate sequence.
+- [Functional e2e auth](functional-e2e-auth.md) — authed e2e: seed a dev users row with a self-generated scrypt hash and log in via the real form; can't forge cookie or mint PIN (both need SESSION_SECRET).
