@@ -17,6 +17,7 @@ export const publicRouter: Router = Router();
 // times, a scraper hammers it. Keyed by client IP, which is trustworthy here
 // because the app sets "trust proxy" in front of the dev proxy.
 const diagnosisRateLimit = createRateLimiter({
+  name: "public-diagnosis",
   windowMs: 60_000,
   max: 30,
   keyFn: (req) => req.ip ?? "unknown",

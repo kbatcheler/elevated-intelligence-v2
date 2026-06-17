@@ -1,48 +1,47 @@
 import type { NextFunction, Request, Response } from "express";
+import { getFixedWindowStore } from "../lib/rateLimit/fixedWindowStore";
+import { logger } from "../lib/logger";
 
-// A small in-memory fixed-window rate limiter. The platform target is a single
-// Reserved VM, so a per-process map is sufficient and avoids a dependency or an
-// external store. A horizontally scaled deployment would replace this with a
-// shared store; that is a later concern and is logged in the Phase D drift
-// report. req.ip is only trustworthy because the app sets "trust proxy" and the
-// dev proxy forwards the client address.
-interface Bucket {
-  count: number;
-  resetAt: number;
-}
-
+// A fixed-window rate limiter behind a store seam. The default backend is an
+// in-process map, which is sufficient for the single Reserved VM target and
+// keeps the dependency-free posture. Setting RATE_LIMIT_STORE=postgres routes
+// every limiter through a shared Postgres table instead, so the limit holds
+// across more than one instance (the Phase D and O horizontal-scaling concern).
+// req.ip is only trustworthy because the app sets "trust proxy" and the dev
+// proxy forwards the client address.
+//
+// The store is selected once at first use; the returned middleware namespaces
+// its key by the limiter name, so two limiters that derive the same caller key
+// (for example mcp and ingest both keyed by an ingestion key id) never share a
+// counter.
 export function createRateLimiter(options: {
+  name: string;
   windowMs: number;
   max: number;
   keyFn: (req: Request) => string;
 }) {
-  const buckets = new Map<string, Bucket>();
-  let lastSweep = Date.now();
+  const store = getFixedWindowStore();
 
   return function rateLimit(req: Request, res: Response, next: NextFunction): void {
     const now = Date.now();
-
-    // Opportunistic cleanup so the map cannot grow without bound.
-    if (now - lastSweep > options.windowMs) {
-      for (const [key, bucket] of buckets) {
-        if (bucket.resetAt <= now) buckets.delete(key);
-      }
-      lastSweep = now;
-    }
-
-    const key = options.keyFn(req);
-    let bucket = buckets.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      bucket = { count: 0, resetAt: now + options.windowMs };
-      buckets.set(key, bucket);
-    }
-    bucket.count += 1;
-
-    if (bucket.count > options.max) {
-      res.setHeader("Retry-After", String(Math.ceil((bucket.resetAt - now) / 1000)));
-      res.status(429).json({ error: "too_many_requests" });
-      return;
-    }
-    next();
+    const key = options.name + "|" + options.keyFn(req);
+    void store
+      .hit(key, options.windowMs, options.max, now)
+      .then((result) => {
+        if (!result.allowed) {
+          res.setHeader("Retry-After", String(Math.ceil((result.resetAt - now) / 1000)));
+          res.status(429).json({ error: "too_many_requests" });
+          return;
+        }
+        next();
+      })
+      .catch((err: unknown) => {
+        // A limiter-store fault must not turn into an availability outage for the
+        // routes it guards. Log it loudly and fail open: the request proceeds and
+        // the route's own auth, key, or HMAC gate still applies. This is a logged
+        // degradation, not a silent fallback.
+        logger.error({ err, limiter: options.name }, "rate limiter store error; failing open");
+        next();
+      });
   };
 }

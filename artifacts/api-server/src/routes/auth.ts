@@ -28,11 +28,13 @@ const WINDOW_MS = 15 * 60 * 1000;
 // an in-memory limiter; the exact numbers are a defaulted decision logged in
 // the drift report.
 const registerLimiter = createRateLimiter({
+  name: "auth-register",
   windowMs: WINDOW_MS,
   max: 50,
   keyFn: (req) => "register:" + req.ip,
 });
 const loginLimiter = createRateLimiter({
+  name: "auth-login",
   windowMs: WINDOW_MS,
   max: 50,
   keyFn: (req) => {

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { recordDecision } from "../../lib/decisionApi";
 import { Link } from "../../lib/router";
 import { Pill } from "../primitives";
+import { decisionErrorText } from "../../lib/decisionView";
 
 // Decision ledger (Phase AL) action control. Attached to a single recommended
 // action, it lets a non-viewer seat record that the board deliberately did NOT
@@ -9,19 +10,6 @@ import { Pill } from "../primitives";
 // required rationale. It never edits or removes the recommendation; the audit
 // captures the call, by whom, and why. A commit is recorded by committing the
 // action elsewhere, so only the two contrarian decisions live here.
-
-const ERROR_LABEL: Record<string, string> = {
-  invalid_input: "Add a short rationale and try again.",
-  forbidden: "Your seat can read decisions but cannot record one.",
-  action_not_found: "This action is no longer present to decide on.",
-  layer_not_found: "This layer is no longer available.",
-  not_an_action: "A decision can only be recorded against a recommended action.",
-  failed: "The decision could not be recorded. Try again.",
-};
-
-function errorText(code: string): string {
-  return ERROR_LABEL[code] ?? ERROR_LABEL.failed;
-}
 
 export function DecisionControl({
   tenantId,
@@ -51,7 +39,7 @@ export function DecisionControl({
     setSubmitting(false);
     if ("unauthorized" in out) return void onUnauthorized();
     if ("error" in out) {
-      setError(errorText(out.error));
+      setError(decisionErrorText(out.error));
       return;
     }
     setRecorded(kind);

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
-import type { GapSeverity, PortfolioPattern, PortfolioSummary, PortfolioTenant } from "../../types";
+import type { PortfolioPattern, PortfolioSummary, PortfolioTenant } from "../../types";
 import { useAuth } from "../../lib/AuthContext";
 import { useTenant } from "../../lib/TenantContext";
 import { useRouter } from "../../lib/router";
 import { fetchPortfolioSummary } from "../../lib/portfolioApi";
+import { SEVERITY_COLOR, labelMissing } from "../../lib/portfolioView";
 import {
   EmptyState,
   ErrorState,
@@ -28,12 +29,6 @@ type State =
   | { kind: "ready"; data: PortfolioSummary }
   | { kind: "forbidden" }
   | { kind: "error" };
-
-const SEVERITY_COLOR: Record<GapSeverity, "coral" | "amber" | "gray"> = {
-  high: "coral",
-  medium: "amber",
-  low: "gray",
-};
 
 export function PortfolioPage() {
   const { logout } = useAuth();
@@ -186,6 +181,7 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
     <div>
       <SectionHeading eyebrow="Ranked" title="Companies by value on the table" />
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="table-scroll">
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)" }}>
@@ -281,15 +277,10 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
-}
-
-function labelMissing(key: string): string {
-  if (key === "layer_content") return "diagnosis";
-  if (key === "outcomes") return "outcomes";
-  return key;
 }
 
 function Th({ children, align = "left" }: { children?: React.ReactNode; align?: "left" | "right" }) {

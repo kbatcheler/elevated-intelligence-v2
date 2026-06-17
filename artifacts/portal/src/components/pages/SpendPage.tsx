@@ -261,6 +261,7 @@ function BreakdownTable({
         <EmptyState title="Nothing recorded yet" />
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="table-scroll">
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
@@ -285,6 +286,7 @@ function BreakdownTable({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -300,6 +302,7 @@ function RunsPanel({ data }: { data: SpendSummary }) {
         <EmptyState title="No layer runs recorded yet" />
       ) : (
         <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="table-scroll">
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
@@ -334,6 +337,7 @@ function RunsPanel({ data }: { data: SpendSummary }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

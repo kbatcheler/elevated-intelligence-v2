@@ -16,25 +16,19 @@ import {
   SectionHeading,
   SkeletonLines,
 } from "../primitives";
-import { formatDate, formatDateTime, formatInt } from "../primitives/format";
+import { formatBrier, formatDate, formatDateTime, formatInt, formatRatioPct } from "../primitives/format";
+import {
+  calibrationHeadline,
+  curveRadius,
+  curveScale,
+  isOnDiagonal,
+  maxBandN,
+} from "../../lib/calibrationView";
 
 type State =
   | { kind: "loading" }
   | { kind: "ready"; data: CalibrationSummary }
   | { kind: "error" };
-
-// A Brier score to three decimals, or a plain dash when there is no figure to
-// show (an empty set is never rendered as a fabricated zero).
-function brier(n: number | null): string {
-  if (n === null || !Number.isFinite(n)) return "-";
-  return n.toFixed(3);
-}
-
-// A stored probability as a whole-number percent for the ledger and curve.
-function prob(n: number): string {
-  if (!Number.isFinite(n)) return "-";
-  return Math.round(n * 100) + "%";
-}
 
 // The owner-only Brier-scored calibration ledger (Phase AJ). Every figure is a
 // real computation over resolved forecasts: a probability the real Evaluator
@@ -117,25 +111,7 @@ function CalibrationBody({ data }: { data: CalibrationSummary }) {
 function HeadlinePanel({ data }: { data: CalibrationSummary }) {
   const { headline, baseline, resolvedCount, openCount } = data;
   const established = headline.label.established;
-  const beats = headline.beatsBaseline;
-  const tone =
-    !established || beats === null
-      ? "var(--slate)"
-      : beats
-        ? "var(--teal)"
-        : "var(--coral)";
-
-  const reading = !established
-    ? "Not enough resolved forecasts yet to read a verdict (" +
-      headline.label.label +
-      "). The score is shown, but treat it as provisional until it is established."
-    : beats
-      ? "Better than chance. A coin-flip forecaster scores " +
-        baseline.toFixed(2) +
-        "; lower is better, and the system is beating that line."
-      : "No better than chance. A coin-flip forecaster scores " +
-        baseline.toFixed(2) +
-        "; the system is at or above that line, so its probabilities are not yet earning their confidence.";
+  const { tone, reading } = calibrationHeadline(data);
 
   return (
     <div className="card">
@@ -153,7 +129,7 @@ function HeadlinePanel({ data }: { data: CalibrationSummary }) {
           className="font-mono"
           style={{ fontSize: 32, fontWeight: 500, color: tone, lineHeight: 1 }}
         >
-          {brier(headline.meanBrier)}
+          {formatBrier(headline.meanBrier)}
         </span>
         <span style={{ fontSize: 15, color: "var(--slate)" }}>
           vs {baseline.toFixed(2)} coin-flip baseline
@@ -220,10 +196,8 @@ function CurvePanel({ curve }: { curve: CalibrationBand[] }) {
 function CurveSvg({ curve }: { curve: CalibrationBand[] }) {
   const size = 280;
   const pad = 28;
-  const inner = size - pad * 2;
-  const x = (v: number) => pad + v * inner;
-  const y = (v: number) => pad + (1 - v) * inner;
-  const maxN = Math.max(...curve.map((b) => b.n), 1);
+  const { inner, x, y } = curveScale(size, pad);
+  const maxN = maxBandN(curve);
 
   return (
     <svg
@@ -244,8 +218,8 @@ function CurveSvg({ curve }: { curve: CalibrationBand[] }) {
       />
       {curve.map((b) => {
         if (b.avgProbability === null || b.observedFrequency === null || b.n === 0) return null;
-        const r = 3 + (b.n / maxN) * 6;
-        const onDiagonal = Math.abs(b.avgProbability - b.observedFrequency) <= 0.1;
+        const r = curveRadius(b.n, maxN);
+        const onDiagonal = isOnDiagonal(b.avgProbability, b.observedFrequency);
         return (
           <circle
             key={b.lower}
@@ -311,7 +285,7 @@ function SegmentTable({
                   </Td>
                   <Td align="right">
                     <span className="font-mono" style={{ color: "var(--navy)" }}>
-                      {brier(r.meanBrier)}
+                      {formatBrier(r.meanBrier)}
                     </span>
                   </Td>
                 </tr>
@@ -369,7 +343,7 @@ function LedgerPanel({ rows }: { rows: CalibrationLedgerRow[] }) {
                   </Td>
                   <Td align="right">
                     <span className="font-mono" style={{ color: "var(--slate)" }}>
-                      {prob(r.probability)}
+                      {formatRatioPct(r.probability)}
                     </span>
                   </Td>
                   <Td>
@@ -377,7 +351,7 @@ function LedgerPanel({ rows }: { rows: CalibrationLedgerRow[] }) {
                   </Td>
                   <Td align="right">
                     <span className="font-mono" style={{ color: "var(--navy)" }}>
-                      {brier(r.brierScore)}
+                      {formatBrier(r.brierScore)}
                     </span>
                   </Td>
                   <Td>

@@ -96,7 +96,7 @@ export function TopNav() {
           <TenantSwitcher tenants={tenants} currentId={currentId} onChange={setCurrentId} />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div className="nav-actions" style={{ display: "flex", alignItems: "center", gap: 14 }}>
           <PerspectiveLens value={perspective} onChange={setPerspective} />
           <div style={{ textAlign: "right", display: "none" }} className="nav-user" />
           <NavBell active={isActive(path, "/notifications")} />
@@ -154,8 +154,9 @@ function TenantSwitcher({
     );
   }
   return (
-    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+    <div className="nav-switcher" style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
       <select
+        className="nav-select"
         aria-label="Switch tenant"
         value={currentId ?? ""}
         onChange={(e) => onChange(e.target.value)}

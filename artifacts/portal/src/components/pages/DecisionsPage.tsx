@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  Basis,
   DecisionTimeline,
   DecisionTimelineEntry,
   PreMortem,
@@ -11,6 +10,7 @@ import { fetchDecisionTimeline, runPreMortem, setIndicatorStatus } from "../../l
 import { useAuth } from "../../lib/AuthContext";
 import { useTenant } from "../../lib/TenantContext";
 import { Link } from "../../lib/router";
+import { basisOf } from "../../lib/decisionView";
 import {
   ConfidencePill,
   EmptyState,
@@ -41,10 +41,6 @@ const MEAS: Record<string, { color: "teal" | "blue" | "coral" | "gray"; label: s
   missed: { color: "coral", label: "Missed" },
   pending: { color: "gray", label: "Pending" },
 };
-
-function basisOf(s: string): Basis {
-  return s === "verified" ? "verified" : "modelled";
-}
 
 // The board-grade decision audit timeline (Phase AL). Every recorded decision,
 // newest first, with the advice exactly as it stood when the call was made, the

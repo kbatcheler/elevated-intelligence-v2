@@ -4,6 +4,7 @@ import { useAuth } from "../../lib/AuthContext";
 import * as adminApi from "../../lib/adminApi";
 import type { CustomLayer } from "../../lib/adminApi";
 import { ARCHETYPE_KEYS } from "../heroes/registry";
+import { canonicalKeys as deriveCanonicalKeys, customLayerErrorLabel } from "../../lib/customLayerView";
 
 // The curated custom-layer console (Phase AG). An owner creates a layer from a
 // guarded template (exactly four metric tiles, an archetype the hero registry can
@@ -31,8 +32,7 @@ export function CustomLayerPanel() {
     setState(custom.state);
     // Canonical layers are the runnable catalog minus the custom layers; only a
     // canonical layer is a valid benchmark mapping target.
-    const customKeys = new Set(custom.items.map((l) => l.key));
-    setCanonicalKeys(catalog.items.filter((l) => !customKeys.has(l.key)).map((l) => l.key));
+    setCanonicalKeys(deriveCanonicalKeys(catalog.items, custom.items));
   };
 
   useEffect(() => {
@@ -175,17 +175,6 @@ function CreateSection({
   const [errorMsg, setErrorMsg] = useState("");
   const [savedKey, setSavedKey] = useState("");
 
-  const errorLabel = (code: string): string => {
-    switch (code) {
-      case "invalid_request":
-        return "Check the template: a name, a diagnostic question, an archetype, exactly four metric tiles, and at least one feed are required.";
-      case "invalid_benchmark_canonical_key":
-        return "The benchmark mapping must target an existing canonical layer.";
-      default:
-        return "Failed to create the custom layer.";
-    }
-  };
-
   const setTile = (i: number, value: string) => {
     setTiles((prev) => prev.map((t, j) => (j === i ? value : t)));
   };
@@ -210,7 +199,7 @@ function CreateSection({
     setSaving(false);
     if ("unauthorized" in result) return logout();
     if ("error" in result) {
-      setErrorMsg(errorLabel(result.error));
+      setErrorMsg(customLayerErrorLabel(result.error));
       return;
     }
     setSavedKey(name);

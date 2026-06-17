@@ -40,6 +40,27 @@ export function pct(n: number): string {
   return `${Math.round(n)}%`;
 }
 
+// A Brier score to three decimals, or a plain dash when there is no figure to
+// show (an empty set is never rendered as a fabricated zero).
+export function formatBrier(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "-";
+  return n.toFixed(3);
+}
+
+// A 0..1 ratio as a whole-number percent, or a plain dash for a missing or
+// non-finite value. Used for stored probabilities and efficacy percentages.
+export function formatRatioPct(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "-";
+  return Math.round(n * 100) + "%";
+}
+
+// Format a Date as the value an <input type="datetime-local"> expects (local
+// wall-clock, minute precision). Used only to seed and bind the picker.
+export function toLocalDateTimeInput(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const MONTHS = [
   "Jan",
   "Feb",

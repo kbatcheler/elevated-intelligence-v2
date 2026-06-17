@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PipelineRun, SeatTelemetry, SubStage } from "../types";
-import { aggregateBySeat } from "./reasoningTelemetry";
+import { aggregateBySeat, isSovereignRun, stageStatusColor } from "./reasoningTelemetry";
 
 function stage(name: string, durationMs: number | null, telemetry: SeatTelemetry | null): SubStage {
   return { name, status: "done", durationMs, error: null, telemetry };
@@ -78,5 +78,30 @@ describe("aggregateBySeat", () => {
     const agg = aggregateBySeat(runs);
     expect(agg.has("Lens")).toBe(true);
     expect(agg.size).toBe(1);
+  });
+});
+
+describe("stageStatusColor", () => {
+  it("maps every sub-stage status to a distinct dot color", () => {
+    expect(stageStatusColor("done")).toBe("var(--teal)");
+    expect(stageStatusColor("running")).toBe("var(--blue)");
+    expect(stageStatusColor("error")).toBe("var(--coral)");
+    // pending and skipped share the muted slate, by design.
+    expect(stageStatusColor("pending")).toBe("var(--slate-light)");
+    expect(stageStatusColor("skipped")).toBe("var(--slate-light)");
+  });
+});
+
+describe("isSovereignRun", () => {
+  it("is true only when a sub-stage actually recorded a sovereign execution mode", () => {
+    const sovereign = [stage("perceive", 10, { seat: "Lens", latencyMs: 10, executionMode: "sovereign" })];
+    expect(isSovereignRun(sovereign)).toBe(true);
+  });
+
+  it("is false for an outside_in/connected run that recorded no marker", () => {
+    const connected = [stage("perceive", 10, { seat: "Lens", latencyMs: 10 })];
+    expect(isSovereignRun(connected)).toBe(false);
+    expect(isSovereignRun([stage("perceive", null, null)])).toBe(false);
+    expect(isSovereignRun([])).toBe(false);
   });
 });

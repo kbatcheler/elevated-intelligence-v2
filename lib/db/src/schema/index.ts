@@ -18,6 +18,11 @@ export * from "./tenantPipelineRuns";
 // The Postgres-backed work queue the seed limiter runs on (brought forward from
 // the Platform phase so concurrency is database-correct, never module memory).
 export * from "./pipelineJobs";
+// Optional shared rate-limit state (Phase D and O hardening). Default is the
+// in-process map; RATE_LIMIT_STORE=postgres routes the auth fixed-window limiter
+// and the connector token bucket through these tables so the limit holds across
+// more than one instance. No tenant reference, no secret, no client data.
+export * from "./rateLimits";
 export * from "./committedActions";
 // The outcome loop (Phase W): one measurement row per committed action grading
 // what it actually realized against the prediction snapshotted at commit time.

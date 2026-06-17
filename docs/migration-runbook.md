@@ -160,6 +160,14 @@ backup and restore.
    time objective is the time to provision a restored instance plus redeploy the
    stateless app. See `docs/backup-and-dr-runbook.md` for the application-side
    crown-jewel logical backup and the proven scratch-restore drill.
+5. Append-only hardening. After the schema is pushed, remove UPDATE and DELETE on
+   `provenance_ledger` from the runtime role so the append-only contract is
+   enforced at the database layer as well as in the application:
+   `psql "$ADMIN_DATABASE_URL" -v app_role=YOUR_RUNTIME_ROLE -f infra/sql/provenance-ledger-append-only.sql`.
+   Run it as a privileged role; it is idempotent and prints the runtime role's
+   remaining grants (expect only SELECT and INSERT). See
+   `docs/deploy-readiness.md` for the rationale (a role grant, not a block
+   trigger, so the privileged tenant-deletion cascade stays intact).
 
 ## Cutover sequence
 

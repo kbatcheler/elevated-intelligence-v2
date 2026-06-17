@@ -22,6 +22,7 @@ ingestRouter.get("/openapi.json", (_req, res) => {
 // the client ip before the key is resolved). Applied after the key gate so one
 // tenant's volume cannot starve another's.
 const ingestLimiter = createRateLimiter({
+  name: "ingest",
   windowMs: 60_000,
   max: 120,
   keyFn: (req) => req.ingestionKey?.id ?? req.ip ?? "unknown",

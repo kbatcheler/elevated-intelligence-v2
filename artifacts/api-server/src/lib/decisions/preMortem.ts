@@ -62,6 +62,11 @@ export interface RunPreMortemParams {
   decisionRecordId: string;
   userId: string;
   log?: Logger;
+  // Test and runtime injection seam. Default undefined: the pre-mortem resolves
+  // its stage context from the environment exactly as before (the production
+  // path). When provided, it overrides that resolution, so a test can inject a
+  // fake in-boundary model and run a pre-mortem with no billed external call.
+  stageContext?: StageContext;
 }
 
 export async function runDecisionPreMortem(params: RunPreMortemParams): Promise<RunPreMortemResult> {
@@ -141,9 +146,10 @@ export async function runDecisionPreMortem(params: RunPreMortemParams): Promise<
 
   // A pre-mortem reuses the Confounder seat, so it honours the deployment-wide
   // sovereign regime exactly as the interactive challenge does.
-  const stageCtx: StageContext = {
-    dataMode: resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in",
-  };
+  const stageCtx: StageContext =
+    params.stageContext ?? {
+      dataMode: resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in",
+    };
 
   const telemetry: StageTelemetry[] = [];
   const result = await runPreMortem(input, log, stageCtx);

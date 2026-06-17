@@ -1,4 +1,25 @@
-import type { PipelineRun } from "../types";
+import type { PipelineRun, SubStage } from "../types";
+
+// The status-dot color for a pipeline sub-stage. Extracted from the reasoning
+// strip so the mapping is unit-testable without rendering the strip.
+export const STAGE_STATUS_COLOR: Record<SubStage["status"], string> = {
+  done: "var(--teal)",
+  running: "var(--blue)",
+  pending: "var(--slate-light)",
+  error: "var(--coral)",
+  skipped: "var(--slate-light)",
+};
+
+export function stageStatusColor(status: SubStage["status"]): string {
+  return STAGE_STATUS_COLOR[status];
+}
+
+// Sovereign honesty marker (Phase AF): true only when the run actually recorded a
+// sub-stage that ran in sovereign mode. Read straight off recorded telemetry,
+// never inferred; an outside_in or connected run records no marker.
+export function isSovereignRun(stages: readonly SubStage[]): boolean {
+  return stages.some((s) => s.telemetry?.executionMode === "sovereign");
+}
 
 export interface SeatAgg {
   stages: number;

@@ -91,6 +91,12 @@ export interface SeedOptions {
   // from the seed/refresh routes so the background backstop honours the same
   // decision the route already approved.
   priorityOverride?: boolean;
+  // Test and runtime injection seam for the stage context. Default undefined:
+  // the seed resolves dataMode from the environment exactly as before and lets
+  // the runners resolve the extraction runtime, so the production path is
+  // unchanged. When provided (tests, the future TEE runner) it overrides both,
+  // so a fake in-boundary model can be injected with no billed external call.
+  stageContext?: StageContext;
 }
 
 export interface LayerOutcome {
@@ -457,7 +463,7 @@ async function runLayer(
   // (inside the runners) sends these to the local seat resolved from the env; in
   // outside_in mode dataMode is "outside_in" and the runners take the external path
   // unchanged. The runtime is left to default resolution; tests inject their own.
-  const stageCtx: StageContext = { dataMode };
+  const stageCtx: StageContext = opts.stageContext ?? { dataMode };
 
   try {
     const perceive = await executeStage<PerceiveOutput>(ctx, "perceive", () =>
@@ -812,7 +818,12 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   // sovereign therefore profiles and builds entirely on the local seat, with no
   // public-web grounding. When unset this resolves to outside_in and changes
   // nothing about the existing public-web path.
-  const dataMode: CortexDataMode = resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in";
+  const dataMode: CortexDataMode =
+    opts.stageContext?.dataMode ?? (resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in");
+  // The stage context threaded into the profile stage and every layer. Default
+  // is the env-derived dataMode with runtime resolution left to the runners (the
+  // production path, unchanged); an injected override (tests) replaces both.
+  const stageCtx: StageContext = opts.stageContext ?? { dataMode };
 
   // In sovereign mode the deployment must not reach the public web at all, so the
   // homepage is deliberately NOT fetched: the profile runs in-boundary on the
@@ -828,7 +839,7 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   }
 
   log.info({ url: rawUrl, grounded: homepage.ok, dataMode }, "seed: running profile stage");
-  const profileResult = await runProfile(rawUrl, homepage, log, { dataMode });
+  const profileResult = await runProfile(rawUrl, homepage, log, stageCtx);
   if (!profileResult.ok) {
     // The profile call may have consumed real tokens before failing schema
     // validation. Record that spend now (the tenant shell does not exist yet, so
@@ -1084,7 +1095,8 @@ async function seedConnectedTenant(
   // too, while still grounding on its own derived signals; otherwise it is the
   // Tier 2 connected split (Lens in-boundary, adversarial seats external). When
   // CORTEX_DATA_MODE is unset this resolves to connected and is unchanged.
-  const dataMode: CortexDataMode = resolveCortexDataMode() === "sovereign" ? "sovereign" : "connected";
+  const dataMode: CortexDataMode =
+    opts.stageContext?.dataMode ?? (resolveCortexDataMode() === "sovereign" ? "sovereign" : "connected");
   const layers = await runLayers(
     tenantId,
     profile,

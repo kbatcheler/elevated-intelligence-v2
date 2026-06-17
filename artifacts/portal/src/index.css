@@ -355,4 +355,16 @@ select.input-base {
   .page-width { padding: 0 16px; }
   .top-nav-row { padding: 10px 16px; gap: 10px; }
   .top-nav-bar { padding: 0 10px; }
+  /* Operator and admin tables (the admin console, Break-glass, Onboarding) carry
+     more columns than a 375px viewport can hold. At this breakpoint a .table-base
+     becomes its own horizontal-scroll box (the same guard as .table-scroll) so a
+     wide table scrolls inside its column instead of forcing the whole page
+     sideways. Internal th/td keep their table-cell layout. */
+  .table-base { display: block; overflow-x: auto; }
+  /* The top-bar clusters must not force the page sideways at phone widths: the
+     action cluster wraps to a second line and the tenant switcher caps its width
+     (the dropdown still opens to the full name). */
+  .nav-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+  .nav-switcher { min-width: 0; }
+  .nav-select { max-width: 150px; min-width: 0; }
 }

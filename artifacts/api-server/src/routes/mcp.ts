@@ -34,6 +34,7 @@ const INVALID_PARAMS = -32602;
 const INTERNAL_ERROR = -32603;
 
 const mcpLimiter = createRateLimiter({
+  name: "mcp",
   windowMs: 60_000,
   max: 120,
   keyFn: (req) => req.ingestionKey?.id ?? req.ip ?? "unknown",

@@ -161,7 +161,7 @@ function LeadCard({ layer }: { layer: OverviewLayer }) {
   const fig = leadFigure(layer);
   const read = layer.hero?.oneLineRead || layer.headlineImpact;
   return (
-    <Link to={`/layers/${layer.key}`} style={{ textDecoration: "none" }}>
+    <Link to={`/layers/${layer.key}`} style={{ textDecoration: "none", minWidth: 0 }}>
       <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <span className="font-serif" style={{ fontSize: 17, color: "var(--navy)" }}>
@@ -171,7 +171,7 @@ function LeadCard({ layer }: { layer: OverviewLayer }) {
         </div>
         {fig.value && (
           <div>
-            <div className="font-mono" style={{ fontSize: 30, fontWeight: 500, color: toneColorVar[fig.tone], lineHeight: 1 }}>
+            <div className="font-mono" style={{ fontSize: 30, fontWeight: 500, color: toneColorVar[fig.tone], lineHeight: 1, overflowWrap: "anywhere" }}>
               {fig.value}
             </div>
             {fig.label && (
@@ -195,7 +195,7 @@ function LeadCard({ layer }: { layer: OverviewLayer }) {
 function LayerRow({ layer }: { layer: OverviewLayer }) {
   const fig = leadFigure(layer);
   return (
-    <Link to={`/layers/${layer.key}`} style={{ textDecoration: "none" }}>
+    <Link to={`/layers/${layer.key}`} style={{ textDecoration: "none", minWidth: 0 }}>
       <div
         className="card"
         style={{
@@ -225,7 +225,7 @@ function LayerRow({ layer }: { layer: OverviewLayer }) {
           </div>
         </div>
         {fig.value ? (
-          <div className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: toneInkVar[fig.tone], flexShrink: 0 }}>
+          <div className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: toneInkVar[fig.tone], minWidth: 0, overflowWrap: "anywhere" }}>
             {fig.value}
           </div>
         ) : (

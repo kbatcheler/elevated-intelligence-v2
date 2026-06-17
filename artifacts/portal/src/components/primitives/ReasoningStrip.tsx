@@ -2,19 +2,12 @@ import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Cpu } from "lucide-react";
 import type { Confounder, PipelineRun, SubStage } from "../../types";
 import { formatDateTime, formatDuration, formatInt } from "./format";
+import { isSovereignRun, stageStatusColor } from "../../lib/reasoningTelemetry";
 
 // The collapsible "How this was reasoned" strip. It shows the real recorded
 // pipeline for this tenant layer: each sub-stage's state and per-seat telemetry,
 // the genuine Confounder count, and when and by which generator the content was
 // produced. Nothing here is animated as if live; it reports what was recorded.
-
-const STAGE_STATUS_COLOR: Record<SubStage["status"], string> = {
-  done: "var(--teal)",
-  running: "var(--blue)",
-  pending: "var(--slate-light)",
-  error: "var(--coral)",
-  skipped: "var(--slate-light)",
-};
 
 function StageRow({ stage }: { stage: SubStage }) {
   const t = stage.telemetry;
@@ -30,7 +23,7 @@ function StageRow({ stage }: { stage: SubStage }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 3, background: STAGE_STATUS_COLOR[stage.status] }} />
+        <span style={{ width: 6, height: 6, borderRadius: 3, background: stageStatusColor(stage.status) }} />
         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)" }}>{stage.name}</span>
       </div>
       <div style={{ fontSize: 12, color: "var(--slate)", display: "flex", flexWrap: "wrap", gap: "2px 14px" }}>
@@ -77,7 +70,7 @@ export function ReasoningStrip({
   // verification channel. This is read straight off the recorded telemetry, never
   // inferred; an outside_in or connected run records no marker and the strip is
   // unchanged for it.
-  const sovereign = stages.some((s) => s.telemetry?.executionMode === "sovereign");
+  const sovereign = isSovereignRun(stages);
 
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>

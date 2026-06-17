@@ -1,6 +1,7 @@
 import React from "react";
 import { useTenant } from "../../lib/TenantContext";
 import { diligencePackUrl } from "../../lib/replayApi";
+import { safeDownloadName } from "../../lib/replayView";
 import { EmptyState, PageHeader, PageWidth, Pill, SkeletonLines } from "../primitives";
 
 // The diligence pack export surface (Phase AM). The pack itself is a single,
@@ -56,7 +57,7 @@ function PackPanel({ tenantId, tenantName }: { tenantId: string; tenantName: str
           <a className="btn-primary" href={url} target="_blank" rel="noreferrer" style={{ textDecoration: "none", fontSize: 13 }}>
             Open diligence pack
           </a>
-          <a className="btn-ghost" href={url} download={`diligence-pack-${safeName(tenantName)}.html`} style={{ textDecoration: "none", fontSize: 13 }}>
+          <a className="btn-ghost" href={url} download={`diligence-pack-${safeDownloadName(tenantName)}.html`} style={{ textDecoration: "none", fontSize: 13 }}>
             Download
           </a>
           <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
@@ -88,8 +89,4 @@ function PackPanel({ tenantId, tenantName }: { tenantId: string; tenantName: str
       </div>
     </div>
   );
-}
-
-function safeName(name: string): string {
-  return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "tenant";
 }

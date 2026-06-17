@@ -10,6 +10,7 @@ import type {
   MintedSource,
   UploadReport,
 } from "../../lib/ingestionApi";
+import { ingestionStatusPill, uploadErrorLabel } from "../../lib/ingestionView";
 
 // The ingestion console (Phase AE). A provider mints and revokes the credentials
 // for the five ingestion paths against a chosen tenant, and can drive a manual
@@ -105,14 +106,8 @@ function RevealBox({ title, value, hint }: { title: string; value: string; hint:
 }
 
 function statePill(status: string) {
-  switch (status) {
-    case "active":
-      return <span className="pill pill-verified">Active</span>;
-    case "revoked":
-      return <span className="pill pill-red">Revoked</span>;
-    default:
-      return <span className="pill pill-navy">{status}</span>;
-  }
+  const { className, label } = ingestionStatusPill(status);
+  return <span className={className}>{label}</span>;
 }
 
 function KeysSection({ tenantId, logout }: { tenantId: string; logout: () => void }) {
@@ -428,28 +423,6 @@ function UploadSection({ tenantId, logout }: { tenantId: string; logout: () => v
     setErrorMsg("");
   }, [tenantId]);
 
-  const errorLabel = (code: string): string => {
-    switch (code) {
-      case "file_too_large":
-        return "That file exceeds the 10MB upload limit.";
-      case "unsupported_file_type":
-      case "unsupported_extension":
-        return "Only .csv, .xlsx, .docx, and .pdf files are accepted.";
-      case "mime_mismatch":
-        return "The file content does not match its extension.";
-      case "local_extraction_seat_not_connected":
-        return "Contract extraction needs the local model seat, which is not connected.";
-      case "layer_not_enabled":
-      case "unknown_layer":
-        return "That layer is not enabled for this tenant.";
-      case "no_numeric_signals":
-      case "invalid_signals":
-        return "No numeric signals could be derived from that file.";
-      default:
-        return "Upload failed.";
-    }
-  };
-
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file) return;
@@ -460,7 +433,7 @@ function UploadSection({ tenantId, logout }: { tenantId: string; logout: () => v
     setUploading(false);
     if ("unauthorized" in result) return logout();
     if ("error" in result) {
-      setErrorMsg(errorLabel(result.error));
+      setErrorMsg(uploadErrorLabel(result.error));
       return;
     }
     setReport(result.report);

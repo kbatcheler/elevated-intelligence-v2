@@ -23,6 +23,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // Keyed by source id so one noisy source cannot starve another. Falls back to ip.
 const webhookLimiter = createRateLimiter({
+  name: "webhooks",
   windowMs: 60_000,
   max: 240,
   keyFn: (req) => String(req.params.sourceId ?? req.ip ?? "unknown"),

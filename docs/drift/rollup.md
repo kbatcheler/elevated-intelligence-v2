@@ -347,6 +347,16 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 `docs/drift/audit-post-X.md`; the now-resolved benchmark re-gate item has moved from "Still live" to
 "One-time or resolved" below.
 
+An owner-requested post-AN remediation pass (2026-06-17) followed the Phase AN closing milestone; it
+minted no phase and advanced no gate. It resolved every "Still live, worth attention" item that could be
+closed in code under the hard constraints (the shared config-gated rate-limit store, the ledger
+database-role append-only hardening, the cortex write-path injected-model tests, the public, efficacy, and
+as-of and diligence read-route integration tests, the portal pure-logic extraction and its unit tests, and
+a live 375px measured pass that caught and fixed a real overflow), re-confirmed the gates and the two-sided
+long-dash sweep, and left the genuinely deferred items in place with their reasons. The resolved items have
+moved from "Still live" to "One-time or resolved" below; the single residual of true DOM-rendering tests is
+consolidated into one bullet that remains in "Still live". The full record is `docs/drift/audit-post-AN.md`.
+
 ## Phase verdicts
 
 | Phase | Name | Verdict | Milestone |
@@ -406,17 +416,6 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 
 ## Still live, worth attention
 
-- In-memory rate limiter for auth (D). Per process, resets on restart, not shared
-  across instances. Fine for a single instance; needs a shared store before
-  horizontal scaling. Note: the SEED pipeline no longer uses an in-module limiter,
-  it uses the Postgres-backed `pipeline_jobs` claim queue (F); this caveat is now
-  scoped to the auth rate limiter only. Captured in `docs/deploy-readiness.md`.
-- Connector rate-limit token buckets are in-memory and per process (O). The
-  per-connection token bucket and the throttle-retry state live in process, like the
-  auth limiter; on more than one instance each keeps its own bucket, so the effective
-  quota multiplies by the instance count. Pin connector refresh to one worker or move
-  the bucket state to a shared store before scaling. Captured in
-  `docs/deploy-readiness.md`.
 - SESSION_SECRET coupling (D). PIN code hashes and session signatures both derive
   from it, so rotating it invalidates all sessions and all outstanding PINs at
   once. Operational caveat, captured in `docs/deploy-readiness.md`.
@@ -435,19 +434,6 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   swappable adapter that reads "available, not connected" until configured; a real
   cloud KMS or bring-your-own-key service implements the same interface with no
   envelope or call-site change. Captured here and in `phase-K.md`.
-- Provenance ledger append-only is enforced in the application, not yet at the DB role
-  (K, re-confirmed in M). The module exposes only `appendEntry` and `verifyChain` and links entries by
-  content hash, so any edit, reorder, or delete breaks `verifyChain`; revoking UPDATE
-  and DELETE on the table at the database-role level is a deployment-time hardening
-  left to the operator. Integrity control today is the hash chain plus the serialized
-  append.
-
-- No dedicated portal unit test for the portfolio view (Y). `PortfolioPage` and
-  `portfolioApi.ts` are covered by the server portfolio integration tests (the ranked board,
-  the cross-portfolio patterns, and the provider/portfolio/403/401 scope cases) and are
-  compile-verified, but there is no portal-side unit test for the forbidden and ready rendering
-  or the drill-down. Accepted as logged drift (the one non-blocking architect item); a future
-  lightweight portal test can close it.
 - Challenge history is treated as non-critical supplementary data on the layer and Ask Different Day
   pages (AA). If the challenge-history fetch fails, the page renders the diagnosis WITHOUT the challenge
   overlay rather than blanking the whole page on a supplementary-data outage; the main diagnosis is
@@ -460,33 +446,12 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   fast-link path; the architect noted it as non-blocking. A future refinement could cache the published
   studies with an honest freshness stamp. Accepted as logged drift until latency measurements show it
   violates the fast-link experience.
-- Stage 4 write and IO paths proven by source inspection, not by an automated test (surfaced in AC).
-  The challenge re-reason engine `runFindingChallenge` spends real Confounder and Synthesist model
-  calls the suite deliberately does not run, and the share-token mint, list, and resolve and the
-  unauthenticated `GET /api/public/diagnosis/:token` route have no `routes/public` or
-  `routes/sellability` integration test. The pure helpers (the finding-version hashing, the token hash
-  and clamp and status, the public projection, the route redaction), the challenge route boundary and
-  rejection cases, and the portal clients ARE tested. The architect marked the gap non-blocking; a
-  future phase can close it with an injected-model challenge test and a public-route integration test.
-  Accepted as logged drift.
-- The 375px usability proof is source-reviewed, not a live-viewport screenshot (AD). The responsive
-  classes (`.page-width`, `.top-nav-row`, `.top-nav-bar`, `.table-scroll`) and the
-  `@media (max-width: 480px)` layer plus the three core-read page markup were read to confirm no
-  overflow at 375px; a live capture at that width was not run. The fix is at the shared-chrome level so
-  it applies uniformly, but the honest proof type is source review. A future pass can attach
-  screenshots. Accepted as logged drift.
-- Operator and admin tables outside the core-read scope are not retrofitted for 375px (AD). The Phase
-  AD acceptance scope is the three core read surfaces (Morning Brief, a layer page, Board Pack); the
-  operator and admin tables (Portfolio, Spend, Break-glass, the admin console, Onboarding) were left
-  as-is. The `.table-scroll` helper is available for them but was not applied, since they are operator
-  surfaces outside the core-read 375px requirement. Accepted as logged drift; a future pass can wrap
-  them.
-- No dedicated portal unit test for the ingestion admin panel (AE). `IngestionPanel` and
-  `ingestionApi.ts` (mint and revoke ingestion keys and webhook sources with a one-shot reveal) are
-  source-reviewed; the server mint, revoke, and gate endpoints behind them ARE integration-tested
-  (`routes/ingest.integration.test.ts`, `routes/webhooks.integration.test.ts`), but there is no
-  portal-side unit test. Accepted as logged drift; a future lightweight portal test can close it,
-  mirroring the existing `adminApi` and `securityApi` client tests.
+- The authenticated share-token sellability routes are source-reviewed, not behind an HTTP integration
+  test (AC residual). The share-token mint, list, and resolve routes (`routes/sellability`) are
+  compile-verified and source-reviewed, while the token hash, clamp, and status helpers, the public
+  projection, and the route redaction ARE unit-tested and the unauthenticated public diagnosis route IS
+  now integration-tested (`routes/public.integration.test.ts`). Accepted as logged drift; a future
+  `routes/sellability` integration test can close it.
 - Cross-package test suite is run serialized, with a test-time DB pool cap (AE). The root `test` script
   runs the per-package vitest suites at `--workspace-concurrency=1` and `lib/db` caps the per-process
   pool at 5 under `VITEST`, because the default concurrent run oversubscribed the 8 CPUs and tripped the
@@ -504,17 +469,6 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   a real tenant end to end with real timings and token/cost telemetry. No figure is fabricated to stand in
   for them; per the blocker the build PAUSES at the AF gate and does not auto-advance to Phase AG. The
   provable-versus-needs-endpoint split and the owner rerun steps and missing env are in `docs/drift/STOP.md`.
-- Portal sovereign surface is source-reviewed, not test-covered (AF). `ReasoningStrip.tsx` and the
-  `types.ts` sovereign markers ("Reasoned in sovereign mode", "External grounding unavailable") are
-  source-reviewed; the markers they read ARE asserted at their source by the cortex `sovereign-pipeline`
-  test, so the portal total stays at 225. Accepted as logged drift, mirroring the AE portal item; a future
-  lightweight portal test can close it.
-- No dedicated portal unit test for the custom-layer panel (AG). `CustomLayerPanel.tsx` and the owner-only
-  "layers" tab in `AccessConsole.tsx` are source-reviewed; the `adminApi` client functions behind them
-  (`fetchCustomLayers`, `fetchCatalogLayers`, `createCustomLayer`, `approveCustomLayer`) ARE unit-tested
-  and the `/layers` routes ARE integration-tested, but there is no portal-side rendering test. Accepted as
-  logged drift, mirroring the AE ingestion-panel and AF sovereign-surface items; a future lightweight
-  portal test can close it.
 - Multi-instance fan-out has no fleet-wide ceiling, by design (AH). `LAYER_CONCURRENCY` is the
   per-instance worker count, so the total parallelism across a fleet is `instances * LAYER_CONCURRENCY`.
   The `pipeline_jobs` queue (not a coordinator) is the safety boundary: an integration test proves each
@@ -529,53 +483,15 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
   available-not-connected adapters (needs real credentials and a bucket the owner provisions), and
   `terraform apply` of `infra/gcp` plus the durable Postgres and PITR the platform owns. The
   provable-versus-owner-rerun split is in `phase-AH.md`.
-- The Evaluator forecast-probability PROMPT is source-reviewed, not run by the suite (AJ). The genuine
-  likelihoods that seed the calibration ledger are emitted only inside a real paid Evaluator call, which
-  the test suite deliberately does not run, so the prompt wording that elicits them is source-reviewed.
-  The score OUTPUT SCHEMA carrying `forecasts[]` and the orchestrator PERSISTENCE of emitted forecasts
-  ARE test-proven (the integration test drives the real output shape through the persist path); only the
-  elicitation prompt is unrun. Accepted as logged drift, mirroring the AC real-model-call and AF
-  sovereign real-endpoint items; a future injected-Evaluator test or a real seed can close it.
-- No portal-side rendering test for the calibration page (AJ). `CalibrationPage.tsx` is source-reviewed;
-  the `calibrationApi` client behind it IS unit-tested and the `/api/calibration` route IS
-  integration-tested, but there is no portal-side rendering test. Accepted as logged drift, mirroring the
-  AE, AF, and AG portal-panel items; a future lightweight portal test can close it.
-- The read-time efficacy loaders and the efficacy routes are source-reviewed, not behind a dedicated
-  integration test (AK). `loadLayerEfficacy`, `loadTenantEfficacy`, and `loadEfficacyForTenants` and the
-  `GET /api/tenants/:id/efficacy` and layer-detail routes are compile-verified and source-reviewed, while
-  the pure `buildLayerEfficacy` driver wiring, the `efficacyMath` index composition, and the `portfolioMath`
-  efficacy ranking behind them ARE unit-tested. Accepted as logged drift, mirroring the prior read-layer
-  items; a future integration test seeding feeds, claims, confounders, and signals can close it.
-- No portal-side rendering test for the efficacy surfaces (AK). `TenantEfficacyRollup` and `EfficacyNote`
-  on `LayerPage`, the Board Pack tenant summary, and the Portfolio efficacy column are source-reviewed; the
-  `efficacyApi` client behind them IS unit-tested. Accepted as logged drift, mirroring the AE, AF, AG, and
-  AJ portal items; a future lightweight portal test can close it.
-- The on-demand pre-mortem's real Confounder call is source-reviewed, not run by the suite (AL).
-  `runDecisionPreMortem` spends a real billed Confounder cortex call the suite deliberately does not run, so
-  the elicitation prompt and the completed-run model output are source-reviewed; the route guards (auth, the
-  client-viewer 403, the 404 on an unknown decision), the failed-run row (an honest `failed` status with the
-  error and NO provenance and NO indicators), the indicator normalisation and the Phase Z `premortem_indicator`
-  push wiring, and the timeline rendering of a directly-seeded completed pre-mortem ARE tested. Accepted as
-  logged drift, mirroring the AC challenge re-reason and the AJ Evaluator-prompt items; a future
-  injected-Confounder test or a real seed can close it.
-- No portal-side rendering test for the decision surfaces (AL). `DecisionsPage` and `DecisionControl`
-  (the audit timeline with the verified-or-unverified recommendation pill, the evidence-ref count, the
-  pre-mortems and their watched indicators, the overruled verdict, and the running realised value) are
-  source-reviewed; the `decisionApi` client behind them IS unit-tested and the decision, pre-mortem,
-  timeline, and indicator routes ARE integration-tested. Accepted as logged drift, mirroring the AE, AF, AG,
-  AJ, and AK portal items; a future lightweight portal test can close it.
-- The diligence pack data assembly and the as-of and diligence routes are source-reviewed, not behind a
-  dedicated integration test (AM). `buildDiligencePack` and the `GET /tenants/:id/as-of` and
-  `GET /tenants/:id/diligence-pack.html` routes are compile-verified and source-reviewed, while the as-of
-  read-model (`buildTenantAsOf`) IS integration-tested against live Postgres, the pack render
-  (`renderDiligencePackHtml`) IS unit-tested, and the efficacy, calibration, timeline, and chain services the
-  assembly calls ARE tested. Accepted as logged drift, mirroring the prior read-route items; a future
-  integration test seeding a full tenant can close it.
-- No portal-side rendering test for the as-of and diligence surfaces, and the `replayApi` client is
-  source-reviewed (AM). `AsOfReplayPage`, `DiligencePackPage`, and the `replayApi.ts` client are
-  source-reviewed; the as-of read-model and the pack render behind them ARE tested. Accepted as logged drift,
-  mirroring the AE, AF, AG, AJ, AK, and AL portal items; a future lightweight portal test, including a
-  `replayApi` client test, can close it.
+- True DOM-rendering tests for the portal surfaces remain deferred under the zero-new-dependency rule
+  (Y, AE, AF, AG, AJ, AK, AL, AM). After the post-AN remediation (2026-06-17), the portal data clients and
+  the extracted state, format, and derivation logic behind every one of these surfaces ARE unit-tested as
+  framework-free modules (the portfolio board and its `portfolioApi`, the ingestion and custom-layer admin
+  panels, the sovereign reasoning strip, the calibration page, the efficacy surfaces, the decision surfaces,
+  and the as-of and diligence surfaces with their `replayApi` client), and the server routes behind them ARE
+  integration-tested. What remains uncovered is ONLY the JSX component rendering itself, because jsdom and a
+  testing-library would be new dependencies held off under the zero-new-dependency rule. Accepted as logged
+  drift; a future pass that adopts a DOM test harness can close it. See `docs/drift/audit-post-AN.md`.
 
 ## Live but runtime-only or cosmetic
 
@@ -591,6 +507,44 @@ and re-confirmed the gates and the two-sided long-dash sweep. The full record is
 
 ## One-time or resolved
 
+- Auth and connector rate limiting now have a shared, config-gated store (D and O, resolved in the post-AN
+  remediation 2026-06-17). The auth fixed-window limiter and the connector token buckets were per process
+  and reset on restart, so neither held across more than one instance. A single `RATE_LIMIT_STORE` seam
+  (default `memory`, unchanged) now also offers `postgres`, which routes both through shared `rate_limit_*`
+  tables so the limit and the quota hold across a fleet; a two-instance test proves two simulated processes
+  share one window and one bucket, and the stored key is a one-way HMAC of the client identifier (no raw IP
+  or email persisted). The in-memory default stays the single-VM target. See `docs/drift/audit-post-AN.md`.
+- Provenance ledger append-only is now enforceable at the database role (K, M, resolved in the post-AN
+  remediation 2026-06-17). `infra/sql/provenance-ledger-append-only.sql` grants a restricted role SELECT and
+  INSERT only, revokes UPDATE, DELETE, and TRUNCATE on `provenance_ledger`, and verifies the posture with a
+  `has_table_privilege` block that raises loudly on any write privilege, including one inherited through a
+  group or `PUBLIC`. The hash chain and serialized append remain the runtime control and `verifyChain` is
+  unchanged; the revoke is a documented deploy-time artifact the single-role dev DB cannot demonstrate. See
+  `docs/drift/audit-post-AN.md`.
+- The cortex write paths are now covered by injected-model tests (AC, AJ, AL, resolved in the post-AN
+  remediation 2026-06-17). `runFindingChallenge`, the Evaluator forecast path, and `runDecisionPreMortem`
+  took an optional runtime override (default unchanged, resolve from env), and new injected-fake-model tests
+  drive the challenge re-reason, the Evaluator forecast persistence, and the pre-mortem end to end with no
+  billed model call, closing the "proven by source inspection only" gap on those paths. See
+  `docs/drift/audit-post-AN.md`.
+- The public, efficacy, and as-of and diligence read routes now have integration tests (AC, AK, AM, resolved
+  in the post-AN remediation 2026-06-17). New HTTP integration tests cover the unauthenticated public
+  diagnosis route, the efficacy read routes, and the as-of and diligence-pack read routes against live
+  Postgres. The authenticated share-token sellability routes remain source-reviewed, tracked as the one AC
+  residual in "Still live, worth attention". See `docs/drift/audit-post-AN.md`.
+- The portal surface logic is now unit-tested as framework-free modules (Y, AE, AF, AG, AJ, AK, AL, AM logic
+  portions, resolved in the post-AN remediation 2026-06-17). The remaining state, format, and derivation
+  logic was extracted into framework-free modules and unit-tested, and the `portfolioApi`, `ingestionApi`,
+  and `replayApi` clients gained unit tests. Only the JSX DOM rendering remains deferred under the
+  zero-new-dependency rule, consolidated into the single "Still live" bullet above. See
+  `docs/drift/audit-post-AN.md`.
+- The 375px core-read usability is now a live measured pass (AD, resolved in the post-AN remediation
+  2026-06-17). A live 375px Playwright viewport pass first measured real horizontal overflow on the
+  core-read surfaces (document `scrollWidth` up to 444 vs an `innerWidth` of 375), contradicting the prior
+  source-only assumption; the fix was made at the shared-chrome level plus a `.table-scroll` wrapper on the
+  operator and admin tables, and a re-measurement found all six surfaces (Morning Brief, a layer page, Board
+  Pack, Portfolio, Spend, Admin) at 375/375 with no horizontal page overflow. See
+  `docs/drift/audit-post-AN.md`.
 - Benchmark cohort read now re-gates stale stats against the current k floor (X, resolved in the
   post-X audit 2026-06-15). The Phase X non-blocking caveat was that `buildLayerCohort` trusted the
   most recent `benchmark_stats` rows without re-filtering them against the CURRENT `BENCHMARK_MIN_COHORT`,

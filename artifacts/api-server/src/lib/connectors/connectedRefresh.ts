@@ -18,7 +18,8 @@ import type { InsertTenantConnection, TenantConnection } from "@workspace/db";
 import { type Alerter, getAlerter } from "../alerts/alerter";
 import { getSecretStore, type SecretStore } from "../secrets/secretStore";
 import { persistDerivedSignalSet, resolveConnectionLayers } from "./persistSignals";
-import { ConnectorThrottleError, realSleep, runWithThrottleRetry, takeToken } from "./rateLimiter";
+import { ConnectorThrottleError, realSleep, runWithThrottleRetry } from "./rateLimiter";
+import { getTokenBucketStore } from "../rateLimit/tokenBucketStore";
 
 // The boundary runtime from Part 3, Tier 1 of the connectors spec. It refreshes
 // every connected, boundary-deployed connector for a tenant in process: it runs
@@ -212,7 +213,7 @@ async function refreshOneConnection(
     // token from its bucket, waiting the reported time (capped) if the bucket is
     // momentarily empty, so we never exceed the client API's own throttle.
     const profile = descriptor.quotaProfile;
-    const waitMs = takeToken(connection.id, profile, ctx.now().getTime());
+    const waitMs = await getTokenBucketStore().take(connection.id, profile, ctx.now().getTime());
     if (waitMs > 0) {
       await ctx.sleep(Math.min(waitMs, profile.maxRetryAfterSeconds * 1000));
     }

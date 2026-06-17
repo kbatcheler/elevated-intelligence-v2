@@ -17,6 +17,7 @@ import {
   Breadcrumbs,
   EmptyState,
   ErrorState,
+  formatRatioPct,
   PageWidth,
   ReasoningStrip,
   Skeleton,
@@ -380,7 +381,6 @@ function TenantEfficacyRollup({ tenantId }: { tenantId: string }) {
 // the strip states the lower ceiling honestly rather than implying the data is
 // poor. The cheapest-improvement hint names the single best next lever.
 function EfficacyNote({ index }: { index: EfficacyIndex }) {
-  const pct = (v: number | null) => (v === null ? "-" : Math.round(v * 100) + "%");
   const capped = index.modeCeiling < 100;
 
   return (
@@ -422,7 +422,7 @@ function EfficacyNote({ index }: { index: EfficacyIndex }) {
             title={d.reason}
           >
             <span style={{ minWidth: 150, fontWeight: 600 }}>{d.label}</span>
-            <span style={{ minWidth: 48 }}>{pct(d.value)}</span>
+            <span style={{ minWidth: 48 }}>{formatRatioPct(d.value)}</span>
             <span style={{ color: "var(--slate)" }}>
               {d.status === "not_measured"
                 ? "not measured"

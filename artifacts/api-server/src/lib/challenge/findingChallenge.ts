@@ -133,6 +133,11 @@ export interface RunChallengeParams {
   challengeText: string;
   userId: string;
   log?: Logger;
+  // Test and runtime injection seam. Default undefined: the challenge resolves
+  // its stage context from the environment exactly as before (the production
+  // path). When provided, it overrides that resolution, so a test can inject a
+  // fake in-boundary model and re-reason a finding with no billed external call.
+  stageContext?: StageContext;
 }
 
 export type RunChallengeResult =
@@ -248,9 +253,10 @@ export async function runFindingChallenge(params: RunChallengeParams): Promise<R
   // in-boundary on the local seat, so a sovereign deployment makes no external
   // call anywhere. When CORTEX_DATA_MODE is unset this is outside_in and the two
   // calls take the external path exactly as before.
-  const stageCtx: StageContext = {
-    dataMode: resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in",
-  };
+  const stageCtx: StageContext =
+    params.stageContext ?? {
+      dataMode: resolveCortexDataMode() === "sovereign" ? "sovereign" : "outside_in",
+    };
 
   // The Confounder seat re-tests the objection against evidence.
   const confound = await runFindingChallengeConfound(input, log, stageCtx);
