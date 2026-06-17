@@ -35,6 +35,7 @@
 - [Crypto-shred revoke ordering and read integrity](crypto-shred-read-integrity.md) - destroy KEK before advertising it gone; trust the active key over the blob's ref.
 - [Local KMS keyring placement](local-kms-keyring.md) - where local KMS stores per-tenant KEK material and why it stays off the SecretStore.
 - [Replit secret isolation](replit-secret-isolation.md) - why agent-side curl/sandbox cannot read user secrets, and how to verify secret-dependent flows.
+- [Owner login recovery on the shared DB](owner-login-recovery.md) - bootstrap is create-only-if-zero-owner; a polluted owners table blocks new logins; dev and the deployment share one DB.
 - [Secret-in-URL redaction chokepoint](secret-in-url-redaction.md) - any route carrying a secret in its URL must be redacted at one shared chokepoint pre-observability.
 - [Async deliver access fence](async-deliver-access-fence.md) - mint-then-deliver seams must re-check tenant access at BOTH the mint and the deliver boundary.
 

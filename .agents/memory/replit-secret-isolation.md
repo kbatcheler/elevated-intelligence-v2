@@ -3,19 +3,23 @@ name: Replit secret isolation
 description: Why agent-side curl/sandbox cannot read user secrets, and how to verify secret-dependent flows instead.
 ---
 
-User-managed Replit secrets (env vars set via the Secrets UI, e.g. OWNER_EMAIL,
-OWNER_PASSWORD, SESSION_SECRET) are injected into the workflow processes when those
-workflows start, but they are NOT present in:
-- the agent `bash` tool's shell (`echo $OWNER_EMAIL` is empty there), and
-- the `code_execution` sandbox (`process.env` is undefined / stripped).
+Secret visibility depends on SCOPE, and the two agent execution contexts differ:
+- WORKFLOW-SCOPED secrets are injected only into the workflow processes; they are
+  absent from the agent `bash` shell and the `code_execution` sandbox.
+- GLOBAL Replit Secrets (added via the Secrets UI / `requestEnvVar`, e.g. once
+  OWNER_EMAIL / OWNER_PASSWORD / SESSION_SECRET are promoted to global) DO appear in
+  the agent `bash` shell (`[ -n "$OWNER_EMAIL" ]` is true there).
+- The `code_execution` sandbox still does NOT receive user secrets even when global
+  (only a curated few like DATABASE_URL are present); also `process` is not a global
+  there, so use `await import("node:process")`.
 
-**Why:** this is the platform's secret-isolation posture, not a bug. It prevents the
-agent from reading or leaking user credentials.
+**Why:** the bash shell inherits the repl env (global secrets included); the sandbox
+is deliberately stripped to a minimal env. This is the platform posture, not a bug.
 
-**How to apply:** do not try to curl or fetch a secret-gated flow (e.g. owner login)
-from the agent shell or sandbox and expect it to work; the request will fail with
-empty credentials (often a 400 validation error on an empty field), which looks like
-an app bug but is not. Verify secret-dependent behavior instead by:
+**How to apply:** for any secret-dependent operation (owner login test, provisioning a
+user from OWNER_*), run it from the agent `bash` shell, NOT the code_execution sandbox.
+Keep secret VALUES in-process (build JSON via `node -e`, pipe to curl; never echo them;
+report only HTTP status / booleans). Verify secret-dependent behavior by:
 - integration tests that boot the real app and inject a test secret store, and
 - reading the resulting DB state directly (e.g. confirm the bootstrapped owner row).
 After a secret is added, restart the workflows so their processes pick it up.
