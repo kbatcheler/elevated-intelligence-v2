@@ -1,34 +1,39 @@
 ---
-name: Owner login recovery on the shared DB
-description: Why setting OWNER_* secrets alone may not yield a working login, and how to recover one safely.
+name: Owner login recovery (dev and prod are separate DBs)
+description: Why OWNER_* secrets alone may not yield a working PUBLISHED login, and the durable self-healing fix.
 ---
 
-Symptom: user sets OWNER_EMAIL / OWNER_PASSWORD, restarts, still cannot log in (and
-"what is the invite PIN?" - PINs are shown once and only a hash is kept, never
-retrievable).
+Symptom: user sets OWNER_EMAIL / OWNER_PASSWORD, the DEV login works, but the PUBLISHED
+app still rejects the same credentials ("credentials were not recognized"). Note PINs are
+not a workaround: they are shown once and only a hash is kept, never retrievable.
 
-Root cause: the owner bootstrap is CREATE-ONLY-WHEN-ZERO provider-owner exists. If the
-users table already holds owners (commonly test-suite pollution like `agent-test-*`,
-`sectest-*`, `*@example.com`, plus a real owner), bootstrap silently skips, so newly
-added OWNER_* secrets never create a login.
+**Key environment fact (durable):** in this project dev and the published deployment use
+SEPARATE Postgres databases. Production is seeded by a one-time clone of dev (schema AND
+data) at first publish; a later republish syncs SCHEMA only, not data. So a dev-side data
+write (e.g. resetting the owner's password) does NOT propagate to production. The
+`executeSql` `environment:"production"` path is READ-ONLY (a replica) and proves the
+divergence: the same user id can carry a DIFFERENT password hash in dev vs prod. There is
+no agent-supported way to write the production database directly.
 
-**Why:** "exactly one way in" is a deliberate design - bootstrap must not clobber an
-existing owner. The cost is that a polluted owners table blocks new-owner creation.
+**Consequence for any prod-data invariant:** the only agent-reachable way to make a fact
+true in the production database is to encode it in code that runs on the deployment at
+startup, then have the user republish. The publish flow runs the deployment's own build and
+boot, so startup reconciliation executes against the prod DB with the prod (global) secrets.
 
-**How to apply (recovery):** provision/reset an owner directly rather than relying on
-bootstrap. Non-destructive path = upsert by email: INSERT ... ON CONFLICT (email) DO
-UPDATE SET password_hash, role='provider-owner', status='active', org_id. Hash with the
-app's exact scrypt format (`scrypt:N:R:P:saltB64:derivedB64`, see the auth password
-lib; must set maxmem or N=2^15 throws). Self-verify by re-reading the stored hash and
-re-running scrypt against the provided password before declaring success, then prove the
-real path with a `POST /api/auth/login` returning 200 + session cookie.
+**The durable fix:** the owner bootstrap is self-healing, not create-only. On boot, if
+OWNER_EMAIL/OWNER_PASSWORD are set it reconciles the user matching that email (create if
+missing; otherwise repair role/status and reset the password only when the stored hash does
+not verify), touching ONLY that one account. The env secret is the source of truth for the
+configured owner. This is safe because there is no in-app owner password-change route, and
+/register requires an invite PIN. After republish, the prod boot repairs the owner and login
+works; the repair is idempotent on subsequent boots.
 
-**Critical environment fact:** dev and the published deployment share ONE physical
-Postgres - the deployment inherits the single DATABASE_URL secret - so a dev-side DB
-write fixes the published app too. The `executeSql` `environment:"production"` path is a
-READ-ONLY view of that same database (it shows the same rows), not a separate DB.
+**Why not create-only:** the old "create only when zero provider-owner exists" guard meant a
+prod DB that already held owners (from the first-publish clone, plus test-suite pollution
+like `agent-test-*`, `*@example.com`) was never reconciled, so a newly set OWNER_PASSWORD
+never took effect in production.
 
-Tooling note: the secret values live in the agent bash shell (global secrets), not the
-code_execution sandbox, so run the provisioning script from bash. Under pnpm's strict
-layout `pg` is not resolvable from `.local/`; resolve it with
-`createRequire("/abs/path/to/lib/db/package.json")` since `lib/db` depends on `pg`.
+**How to apply:** make the startup reconciliation change in dev, verify dev login still
+returns 200, then tell the user to Publish again; only the republish makes it take effect in
+production. Owner secret values live in the agent bash shell, not the code_execution sandbox
+(see replit-secret-isolation.md).
