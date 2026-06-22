@@ -37,7 +37,7 @@ export function DiligencePackPage() {
         {tenantStatus === "empty" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its diligence pack can be exported here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its diligence pack can be exported here."
           />
         )}
         {(tenantStatus === "ready") && current && currentId && (

@@ -49,6 +49,7 @@
 ## Portal
 - [Phase E portal architecture](phase-e-portal.md) - durable decisions for the per-tenant portal surfaces; the parallel archetype-hero fan-out contract.
 - [Portal testing under zero-new-dependency](portal-testing-without-dom-deps.md) - add meaningful portal tests without jsdom/testing-library.
+- [Portal British copy vs American identifiers](portal-british-copy.md) - UI copy is British; enum values, field names, and catalog keys stay American verbatim.
 
 ## Schema and tooling
 - [Push a new Drizzle table before integration](schema-push-before-integration.md) - a new schema table is not in dev Postgres until pushed; integration tests 500 until then.

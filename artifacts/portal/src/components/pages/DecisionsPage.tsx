@@ -36,7 +36,7 @@ const DECISION: Record<DecisionTimelineEntry["decision"], { color: "navy" | "amb
 };
 
 const MEAS: Record<string, { color: "teal" | "blue" | "coral" | "gray"; label: string }> = {
-  realized: { color: "teal", label: "Realized" },
+  realized: { color: "teal", label: "Realised" },
   on_track: { color: "blue", label: "On track" },
   missed: { color: "coral", label: "Missed" },
   pending: { color: "gray", label: "Pending" },
@@ -101,7 +101,7 @@ export function DecisionsPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its decision ledger will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its decision ledger will appear here."
           />
         )}
         {state.kind === "ready" && state.timeline.entries.length === 0 && (

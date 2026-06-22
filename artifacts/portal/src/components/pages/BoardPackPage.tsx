@@ -117,7 +117,7 @@ export function BoardPackPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No company in your scope yet"
-            message="Once a company is bound to your organization, its board pack will assemble here."
+            message="Once a company is bound to your organisation, its board pack will assemble here."
           />
         )}
         {(state.kind === "empty" || (state.kind === "ready" && generated.length === 0)) && (

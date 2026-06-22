@@ -16,7 +16,7 @@ export function Login({ onSwitch }: { onSwitch: () => void }) {
     const { error } = await login(email, password);
     setLoading(false);
     if (error) {
-      if (error === "invalid_credentials") setErrorMsg("Those credentials were not recognized.");
+      if (error === "invalid_credentials") setErrorMsg("Those credentials were not recognised.");
       else if (error === "account_disabled") setErrorMsg("This account has been disabled.");
       else setErrorMsg("An error occurred. Please try again.");
     }

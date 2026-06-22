@@ -37,7 +37,7 @@ const STATUS = {
 } as const;
 
 const MEAS_STATUS: Record<OutcomeMeasurementStatus, { color: "teal" | "blue" | "coral" | "gray"; label: string }> = {
-  realized: { color: "teal", label: "Realized" },
+  realized: { color: "teal", label: "Realised" },
   on_track: { color: "blue", label: "On track" },
   missed: { color: "coral", label: "Missed" },
   pending: { color: "gray", label: "Pending" },
@@ -104,7 +104,7 @@ function ValueCounter({ outcomes }: { outcomes: TenantOutcomes }) {
         </div>
         <div>
           <div className="eyebrow text-slate-light">
-            Value realized
+            Value realised
           </div>
           <div className="font-serif text-[26px] text-teal">
             {formatUsd(summary.valueRealizedUsd)}
@@ -165,7 +165,7 @@ export function ActionsPage() {
       <PageHeader
         eyebrow="Track record"
         title="Committed actions"
-        subtitle={current ? `Actions committed for ${current.name}, with their predicted impact and realized value.` : undefined}
+        subtitle={current ? `Actions committed for ${current.name}, with their predicted impact and realised value.` : undefined}
       />
       <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={4} />}
@@ -175,7 +175,7 @@ export function ActionsPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its track record will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its track record will appear here."
           />
         )}
         {state.kind === "empty" && (
@@ -213,7 +213,7 @@ export function ActionsPage() {
                     </div>
                     {meas && (
                       <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light border-t border-cream-dark pt-2">
-                        {realized !== null && <span>Realized: {formatUsd(realized)}</span>}
+                        {realized !== null && <span>Realised: {formatUsd(realized)}</span>}
                         {variance && <span>Variance: {variance}</span>}
                         <Pill color={MEAS_STATUS[meas.status].color}>{MEAS_STATUS[meas.status].label}</Pill>
                         <Pill color={meas.basis === "measured" ? "teal" : "amber"}>

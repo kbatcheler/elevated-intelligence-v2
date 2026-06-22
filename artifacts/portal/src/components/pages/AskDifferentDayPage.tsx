@@ -136,7 +136,7 @@ export function AskDifferentDayPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, you can ask of its intelligence here."
+            message="No company is in your scope yet. Once one is bound to your organisation, you can ask of its intelligence here."
           />
         )}
         {state.kind === "empty" && (

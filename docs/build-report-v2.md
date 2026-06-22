@@ -3140,3 +3140,77 @@ Phase AR passed its architect `evaluate_task` review (PASS) after one documentat
 steady-state-versus-rollout caveat). The hard constraints hold (zero new dependencies, ASCII hyphen only in
 source and data, no fabricated figure). The drift index, the rollup, and this build report advance to "A
 through AR". Phase AR is gated but not a milestone; the wave continues with Phase AS (the signature surface).
+
+## Phase AS: signature surface (closes the Robustness and Magic wave)
+
+Phase AS is the fifth and closing phase of the Robustness and Magic wave (AO through AS). It changes no product
+behaviour and no data; it makes the portal's visual language consistent and deliberate. AS owns
+`artifacts/portal` in full and changes no server, route, contract, or shared type: the authoritative diff since
+the Phase AR commit is portal-only (67 portal files plus the drift records, nothing outside `artifacts/portal`).
+
+Tokenisation is the spine. `artifacts/portal/src/index.css` is the frozen vocabulary (colour, type, spacing,
+pill, tag, eyebrow, serif-diagnosis, and gold-sweep tokens plus the component utility classes), and every
+component now states its intent through those classes and the Tailwind utilities rather than a hand-built inline
+`style={{...}}` object. Across 67 files this removed far more than it added (a net reduction of about 376 lines),
+because a repeated inline object collapses to one shared class; the text tokens carry the WCAG AA `-ink`
+foreground variants, so choosing the token is choosing the accessible colour.
+
+The signature primitives live in `components/primitives/`. A new `Signature.tsx` holds the two most expressive
+surfaces: `SerifDiagnosis` sets the product's single confident conclusion in the serif voice, with the tone
+colouring only the thin leading rule so the conclusion itself always reads in navy authority (a bad diagnosis is
+rendered no less confidently than a good one), and `GoldUnderlineSweep` is a thin gold rule that wipes in once
+beneath a freshly computed value, pure CSS with no library, remounting on a changed `sweepKey` so the wipe
+replays exactly once per recompute, holding fully drawn under reduced motion, and `aria-hidden` because it is
+decorative. `Pills.tsx` carries `ProvenancePill` (verified versus modelled) and `ConfidencePill`;
+`ReasoningStrip.tsx`, `MetricTile.tsx`, and `DataState.tsx` (the loading, empty, error, and ready states as one
+honest primitive) complete the set the pages compose from.
+
+`TopNav.tsx` cuts the primary bar to five destinations (Brief, Board pack, Layers, Decisions, Outcome loop) and
+moves the rest into a secondary, role-fenced More grouping (Analysis and Operations); no route, guard, or server
+fence changed, so a surface a seat could not reach before is still unreachable. The two signature surfaces, the
+Morning Brief (`BriefPage.tsx`) and the public `/d/:token` diagnosis (`PublicDiagnosisPage.tsx`), are restyled
+onto the signature vocabulary, as is Phase AQ's outcome loop page.
+
+The UI copy is normalised to British spelling (organisation, recognised), closing the normalisation Phase AQ
+deferred, while the data-contract identifiers stay American by deliberate decision: the
+`OutcomeMeasurementStatus` `realized` enum value, the `realizedValueUsd` fields, and the `catalog` layer
+identifiers are wire and code names, not user-visible copy, so anglicising them would be a contract change AS is
+forbidden from making. No test asserts the changed copy strings (verified by grep before editing).
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both; build at 1773 modules).
+- The full suite is green at 1179 tests with zero failures (api-server 656 across 80 files, portal 327, cortex
+  111, connectors 63, edge-agent 10, db 8, scripts 4 including the source guard). The contention-sensitive
+  api-server integration suite (untouched by AS) intermittently flaked a different single test on each of two
+  saturated runs (the `spend` ledger-SUM reconciliation, then the `asOf` deterministic-replay equality), both
+  concurrent-write races on the shared dev database between parallel test files; both flaky files pass serially
+  with file parallelism disabled, and a subsequent full workflow run passed completely green.
+- Long-dash sweep zero on both sides: the source guard is green over authored source including this Phase AS
+  Markdown, and a fresh database-wide row-cast over the public text and jsonb columns reports zero hits (AS
+  writes no schema and no data).
+- Zero new npm dependencies: the gold-underline sweep and every transition are pure CSS, framer-motion is
+  absent, and AS added one primitive module, utility classes, and markup only.
+
+### Honest marking
+
+What is PROVEN: that the workspace typechecks and builds with the tokenised portal, that the full automated
+suite stays green, that the long-dash sweep is zero across source and data, and that the public login surface
+renders the signature vocabulary correctly (visually smoke-tested at the running dev server). What is the
+accepted boundary (logged drift): WCAG AA and the 375px mobile floor are handled by construction (the AA `-ink`
+text tokens, and fluid layouts that wrap and reflow via `flex-wrap`, `min-w-0`, and arbitrary `minmax` grids)
+and confirmed on the public surface, but the AUTHENTICATED portal could not be screenshotted at a controlled
+viewport here (owner secrets are not in the agent shell, so no interactive sign-in; and the screenshot tool
+exposes no viewport parameter), so an automated cross-viewport accessibility sweep is an operator follow-up. A
+few inline styles are deliberately kept where the value is genuine runtime geometry that cannot be a static
+token (chart and bar dimensions computed from data, a per-figure or per-group palette colour resolved at
+runtime, the boot-splash skeleton sizes). Nothing is fabricated: the restyle adds no figure, no telemetry, and
+no output; a missing figure remains a disclosed dash, never a zero, and the gold-underline sweep marks a real
+recompute rather than inventing one.
+
+### Close
+
+Phase AS passed its architect `evaluate_task` review (PASS). The hard constraints hold (zero new dependencies,
+ASCII hyphen only in source and data, no fabricated figure, British UI copy with American data-contract
+identifiers). The drift index, the rollup, and this build report advance to "A through AS". Phase AS is gated
+but not a milestone; it CLOSES the Robustness and Magic wave (AO through AS).

@@ -80,7 +80,7 @@ export function AnomaliesPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its anomalies will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its anomalies will appear here."
           />
         )}
         {state.kind === "empty" && (

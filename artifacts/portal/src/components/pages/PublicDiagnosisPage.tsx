@@ -11,13 +11,14 @@ import { withBase } from "../../lib/router";
 import {
   EmptyState,
   ErrorState,
+  GoldUnderlineSweep,
   PageHeader,
   PageWidth,
   Pill,
+  ProvenancePill,
+  SerifDiagnosis,
   SkeletonLines,
   Tag,
-  basisLabel,
-  basisPillClass,
   formatUsd,
   pct,
 } from "../primitives";
@@ -44,6 +45,14 @@ const TONE_INK: Record<Tone, string> = {
   warn: "text-amber-ink",
   bad: "text-coral-ink",
   neutral: "text-navy",
+};
+// The diagnosis tone colours the leading rule only; the conclusion always reads
+// in navy authority, so a "bad" diagnosis is no less confident than a good one.
+const TONE_DIAGNOSIS: Record<Tone, "teal" | "amber" | "coral" | "navy"> = {
+  good: "teal",
+  warn: "amber",
+  bad: "coral",
+  neutral: "navy",
 };
 
 export function PublicDiagnosisPage({ token }: { token: string }) {
@@ -97,7 +106,8 @@ export function PublicDiagnosisPage({ token }: { token: string }) {
           )}
           {state.kind === "ready" && generated.length > 0 && (
             <div className="grid gap-4">
-              {generated.map((l) => (
+              <PublicHero layer={generated[0]} />
+              {generated.slice(1).map((l) => (
                 <PublicLayerCard key={l.key} layer={l} />
               ))}
               {state.diagnosis.caseStudy && <CaseStudyCard study={state.diagnosis.caseStudy} />}
@@ -107,6 +117,40 @@ export function PublicDiagnosisPage({ token }: { token: string }) {
 
         {state.kind === "ready" && <PoweredBy mark={state.diagnosis.poweredBy} />}
       </PageWidth>
+    </div>
+  );
+}
+
+// The lead generated layer, read as a confident serif diagnosis with its leading
+// figure beside it, mirroring the Morning Brief hero. The gold rule sweeps in
+// once beneath the figure, keyed on the figure itself so it marks the computed
+// value rather than a stray re-render. A layer with no figure shows no figure.
+function PublicHero({ layer }: { layer: PublicDiagnosisLayer }) {
+  const tone: Tone = layer.hero?.tone ?? layer.leadMetric?.tone ?? "neutral";
+  const metricValue = layer.hero?.metricValue ?? layer.leadMetric?.value ?? null;
+  const metricLabel = layer.hero?.metricLabel ?? layer.leadMetric?.label ?? null;
+  return (
+    <div className="surface surface-cream p-6 md:p-8">
+      <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
+        <SerifDiagnosis
+          eyebrow={layer.name}
+          tone={TONE_DIAGNOSIS[tone]}
+          lead
+          support={layer.narrative || undefined}
+        >
+          {layer.headlineFinding || layer.name}
+        </SerifDiagnosis>
+        {metricValue && (
+          <div className="md:text-right">
+            <GoldUnderlineSweep sweepKey={metricValue}>
+              <span className={`font-mono text-display font-medium leading-none break-words ${TONE_INK[tone]}`}>
+                {metricValue}
+              </span>
+            </GoldUnderlineSweep>
+            {metricLabel && <div className="eyebrow text-slate-light mt-2">{metricLabel}</div>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -152,9 +196,7 @@ function PublicLayerCard({ layer }: { layer: PublicDiagnosisLayer }) {
             {layer.topAction.impact && (
               <span className="text-caption text-slate-base">{layer.topAction.impact}</span>
             )}
-            {layer.topAction.basis && (
-              <span className={`pill ${basisPillClass(layer.topAction.basis)}`}>{basisLabel(layer.topAction.basis)}</span>
-            )}
+            {layer.topAction.basis && <ProvenancePill basis={layer.topAction.basis} />}
             {layer.topAction.confidence != null && (
               <span className="eyebrow text-slate-light">{pct(layer.topAction.confidence)} confidence</span>
             )}

@@ -120,7 +120,7 @@ export function LayerPage({ layerKey }: { layerKey: string }) {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its layers will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its layers will appear here."
           />
         )}
         {state.kind === "empty" && (

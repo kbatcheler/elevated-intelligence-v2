@@ -98,7 +98,7 @@ export function Onboarding() {
       <PageHeader
         eyebrow="Onboarding"
         title="Invite your team"
-        subtitle="Mint a read-only invite for a colleague in your organization. They self-register with it and land beside you."
+        subtitle="Mint a read-only invite for a colleague in your organisation. They self-register with it and land beside you."
       />
 
       <div className="grid gap-8 mt-7">
@@ -108,7 +108,7 @@ export function Onboarding() {
             <li>Mint a viewer invite below. The PIN is shown once, so copy it then.</li>
             <li>Share the PIN with your colleague over a channel you trust.</li>
             <li>
-              They open the sign-in screen, choose Create Account, and enter the PIN. They land in your organization
+              They open the sign-in screen, choose Create Account, and enter the PIN. They land in your organisation
               with read-only access to the same companies you see.
             </li>
           </ol>

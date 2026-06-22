@@ -61,7 +61,7 @@ export function PortfolioPage() {
       <PageHeader
         eyebrow="Portfolio"
         title="Portfolio intelligence"
-        subtitle="Every company you hold on one board, ranked by the value still on the table. Identified value is the sum of committed predictions, realized is the sum of measured outcomes, and the difference is what is unrealized. A company with no numeric prediction shows a dash, never a fabricated figure."
+        subtitle="Every company you hold on one board, ranked by the value still on the table. Identified value is the sum of committed predictions, realised is the sum of measured outcomes, and the difference is what is unrealised. A company with no numeric prediction shows a dash, never a fabricated figure."
       />
       <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={8} />}
@@ -110,7 +110,7 @@ function TotalsPanel({ data }: { data: PortfolioSummary }) {
         <MetricTile label="Companies" value={formatInt(t.tenantCount)} />
         <MetricTile label="Value on the table" value={formatUsd(t.unrealizedValueUsd)} tone="warn" />
         <MetricTile label="Value identified" value={formatUsd(t.valueIdentifiedUsd)} />
-        <MetricTile label="Value realized" value={formatUsd(t.valueRealizedUsd)} tone="good" />
+        <MetricTile label="Value realised" value={formatUsd(t.valueRealizedUsd)} tone="good" />
         <MetricTile
           label="Open gaps"
           value={formatInt(t.openGaps.total)}
@@ -181,7 +181,7 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
               <Th align="left">Company</Th>
               <Th align="right">On the table</Th>
               <Th align="right">Identified</Th>
-              <Th align="right">Realized</Th>
+              <Th align="right">Realised</Th>
               <Th align="right">Confidence</Th>
               <Th align="right">Data efficacy</Th>
               <Th align="left">Open gaps</Th>

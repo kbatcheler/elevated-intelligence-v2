@@ -177,7 +177,7 @@ export function WarRoomPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its decision picture will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its decision picture will appear here."
           />
         )}
         {state.kind === "empty" && (

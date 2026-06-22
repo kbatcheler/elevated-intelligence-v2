@@ -81,7 +81,7 @@ export function DependencyMapPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its dependency map will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its dependency map will appear here."
           />
         )}
         {state.kind === "empty" && (

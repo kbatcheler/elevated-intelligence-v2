@@ -112,7 +112,7 @@ export function HeartbeatPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its feeds will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its feeds will appear here."
           />
         )}
         {state.kind === "empty" && (

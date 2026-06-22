@@ -121,24 +121,16 @@ export function NotificationsPage() {
   const unread = center.kind === "ready" ? center.data.unreadCount : 0;
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 96 }}>
+    <PageWidth space="tall">
       <PageHeader
         eyebrow="Notifications"
         title="Proactive intelligence"
         subtitle="The breaches worth your attention, ranked by the dollars at stake and the confidence behind them. A below-threshold or muted breach is still recorded here, shown distinct, so tuning the noise down never loses the signal. Every figure is computed from persisted state; a breach with no dollar prediction shows a dash, never a fabricated number."
       />
 
-      <div style={{ marginTop: 28, display: "grid", gap: 32 }}>
+      <div className="mt-7 grid gap-8">
         <div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
             <SectionHeading
               eyebrow={unread > 0 ? `${unread} unread` : "All caught up"}
               title="Notification center"
@@ -199,7 +191,7 @@ function CenterBody({
     );
   }
   return (
-    <div style={{ display: "grid", gap: 12 }}>
+    <div className="grid gap-3">
       {notifications.map((n) => (
         <NotificationCard key={n.id} n={n} busy={busy} onRead={onRead} />
       ))}
@@ -221,47 +213,25 @@ function NotificationCard({
   const unread = !n.read && !suppressed;
   return (
     <div
-      className="card"
-      style={{
-        padding: 18,
-        opacity: suppressed ? 0.72 : 1,
-        borderLeft: unread ? "3px solid var(--gold)" : "3px solid transparent",
-      }}
+      className={`card p-[18px] border-l-[3px] ${suppressed ? "opacity-[0.72]" : "opacity-100"} ${unread ? "border-gold" : "border-transparent"}`}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="font-serif text-[16px] text-navy">
             {n.title}
           </span>
           <Pill color={status.color}>{status.label}</Pill>
           {unread && <Pill color="amber">Unread</Pill>}
         </div>
-        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+        <span className="eyebrow text-slate-light">
           {n.tenantName ?? "Unknown company"}
         </span>
       </div>
 
-      <p style={{ margin: "10px 0 0", color: "var(--slate)", fontSize: 14, lineHeight: 1.5 }}>{n.message}</p>
+      <p className="mt-2.5 text-slate-base text-[14px] leading-normal">{n.message}</p>
 
-      <div
-        style={{
-          marginTop: 12,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", gap: 18, alignItems: "baseline", flexWrap: "wrap" }}>
+      <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex gap-[18px] items-baseline flex-wrap">
           <Figure label="Impact" value={formatUsd(n.impactUsd)} mono accent={n.impactUsd == null ? "muted" : "coral"} />
           <Figure label="Confidence" value={n.confidence == null ? "-" : pct(n.confidence)} mono />
           <Figure label="Rank score" value={n.rankScore.toLocaleString("en-US")} mono />
@@ -289,13 +259,13 @@ function Figure({
   mono?: boolean;
   accent?: "coral" | "muted";
 }) {
-  const color = accent === "coral" ? "var(--coral-ink)" : accent === "muted" ? "var(--slate-light)" : "var(--navy)";
+  const tone = accent === "coral" ? "text-coral-ink" : accent === "muted" ? "text-slate-light" : "text-navy";
   return (
-    <span style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
-      <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 11 }}>
+    <span className="inline-flex flex-col gap-0.5">
+      <span className="eyebrow text-slate-light text-meta">
         {label}
       </span>
-      <span className={mono ? "font-mono" : undefined} style={{ color, fontSize: 14 }}>
+      <span className={`${mono ? "font-mono " : ""}text-[14px] ${tone}`}>
         {value}
       </span>
     </span>
@@ -320,7 +290,7 @@ function RulesBody({
     );
   }
   return (
-    <div style={{ display: "grid", gap: 12 }}>
+    <div className="grid gap-3">
       {rules.map((r) => (
         <RuleCard key={r.id} rule={r} busy={busy} run={run} />
       ))}
@@ -356,43 +326,27 @@ function RuleCard({
   };
 
   return (
-    <div className="card" style={{ padding: 18, opacity: rule.enabled ? 1 : 0.7 }}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "baseline",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>
+    <div className={`card p-[18px] ${rule.enabled ? "opacity-100" : "opacity-70"}`}>
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="font-serif text-[16px] text-navy">
             {TYPE_LABEL[rule.type]}
           </span>
           {!rule.enabled && <Pill color="gray">Disabled</Pill>}
           {mutedActive && <Pill color="amber">Muted</Pill>}
         </div>
-        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+        <span className="eyebrow text-slate-light">
           {rule.tenantName ?? "Unknown company"}
         </span>
       </div>
 
       {mutedActive && (
-        <p style={{ margin: "8px 0 0", color: "var(--slate-light)", fontSize: 13 }}>
+        <p className="mt-2 text-slate-light text-caption">
           Muted until {formatDateTime(rule.mutedUntil)}. Breaches are still recorded, shown suppressed.
         </p>
       )}
 
-      <div
-        style={{
-          marginTop: 14,
-          display: "flex",
-          gap: 16,
-          alignItems: "flex-end",
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="mt-3.5 flex gap-4 items-end flex-wrap">
         <ThresholdInput
           label="Min impact (USD)"
           value={impact}
@@ -408,7 +362,7 @@ function RuleCard({
         <button className="btn-ghost" disabled={busy} onClick={saveThresholds}>
           Save thresholds
         </button>
-        <div style={{ display: "flex", gap: 8, marginLeft: "auto", flexWrap: "wrap" }}>
+        <div className="flex gap-2 ml-auto flex-wrap">
           <button
             className="btn-ghost"
             disabled={busy}
@@ -443,8 +397,8 @@ function ThresholdInput({
   onChange: (v: string) => void;
 }) {
   return (
-    <label style={{ display: "inline-flex", flexDirection: "column", gap: 4 }}>
-      <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 11 }}>
+    <label className="inline-flex flex-col gap-1">
+      <span className="eyebrow text-slate-light text-meta">
         {label}
       </span>
       <input
@@ -453,16 +407,7 @@ function ThresholdInput({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: 130,
-          background: "var(--cream)",
-          border: "1px solid var(--border)",
-          borderRadius: 6,
-          padding: "6px 10px",
-          fontSize: 14,
-          color: "var(--navy)",
-          fontFamily: "var(--font-mono)",
-        }}
+        className="w-[130px] bg-cream border border-border-base rounded-md py-1.5 px-2.5 text-[14px] text-navy font-mono"
       />
     </label>
   );

@@ -139,7 +139,7 @@ export function AsOfReplayPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its history can be replayed here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its history can be replayed here."
           />
         )}
         {state.kind === "ready" && <ReplayView data={state.data} />}

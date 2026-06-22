@@ -1,4 +1,4 @@
-# Drift rollup: Phases A through AR
+# Drift rollup: Phases A through AS
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
@@ -10,10 +10,35 @@ opened Stage 6, the final stage, followed by Phase AL (the decision ledger and p
 as-of replay and the diligence pack), then closed by Phase AN (the final verification and the consolidated
 report). The Robustness and Magic wave (AO through AS) then reopened the build to harden it and sharpen its
 surface; its first phase AO realises the priority connectors, its second phase AP audits and hardens the
-sovereign seat, its third phase AQ closes the outcome loop, and its fourth phase AR hardens the operational
-deploy posture, so the rollup now spans Phases A through AR.
+sovereign seat, its third phase AQ closes the outcome loop, its fourth phase AR hardens the operational
+deploy posture, and its fifth and closing phase AS tokenises the portal into one signature surface, so the
+rollup now spans Phases A through AS.
 
-Last updated after Phase AR (operational hardening, the fourth phase of the Robustness and Magic wave). AR
+Last updated after Phase AS (the signature surface, the fifth and closing phase of the Robustness and Magic
+wave). AS owns `artifacts/portal` in full and changes no server, route, contract, or shared type (the
+authoritative diff since the Phase AR commit is portal-only). It replaces every inline style object across 67
+portal files with the frozen token vocabulary and Tailwind utilities (a net reduction of about 376 lines), cuts
+the top navigation to five primary destinations (Brief, Board pack, Layers, Decisions, Outcome loop) with the
+rest grouped under a role-fenced More menu (no server fence changed), and builds the signature primitives: a new
+`Signature.tsx` with `SerifDiagnosis` (the single confident conclusion in the serif voice, its tone colouring
+only the leading rule so the conclusion always reads in navy authority) and `GoldUnderlineSweep` (a pure-CSS
+gold rule that wipes in once per recompute, held drawn under reduced motion, decorative and aria-hidden), plus
+the provenance pill, the reasoning ribbon, the headline metric, and the four honest data states. The two
+signature surfaces, the Morning Brief and the public `/d/:token` diagnosis, are restyled onto them, as is AQ's
+outcome loop page. The UI copy is normalised to British spelling (organisation, recognised) while the
+data-contract identifiers (`realized`/`realizedValueUsd`, the `catalog` keys) stay American because they are
+wire and code names, closing the normalisation AQ deferred. Typecheck and build are clean; the full suite is
+green at 1179 tests (api-server 656 across 80 files, portal 327, cortex 111, connectors 63, edge-agent 10, db 8,
+scripts 4), with the contention-sensitive api-server integration suite passing cleanly green after two saturated
+runs each intermittently flaked a different unrelated test, both proven to pass serially with file parallelism
+disabled; the two-sided long-dash sweep is zero (the source guard over authored source including the AS Markdown
+and a fresh database cast over the public text and jsonb columns, AS writing no schema and no data); zero new
+npm dependencies (the sweep and every transition are pure CSS, framer-motion absent). The architect returned
+PASS. AS adds one logged drift item: an automated cross-viewport AA and 375px sweep of the AUTHENTICATED portal
+is an operator follow-up (owner secrets are not in the agent shell and the screenshot tool has no viewport
+control), with AA and the mobile floor handled by construction and confirmed on the public login surface.
+
+Earlier, updated after Phase AR (operational hardening, the fourth phase of the Robustness and Magic wave). AR
 changes no product behaviour; it makes the deployment posture explicit and self-consistent across code, infra,
 and the runbooks. Two of its three substrate pieces were already real from the post-AN remediation (the
 config-gated `RATE_LIMIT_STORE` shared store and the fail-loud provenance append-only database role SQL); AR
@@ -498,6 +523,7 @@ consolidated into one bullet that remains in "Still live". The full record is `d
 | AP | Sovereign Seat Realisation (correctness audit) | Pass | no (gated, Robustness and Magic wave; advances to AQ) |
 | AQ | Outcome Loop Closure | Pass | no (gated, Robustness and Magic wave; advances to AR) |
 | AR | Operational Hardening | Pass | no (gated, Robustness and Magic wave; advances to AS) |
+| AS | Signature Surface (closes the Robustness and Magic wave) | Pass | no (gated, Robustness and Magic wave; closes the AO-AS wave) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -695,6 +721,19 @@ consolidated into one bullet that remains in "Still live". The full record is `d
 
 ## Logged spec deviations (decisions)
 
+- British UI copy with American data-contract identifiers (AS). The portal copy is normalised to British
+  spelling (organisation, recognised), but the wire and code identifiers stay American: the
+  `OutcomeMeasurementStatus` `realized` enum value, the `realizedValueUsd` fields, and the `catalog` layer keys
+  are not user-visible copy, so anglicising them would be a contract change the portal-only phase is forbidden
+  from making. This closes the normalisation Phase AQ deferred.
+- A few inline styles kept for genuine runtime geometry (AS). The portal otherwise composes from the frozen
+  token vocabulary, but values computed at runtime from data (chart and bar dimensions, a per-figure or
+  per-group palette colour, the boot-splash skeleton sizes) stay inline because they cannot be static tokens;
+  these are data-driven values, not style drift.
+- The authenticated-portal cross-viewport AA and 375px sweep is an operator follow-up (AS). AA is met by the
+  audited `-ink` text tokens and the mobile floor by fluid layouts that wrap and reflow; an automated sweep of
+  the AUTHENTICATED portal is deferred because owner secrets are not in the agent shell (no interactive
+  sign-in) and the screenshot tool exposes no viewport control, with both confirmed on the public login surface.
 - Share token stored as a one-way hash only, plaintext returned once (AB). The opaque token is 32
   bytes of CSPRNG entropy base64url; only its sha256 hash is persisted and the plaintext is returned
   to the minter exactly once, so a database read can never reconstruct a working link and a lost link

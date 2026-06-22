@@ -76,7 +76,7 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
       <div className="grid [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))] gap-6">
         <div className="card card-accent-teal">
           <h3 className="font-serif text-[18px] font-semibold text-navy mb-4">
-            Create Organization
+            Create Organisation
           </h3>
           {createError && (
             <div className="alert-error mb-4 p-2">
@@ -112,7 +112,7 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
           )}
           <form onSubmit={handleBind} className="grid gap-3">
             <div>
-              <label className="label-base">Organization</label>
+              <label className="label-base">Organisation</label>
               <select className="input-base" value={bindingOrgId} onChange={e => setBindingOrgId(e.target.value)} required>
                 <option value="">Select Org...</option>
                 {orgs.filter(o => o.type !== "provider").map(o => (
@@ -138,7 +138,7 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
 
       <div>
         <h3 className="font-serif text-title font-semibold text-navy mb-4">
-          Organizations
+          Organisations
         </h3>
         <div className="card p-0 overflow-hidden">
           {orgs.length === 0 ? (

@@ -178,27 +178,27 @@ function TelemetryNote({
 }) {
   if (runsError) {
     return (
-      <div style={{ fontSize: 13, color: "var(--coral-ink)", marginTop: 2 }}>
+      <div className="text-caption text-coral-ink mt-0.5">
         Per-seat telemetry is temporarily unavailable; the architecture below is still accurate.
       </div>
     );
   }
   if (!hasTenant) {
     return (
-      <div style={{ fontSize: 13, color: "var(--slate-light)", marginTop: 2 }}>
+      <div className="text-caption text-slate-light mt-0.5">
         Per-seat telemetry appears once a tenant is selected and its runs are recorded.
       </div>
     );
   }
   if (!hasRuns) {
     return (
-      <div style={{ fontSize: 13, color: "var(--slate-light)", marginTop: 2 }}>
+      <div className="text-caption text-slate-light mt-0.5">
         No reasoning runs recorded yet{tenantName ? ` for ${tenantName}` : ""}, so seats show no telemetry.
       </div>
     );
   }
   return (
-    <div style={{ fontSize: 13, color: "var(--slate-light)", marginTop: 2 }}>
+    <div className="text-caption text-slate-light mt-0.5">
       Telemetry below is the real recorded total across {tenantName ?? "this tenant"}'s runs.
     </div>
   );
@@ -216,33 +216,22 @@ function SeatCard({
   agg: SeatAgg | null;
 }) {
   return (
-    <div className="card" style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: 8,
-            background: "var(--cream)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
+    <div className="card grid gap-3">
+      <div className="flex items-center gap-2.5">
+        <div className="w-[30px] h-[30px] rounded-lg bg-cream flex items-center justify-center shrink-0">
           <Cpu size={15} color="var(--navy-soft)" />
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div className="font-serif" style={{ fontSize: 17, color: "var(--navy)" }}>
+        <div className="min-w-0">
+          <div className="font-serif text-lead text-navy">
             {name}
           </div>
-          <div className="font-mono" style={{ fontSize: 12, color: "var(--slate-light)" }}>
+          <div className="font-mono text-xs text-slate-light">
             {provider} / {model}
           </div>
         </div>
       </div>
       {agg ? (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 12px" }}>
+        <div className="grid grid-cols-[1fr_1fr] gap-y-2 gap-x-3">
           <Stat label="Stages run" value={formatInt(agg.stages)} />
           <Stat label="Compute" value={formatDuration(agg.durationMs)} />
           <Stat label="Tokens in" value={formatInt(agg.inputTokens)} />
@@ -250,7 +239,7 @@ function SeatCard({
           {agg.searchCalls > 0 && <Stat label="Search calls" value={formatInt(agg.searchCalls)} />}
         </div>
       ) : (
-        <div style={{ fontSize: 12.5, color: "var(--slate-light)" }}>No recorded telemetry for this seat.</div>
+        <div className="text-[12.5px] text-slate-light">No recorded telemetry for this seat.</div>
       )}
     </div>
   );
@@ -259,10 +248,10 @@ function SeatCard({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: "var(--navy)", lineHeight: 1.1 }}>
+      <div className="font-mono text-[16px] font-medium text-navy leading-[1.1]">
         {value}
       </div>
-      <div className="eyebrow" style={{ color: "var(--slate-light)", marginTop: 3 }}>
+      <div className="eyebrow text-slate-light mt-[3px]">
         {label}
       </div>
     </div>
