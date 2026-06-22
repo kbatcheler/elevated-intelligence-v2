@@ -32,7 +32,7 @@ commit), OR grant the connection the workflow scope if/when that becomes possibl
 ## 2. The main agent cannot do git at all
 Any git ref operation (`fetch`/`merge`/`push`/`commit`) AND even `rm` of a file under
 `.git/` is hard-blocked for the main agent (guard returns exit 254, points at
-project_tasks). **How to apply:** do not burn cycles retrying — have the USER run git
+project_tasks). **How to apply:** do not burn cycles retrying - have the USER run git
 in their own Shell (their shell is not guarded), pasting commands you provide.
 
 ## 3. Stale `.git/**/*.lock` files fake a divergence

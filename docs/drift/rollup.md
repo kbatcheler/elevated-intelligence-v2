@@ -1,4 +1,4 @@
-# Drift rollup: Phases A through AN
+# Drift rollup: Phases A through AO
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
@@ -8,9 +8,34 @@ A post-AI verification audit (2026-06-16) is recorded below the Phase AI summary
 Phase AJ (the Brier-scored calibration ledger) followed it, and Phase AK (the Data Efficacy Index) then
 opened Stage 6, the final stage, followed by Phase AL (the decision ledger and pre-mortem) and Phase AM (the
 as-of replay and the diligence pack), then closed by Phase AN (the final verification and the consolidated
-report), so the rollup now spans Phases A through AN and the whole build is complete.
+report). The Robustness and Magic wave (AO through AS) then reopened the build to harden it and sharpen its
+surface; its first phase AO realises the priority connectors, so the rollup now spans Phases A through AO.
 
-Last updated after Phase AN (the final verification and the consolidated report, the closing milestone of
+Last updated after Phase AO (priority connectors, the first phase of the Robustness and Magic wave, the
+post-AN follow-on wave AO through AS that reopens the build to harden it and sharpen its surface). Phase AO
+realises six of the catalogue's previously declared-only connectors as zero-SDK HTTP runtimes against the
+uniform connector contract, each running in the in-client edge agent and reducing a provider's API to only
+its declared catalogue signals: salesforce and hubspot (crm-sales), quickbooks-online (accounting-erp),
+google-analytics-4 (marketing-web-analytics), shopify (commerce-pos-inventory), and zendesk
+(support-customer). A shared `httpJson.ts` substrate funnels every provider call through one timeout,
+throttle, and error discipline over the Node global fetch (no SDK, no new dependency), throwing a typed
+ConnectorThrottleError on a 429 that the runtime owns the retry of and never logging a response body. The six
+are registered in `IMPLEMENTED_CONNECTORS` and flipped to `implemented: true`; the rest of the catalogue and
+the two warehouse connectors are untouched. The honesty boundary is carried through: a figure is omitted (a
+dash, never a zero or an understated partial sum) whenever its population is incompletely observed, including
+the partial-observability class where a paged walk is truncated at its record cap; the derive-and-discard
+guard rejects any draft whose key the connector did not declare, and no opportunity id, contact email,
+customer name, channel label, product title, or realm id ever reaches a signal. Typecheck and build are
+clean; the full suite is green at 1167 tests (connectors 29 to 63, the new `priorityConnectors` suite adding
+34); the two-sided long-dash sweep is zero (the source guard green and a fresh database-wide row-cast over
+all 46 public tables reporting zero); zero new npm dependencies. The architect returned PASS after closing
+two honesty findings: a QuickBooks aged-receivables figure that did not propagate incompleteness from a
+wholly malformed nested section, and a HubSpot and Shopify population total that could be shown over a
+truncated, partial sample. Phase AO's one logged drift is the connector test-harness boundary: the six
+runtimes are proven against a node:http harness mirroring each provider's response shape, not against the
+live third-party API, which needs real OAuth credentials and is exercised only on a real tenant connection.
+
+Earlier, updated after Phase AN (the final verification and the consolidated report, the closing milestone of
 Stage 6 and of the whole Elevated Intelligence V2 build, run under the same owner authorization that cleared
 the AJ milestone pause to execute the AK-AL-AM-AN sequence linearly). Phase AN builds NO product feature and
 changes no product code; it re-ran the full verification fresh and appended the consolidated report that
@@ -27,8 +52,9 @@ design, the efficacy index weights, the decision and forecast schemas, and the h
 run through the system. The architect returned PASS with no remediation rounds and no blockers. Phase AN adds
 NO new still-live drift item: the open drift at the close is exactly the set already logged below (the
 source-reviewed read routes and portal surfaces of several phases, each with the service and the render
-behind it tested). The whole build is COMPLETE: Stages 1 through 6, Phases A through AN, all gated and
-verified; there is no next phase.
+behind it tested). The whole build was COMPLETE at this point: Stages 1 through 6, Phases A through AN, all
+gated and verified; there was no next phase until the Robustness and Magic wave (AO onward) reopened the
+build.
 
 Earlier, updated after Phase AM (the as-of replay and the diligence pack, the third phase of Stage 6, run under
 the same owner authorization that cleared the AJ milestone pause to execute the AK-AL-AM-AN sequence
@@ -401,6 +427,7 @@ consolidated into one bullet that remains in "Still live". The full record is `d
 | AL | The Decision Ledger and Pre-mortem | Pass | no (gated, Stage 6; owner-authorized AK-AL-AM-AN sequence run linearly, advances to AM) |
 | AM | As-of Replay and the Diligence Pack | Pass | no (gated, Stage 6; owner-authorized AK-AL-AM-AN sequence run linearly, advances to AN) |
 | AN | Final Verification and the Consolidated Report (closes Stage 6 and the whole build) | Pass | yes (closing milestone of Stage 6 and the whole build; owner-authorized AK-AL-AM-AN sequence complete, build closed) |
+| AO | Priority Connectors (opens the Robustness and Magic wave) | Pass | no (gated; reopens the build closed at AN as the first of the AO-AS wave; advances to AP) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 

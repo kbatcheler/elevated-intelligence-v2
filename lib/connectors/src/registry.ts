@@ -1,11 +1,27 @@
 import { CATALOGUE, getDescriptor } from "./catalogue";
+import { googleAnalytics4Connector } from "./connectors/googleAnalytics4";
+import { hubspotConnector } from "./connectors/hubspot";
+import { quickbooksOnlineConnector } from "./connectors/quickbooksOnline";
+import { salesforceConnector } from "./connectors/salesforce";
+import { shopifyConnector } from "./connectors/shopify";
 import { genericSqlConnector, redshiftConnector } from "./connectors/warehouse";
+import { zendeskConnector } from "./connectors/zendesk";
 import type { Connector, ConnectorDescriptor } from "./contract";
 
-// The connectors whose runtime is implemented in this phase. Everything else in
-// the catalogue is declared but not yet runnable, and is reported honestly as
-// "available, not connected".
-export const IMPLEMENTED_CONNECTORS: Connector[] = [genericSqlConnector, redshiftConnector];
+// The connectors whose runtime is implemented. Everything else in the catalogue
+// is declared but not yet runnable, and is reported honestly as "available, not
+// connected". The bring-your-own-warehouse pair speak SQL over node-postgres; the
+// six priority connectors speak their provider's public HTTP API with no SDK.
+export const IMPLEMENTED_CONNECTORS: Connector[] = [
+  genericSqlConnector,
+  redshiftConnector,
+  salesforceConnector,
+  hubspotConnector,
+  quickbooksOnlineConnector,
+  googleAnalytics4Connector,
+  shopifyConnector,
+  zendeskConnector,
+];
 
 const IMPLEMENTED_BY_KEY = new Map<string, Connector>(
   IMPLEMENTED_CONNECTORS.map((c) => [c.key, c]),

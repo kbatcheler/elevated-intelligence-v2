@@ -160,7 +160,9 @@ function d(
 // connected" until their runtime lands.
 export const CATALOGUE: ConnectorDescriptor[] = [
   // Accounting and ERP
-  d("quickbooks-online", "QuickBooks Online", "accounting-erp", "oauth2", "edge", "edge-agent"),
+  d("quickbooks-online", "QuickBooks Online", "accounting-erp", "oauth2", "edge", "edge-agent", {
+    implemented: true,
+  }),
   d("xero", "Xero", "accounting-erp", "oauth2", "edge", "edge-agent"),
   d("netsuite", "Oracle NetSuite", "accounting-erp", "oauth2", "boundary", "boundary-runtime"),
   d("sage-intacct", "Sage Intacct", "accounting-erp", "apiKey", "edge", "edge-agent"),
@@ -174,8 +176,8 @@ export const CATALOGUE: ConnectorDescriptor[] = [
   ),
 
   // CRM and sales
-  d("salesforce", "Salesforce", "crm-sales", "oauth2", "edge", "edge-agent"),
-  d("hubspot", "HubSpot CRM", "crm-sales", "oauth2", "edge", "edge-agent"),
+  d("salesforce", "Salesforce", "crm-sales", "oauth2", "edge", "edge-agent", { implemented: true }),
+  d("hubspot", "HubSpot CRM", "crm-sales", "oauth2", "edge", "edge-agent", { implemented: true }),
   d("pipedrive", "Pipedrive", "crm-sales", "oauth2", "edge", "edge-agent"),
   d("dynamics-crm", "Microsoft Dynamics 365 Sales", "crm-sales", "oauth2", "edge", "edge-agent"),
 
@@ -187,6 +189,7 @@ export const CATALOGUE: ConnectorDescriptor[] = [
     "oauth2",
     "edge",
     "edge-agent",
+    { implemented: true },
   ),
   d(
     "google-search-console",
@@ -210,7 +213,9 @@ export const CATALOGUE: ConnectorDescriptor[] = [
   d("marketo", "Adobe Marketo Engage", "marketing-web-analytics", "oauth2", "edge", "edge-agent"),
 
   // Commerce, POS and inventory
-  d("shopify", "Shopify", "commerce-pos-inventory", "oauth2", "edge", "edge-agent"),
+  d("shopify", "Shopify", "commerce-pos-inventory", "oauth2", "edge", "edge-agent", {
+    implemented: true,
+  }),
   d("square", "Square", "commerce-pos-inventory", "oauth2", "edge", "edge-agent"),
   d("lightspeed", "Lightspeed", "commerce-pos-inventory", "oauth2", "edge", "edge-agent"),
   d("cin7", "Cin7", "commerce-pos-inventory", "apiKey", "edge", "edge-agent"),
@@ -236,7 +241,7 @@ export const CATALOGUE: ConnectorDescriptor[] = [
   d("box", "Box", "contracts-documents", "oauth2", "edge", "edge-agent"),
 
   // Support and customer
-  d("zendesk", "Zendesk", "support-customer", "oauth2", "edge", "edge-agent"),
+  d("zendesk", "Zendesk", "support-customer", "oauth2", "edge", "edge-agent", { implemented: true }),
   d("intercom", "Intercom", "support-customer", "oauth2", "edge", "edge-agent"),
   d("gainsight", "Gainsight", "support-customer", "apiKey", "edge", "edge-agent"),
 

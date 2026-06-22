@@ -1,3 +1,4 @@
+import { ConnectorThrottleError } from "@workspace/connectors";
 import type { QuotaProfile } from "@workspace/connectors";
 
 // Per-connection runtime rate limiting (Phase O). Two mechanisms work together:
@@ -10,18 +11,12 @@ import type { QuotaProfile } from "@workspace/connectors";
 //    retried with backoff that honors a server Retry-After hint, a genuine error
 //    is not retried at all. This mirrors the seed-runner 429 handling.
 
-// A typed signal that a source asked us to slow down. A connector throws this on
-// a 429 or equivalent; the runtime retries it with backoff. A plain Error is a
-// genuine failure and is never retried here. retryAfterSeconds carries a
-// server-provided hint when the source gives one.
-export class ConnectorThrottleError extends Error {
-  readonly retryAfterSeconds?: number;
-  constructor(message: string, retryAfterSeconds?: number) {
-    super(message);
-    this.name = "ConnectorThrottleError";
-    this.retryAfterSeconds = retryAfterSeconds;
-  }
-}
+// The throttle signal a connector raises on a 429. It is defined once in the
+// shared connectors package and re-exported here so the connector that throws it
+// (over httpJson) and this runtime that catches it share one class identity,
+// which is what makes the instanceof check below sound. A plain Error is a
+// genuine failure and is never retried.
+export { ConnectorThrottleError };
 
 interface BucketState {
   tokens: number;

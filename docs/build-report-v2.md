@@ -2850,3 +2850,114 @@ verified, the full suite is green at 1034 tests, the two-sided long-dash sweep i
 dependencies were added across the build. Phase AN is the closing milestone of Stage 6 and of the whole
 build; the drift index and the rollup record the build as closed at "A through AN", and there is no next
 phase.
+
+## Phase AO: priority connectors (opens the Robustness and Magic wave)
+
+Phase AO opens the Robustness and Magic wave (AO through AS), a post-AN follow-on that reopens the build,
+closed at the Phase AN milestone, to harden the platform and sharpen its surface. AO is the connector phase:
+it turns six of the catalogue's previously declared-only entries into real, zero-SDK HTTP runtimes against
+the uniform connector contract, each running in the in-client edge agent and each reducing a provider's API
+to only the declared catalogue signals for its family.
+
+### The six connectors
+
+Each connector imports only `@workspace/db/contracts`, resolves its credential through
+`ctx.resolveSecret(scope.authRef)`, builds its signal set with `buildSignalSet`, and returns it through
+`assertDerivedSignalSet`, so the derive-and-discard boundary holds by construction:
+
+- salesforce (crm-sales, oauth2): pipeline_coverage_ratio, win_rate_pct, sales_cycle_days, and
+  stage_distribution from SOQL aggregate queries (server-side GROUP BY counts and sums) plus one bounded,
+  date-only projection for the cycle. No opportunity name, owner, account, or id is read.
+- hubspot (crm-sales, oauth2): the same four crm-sales signals from a bounded paged walk of deal PROPERTIES
+  (stage, amount, created and close dates, the closed and closed-won flags); no deal id, contact, name, or
+  email is touched.
+- quickbooks-online (accounting-erp, oauth2): gross_margin_pct, revenue_trend_delta, ar_days_outstanding,
+  and expense_ratio from the QBO Reports API (the Profit and Loss summary totals for the current and prior
+  windows and the Aged Receivables total). Only the numeric totals in each report summary are read.
+- google-analytics-4 (marketing-web-analytics, oauth2): conversion_rate_pct, cac_trend_delta,
+  channel_mix_distribution, and engagement_index from the GA4 Data API runReport totals; the channel labels
+  order the distribution and are then discarded.
+- shopify (commerce-pos-inventory, oauth2): sell_through_rate_pct, inventory_turns, aov_trend_delta, and
+  stockout_ratio from the REST Admin order and product feeds with Link-header cursor pagination, reading
+  only order totals, line-item quantities, and variant inventory quantities.
+- zendesk (support-customer, oauth2): csat_index, first_response_hours, ticket_volume_trend_delta, and
+  resolution_rate_pct from the search/count endpoint (server-side aggregate counts) plus a bounded sample
+  mean for the first response time.
+
+### The shared HTTP substrate
+
+`lib/connectors/src/httpJson.ts` is the one place a connector touches a provider over HTTP. It uses the Node
+global fetch and adds nothing to the dependency tree (no SDK, no client library): a bounded timeout on every
+request, a typed `ConnectorThrottleError` on an HTTP 429 carrying any Retry-After hint (the runtime owns the
+retry, so the helper never retries internally and never doubles the backoff), `nextLink` to follow an RFC
+5988 Link header for cursor pagination, and a strict rule that a response body is never logged or attached to
+an error (a provider error body can echo the sensitive request). `httpRequestJson` returns the headers and
+status alongside the parsed body so a Link-paginated connector can follow the cursor without a second request
+shape; `httpJson` is the body-only common case.
+
+### Registration and the honesty boundary
+
+The six are added to `IMPLEMENTED_CONNECTORS` in the registry and flipped to `implemented: true` in the
+catalogue; every other catalogue entry and the two bring-your-own-warehouse connectors (generic-sql,
+redshift) are untouched and still report an honest available-not-connected error. OAuth connections continue
+to refresh through the existing oauthRefresh and connected-refresh paths. The honesty boundary is carried all
+the way through the reduction: a per-connector allowlist guard rejects any draft whose key the connector did
+not declare; and a figure is OMITTED (rendered later as a dash, never as a zero or an understated partial
+sum) whenever its population is incompletely observed. That covers the ordinary missing-field case (an open
+deal with no amount, a receivables line with no total) AND the partial-observability class where a paged walk
+is truncated at its record cap: HubSpot omits all four signals when its deal search is truncated mid-walk,
+and Shopify folds order-feed truncation into its revenue and units completeness and product-feed truncation
+into its on-hand completeness, so a figure computed over an arbitrary partial sample of the window is never
+shown. QuickBooks aged-receivables completeness propagates from a wholly malformed nested section so a
+nested-only failure cannot silently understate the figure.
+
+### Tests
+
+`lib/connectors/src/connectors/priorityConnectors.test.ts` (34) drives every connector over a node:http
+loopback harness that mirrors each provider's response shape: per-connector derivation of the four signals,
+the no-raw-field boundary (no id, email, name, label, or realm id escapes), honest omission (no zero, no
+partial sum, and no partial-sample figure on a truncated walk), the throttle path (an HTTP 429 surfaced as a
+ConnectorThrottleError carrying the Retry-After hint), and the credential resolved by authRef and sent as a
+bearer header. A signal-allowlist guard test pair proves a draft with an undeclared key is rejected, and a
+registry integration test pair proves all six are marked, registered, and resolved while the warehouse pair
+and the rest of the catalogue stay untouched. The connectors suite moves from 29 to 63. Phase AO also
+relocates the `ConnectorThrottleError` class out of the api-server rate limiter into the shared connectors
+package (re-exported from `rateLimiter.ts` for its existing callers) so the connector that raises a throttle
+over `httpJson` and the runtime that catches it by `instanceof` share one class identity;
+`artifacts/api-server/src/lib/connectors/throttleIdentity.test.ts` (3) pins that the re-export is the very
+class the connectors raise, that a connector-raised throttle is retried with backoff honouring its
+Retry-After hint, and that a genuine error is never retried.
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both; portal built, api-server bundled).
+- Full suite green at 1167 tests (api-server 644, portal 327, cortex 111, connectors 63, edge-agent 10, db
+  8, scripts 4). AO adds 37 tests over the post-AN baseline of 1130: the 34 in `priorityConnectors.test.ts`
+  (the connectors package moves from 29 to 63) and the 3 in
+  `artifacts/api-server/src/lib/connectors/throttleIdentity.test.ts` (the throttle-identity pins that account
+  for the api-server delta).
+- Long-dash sweep zero on both sides: the source guard is green over authored source including this Phase AO
+  Markdown, and a fresh database-wide row-cast over all 46 public tables reports zero hits (AO writes no
+  schema and no data, so the database side stays clean and is re-run fresh to claim zero honestly).
+- Zero new npm dependencies (the connectors use the Node global fetch through `httpJson.ts`; no SDK).
+
+### Honest marking
+
+What is TEST-PROVEN here: each connector's reduction of a mirrored provider response to its four declared
+signals; the derive-and-discard boundary (no reversible field escapes); the honest-omission rules including
+the truncation partial-observability class and the QuickBooks nested-malformed propagation; the throttle
+surface; the credential-by-authRef bearer; the allowlist guard; and the registry marking and resolution.
+What is the accepted boundary (logged drift): the six runtimes are proven against a node:http harness that
+faithfully mirrors each provider's response shape, not against the live third-party API, which needs real
+OAuth credentials and is exercised only when a real tenant connects, mirroring how the warehouse connectors
+were proven against a real Postgres-wire warehouse while the third-party wires cannot be reached from the
+build environment.
+
+### Close
+
+Phase AO passed its architect `evaluate_task` review (PASS) after two honesty remediation rounds: the first
+closed a QuickBooks aged-receivables path that did not propagate incompleteness from a wholly malformed
+nested receivables section, and the second closed a HubSpot and Shopify partial-observability gap where a
+population total could be shown over a truncated, partial sample. The drift index, the rollup, and this build
+report advance to "A through AO". Phase AO is gated but not a milestone; the wave continues with Phase AP
+(the sovereign seat realisation).
