@@ -411,7 +411,11 @@ async function executeEnrichment(
 }
 
 // ── one layer: nine sub-stages, then persist tenant_layers ───────────────────
-async function runLayer(
+// Exported (beyond the seedTenant/seedConnectedTenant entrypoints) for the
+// as-of snapshot data-mode regression test: it takes the layer descriptor as a
+// param and never touches the registry or the seed queue, so a single layer can
+// be built hermetically with an injected in-boundary runtime.
+export async function runLayer(
   tenantId: string,
   profile: ProfileOutput,
   layer: RegistryEntry,
@@ -425,6 +429,15 @@ async function runLayer(
   // Lens stages in-boundary onto the local seat while the external Synthesist and
   // adversarial seats stay external on de-identified signals.
   dataMode: CortexDataMode = "outside_in",
+  // The tenant's DATA-SOURCE regime that grounded THIS build, captured once at
+  // the seed decision point (seedTenant's non-connected branch is always
+  // outside_in; seedConnectedTenant is always connected) and threaded here so the
+  // as-of snapshot records the regime the build ACTUALLY ran under, never a later
+  // read of the mutable tenants.dataMode column. sovereign is an EXECUTION regime
+  // and so is deliberately absent from this type: a sovereign build still grounds
+  // on one real data source. The default derives from the execution dataMode,
+  // which is correct for every non-sovereign direct caller.
+  dataSourceMode: "outside_in" | "connected" = dataMode === "connected" ? "connected" : "outside_in",
 ): Promise<LayerOutcome> {
   const resume = opts.resume !== false;
   const mode = opts.mode ?? "full";
@@ -578,10 +591,29 @@ async function runLayer(
       typeof (assembled.content as { confidence?: unknown }).confidence === "number"
         ? (assembled.content as { confidence: number }).confidence
         : null;
-    // The data mode and feed list in effect for THIS build, snapshotted so the
-    // as-of efficacy is recomputed with the inputs the build actually had, never
-    // the tenant's current mode or the layer's current feeds.
-    const snapshotDataMode = dataMode === "outside_in" ? "outside_in" : "connected";
+    // The DATA-SOURCE regime in effect for THIS build, snapshotted so the as-of
+    // efficacy is recomputed with the ceiling the build actually had, never the
+    // layer's current feeds. It is the data-source regime (dataSourceMode), NOT
+    // the model-execution dataMode threaded into the stages: sovereign is an
+    // execution regime, not a data source. A sovereign build of an outside_in
+    // tenant has no connector grounding, so it records "outside_in" (its as-of
+    // ceiling then matching its live ceiling), while a sovereign refresh of a
+    // connected tenant keeps the "connected" ceiling it genuinely earns.
+    // Collapsing the execution dataMode (which can be "sovereign") to "connected"
+    // recorded a 100 as-of ceiling for an outside_in build whose live ceiling was
+    // 60: the same build, two ceilings.
+    //
+    // It is the threaded value, NOT a fresh read of tenants.dataMode here, on
+    // purpose. The regime is decided once, atomically, before any stage runs
+    // (seedTenant branches a connected tenant off to seedConnectedTenant, so its
+    // remaining path is always outside_in; seedConnectedTenant is always
+    // connected), then carried alongside the grounding the build consumed.
+    // Re-reading the mutable column at snapshot time would let an admin flip mid
+    // build stamp a regime the build never ran under (e.g. a 100 ceiling on a
+    // build that loaded no connector grounding), a fresh instance of the very
+    // two-ceiling defect this audit closed. The threaded value is immune to that
+    // race by construction.
+    const snapshotDataMode = dataSourceMode;
     // The connected-signal metadata that grounded THIS build (the connector
     // source and computedAt of each derived signal), captured so the as-of
     // efficacy recomputes coverage, freshness, and source diversity from what the
@@ -896,7 +928,10 @@ export async function seedTenant(rawUrl: string, opts: SeedOptions): Promise<See
   }
   log.info({ tenantId, layers: registry.length }, "seed: fanning out across layers");
 
-  const layers = await runLayers(tenantId, profile, registry, opts, undefined, dataMode);
+  // This path only runs for a non-connected tenant (a connected tenant branched
+  // to seedConnectedTenant above), so the data-source regime is always outside_in
+  // even when the execution dataMode is sovereign.
+  const layers = await runLayers(tenantId, profile, registry, opts, undefined, dataMode, "outside_in");
 
   const anyError = layers.some((o) => o.status === "error");
   await db
@@ -938,6 +973,10 @@ async function runLayers(
   // The grounding regime for this seed. outside_in (the default) leaves every
   // stage external; connected routes the two Lens stages in-boundary per layer.
   dataMode: CortexDataMode = "outside_in",
+  // The data-source regime that grounded this seed, threaded to every layer's
+  // snapshot: outside_in for the public-web seed, connected for a connected
+  // refresh, independent of the possibly-sovereign execution dataMode.
+  dataSourceMode: "outside_in" | "connected" = dataMode === "connected" ? "connected" : "outside_in",
 ): Promise<LayerOutcome[]> {
   const mode = opts.mode ?? "full";
   const layerByKey = new Map(registry.map((l) => [l.key, l] as const));
@@ -965,6 +1004,7 @@ async function runLayers(
         { ...opts, mode: job.payload.mode },
         groundingByLayer?.get(layer.key),
         dataMode,
+        dataSourceMode,
       );
       outcomes.set(layer.key, outcome);
       await markSeedJob(job.id, outcome.status === "error" ? "error" : "done", {
@@ -1104,6 +1144,9 @@ async function seedConnectedTenant(
     { ...opts, resume: false },
     groundingByLayer,
     dataMode,
+    // A connected tenant grounds on its own derived signals, so the data-source
+    // regime is connected regardless of whether execution is sovereign.
+    "connected",
   );
 
   const anyError = layers.some((o) => o.status === "error");

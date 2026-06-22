@@ -1,4 +1,4 @@
-# Drift rollup: Phases A through AO
+# Drift rollup: Phases A through AP
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
@@ -9,9 +9,30 @@ Phase AJ (the Brier-scored calibration ledger) followed it, and Phase AK (the Da
 opened Stage 6, the final stage, followed by Phase AL (the decision ledger and pre-mortem) and Phase AM (the
 as-of replay and the diligence pack), then closed by Phase AN (the final verification and the consolidated
 report). The Robustness and Magic wave (AO through AS) then reopened the build to harden it and sharpen its
-surface; its first phase AO realises the priority connectors, so the rollup now spans Phases A through AO.
+surface; its first phase AO realises the priority connectors and its second phase AP audits and hardens the
+sovereign seat, so the rollup now spans Phases A through AP.
 
-Last updated after Phase AO (priority connectors, the first phase of the Robustness and Magic wave, the
+Last updated after Phase AP (the sovereign seat realisation, the second phase of the Robustness and Magic
+wave, redefined on inspection as a CORRECTNESS AUDIT because the in-boundary sovereign seat was already real
+and proven from Phases J and AF). The audit found and fixed one honesty defect at the as-of replay snapshot
+sink: a build's recorded data-source regime collapsed a `sovereign` model-execution mode into a connected
+DATA-SOURCE regime, which would have lifted a past build's as-of efficacy ceiling to 100 over data it never
+consumed. The first fix re-read the live `tenants.dataMode` column at snapshot time and was rejected by the
+architect as a mid-build flip race; the race-immune fix threads an explicit `dataSourceMode` decided once at
+the seed decision point through `runLayers` and `runLayer`, recording the regime the build actually grounded
+on and deleting the snapshot read of the mutable column, so a post-build mode flip is preserved as legitimate
+live/as-of divergence rather than a retroactive restamp. A new race-immunity integration case proves a tenant
+row reading connected while the build threaded outside_in records outside_in with an as-of efficacy ceiling
+below 100. Typecheck and build are clean; the full suite is green with zero failures (the
+contention-sensitive api-server integration suite passes cleanly on a re-run after a saturated run
+intermittently flaked one unrelated test); the two-sided long-dash sweep is zero (the source guard plus
+a fresh database-wide cast over all 46 public tables; AP writes no schema and no data); zero new npm
+dependencies. The architect returned PASS after the threaded fix closed the race by construction. AP adds NO
+new still-live drift item and documents the sovereign seat and the as-of data-source regime invariant in
+`replit.md`; its only logged boundary is that the in-boundary seat runs live only when a `LOCAL_MODEL_*`
+endpoint is configured (available, not connected by default).
+
+Earlier, updated after Phase AO (priority connectors, the first phase of the Robustness and Magic wave, the
 post-AN follow-on wave AO through AS that reopens the build to harden it and sharpen its surface). Phase AO
 realises six of the catalogue's previously declared-only connectors as zero-SDK HTTP runtimes against the
 uniform connector contract, each running in the in-client edge agent and reducing a provider's API to only

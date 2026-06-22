@@ -2961,3 +2961,69 @@ nested receivables section, and the second closed a HubSpot and Shopify partial-
 population total could be shown over a truncated, partial sample. The drift index, the rollup, and this build
 report advance to "A through AO". Phase AO is gated but not a milestone; the wave continues with Phase AP
 (the sovereign seat realisation).
+
+## Phase AP: sovereign seat realisation (correctness audit)
+
+Phase AP is the second phase of the Robustness and Magic wave (AO through AS). On inspection it was redefined
+as a correctness audit rather than a from-scratch realisation: the in-boundary sovereign seat was already real
+and proven from Phase J (the split pipeline and the in-boundary Lens seam) and Phase AF (the sovereign mode),
+so re-building it would have been fabricated novelty. The honest deliverable is the audit of the seat as it
+stands, the one honesty defect that audit found and fixed across two remediation rounds, and the documentation
+the seat lacked (the new sovereign-seat and as-of data-source-regime section of `replit.md`).
+
+The seat as it stands: the split pipeline routes the two Lens stages (perceive, hypothesise) to an in-boundary
+sovereign seat in connected data mode, while the external Synthesist and adversarial seats plus the Evaluator
+receive only the profile, the in-boundary Lens output, and the math-only derived-signal grounding, never raw
+client content. The adapter (`lib/cortex/src/clients/local.ts`) speaks the OpenAI-compatible
+`/v1/chat/completions` wire over the Node global fetch with strict JSON mode, a Bearer only when an api key is
+set, 429 backoff, and one corrective retry; `resolveLocalSeat` reads the model from `LOCAL_MODEL_BASE_URL`,
+`LOCAL_MODEL_MODEL`, and the optional `LOCAL_MODEL_API_KEY` so no model literal enters source, and
+`getExtractionRuntime` returns the runtime only when one is configured, an unconfigured connected Lens failing
+loud with no silent external fallback.
+
+The defect and its fix: at the as-of replay snapshot sink the build-time data-source regime was recorded as
+`dataMode === "outside_in" ? "outside_in" : "connected"`, which collapses a `sovereign` model-execution mode
+into a connected DATA source and would lift a past build's as-of efficacy ceiling to 100 over data it never
+consumed. The first fix re-read the live `tenants.dataMode` column at snapshot time; the architect rejected it
+as a race, because a mid-build flip of the mutable column could stamp a regime the build never ran under. The
+race-immune fix threads an explicit `dataSourceMode` decided ONCE at the seed decision point through
+`runLayers` and `runLayer`, recording the regime the build actually grounded on and deleting the snapshot read
+of the mutable column; a post-build mode flip is preserved as legitimate live/as-of divergence, not a
+retroactive restamp. No in-transaction validation was added, deliberately: with the regime threaded there is
+no mutable read left to validate, and a later mode flip is intended divergence, not a defect.
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both).
+- The full suite is green with zero failures (api-server 647 tests across 78 files, edge-agent 10, plus the
+  portal, cortex, connectors, db, and scripts suites). The three `snapshotDataMode.integration.test.ts` cases
+  all pass, the third proving race-immunity (the live tenant row reads connected while the build threaded
+  outside_in, and the snapshot records outside_in with an as-of ceiling below 100). The heavily loaded
+  api-server integration suite is contention-sensitive (a saturated run intermittently flaked one unrelated
+  integration test, observed once as a 5000ms timeout and once as a transient 500 on a different test); a clean
+  re-run passed all 647, and the flake touches neither the orchestrator threading nor the snapshot sink this
+  phase changed.
+- Long-dash sweep zero on both sides: the source guard is green over authored source including this Phase AP
+  Markdown, and a fresh database-wide row-cast over all 46 public tables reports zero hits (Phase AP writes no
+  schema and no data).
+- Zero new npm dependencies (the audit changed orchestrator threading and documentation only).
+
+### Honest marking
+
+What is TEST-PROVEN: that the as-of snapshot records the threaded data-source regime the build was grounded on
+and never the mutable live column, including the race case where they disagree, and that the as-of efficacy
+ceiling tracks that regime (below 100 for outside-in, reaching the connected regime for connected). What is the
+accepted boundary (logged drift): the in-boundary seat runs against a live local model only when a
+`LOCAL_MODEL_*` endpoint is configured (available, not connected by default, proven against a `node:http`
+adapter harness rather than a live local model the build environment does not host); and the api-server
+integration suite is contention-sensitive, intermittently flaking one unrelated test under a saturated run
+while a clean re-run passes all 647 (an environmental flake, not a regression).
+
+### Close
+
+Phase AP passed its architect `evaluate_task` review (PASS) after the threaded fix closed the race the first
+fix introduced. The re-review confirmed the race is closed by construction, that omitting an in-transaction
+validation is correct (a post-build mode flip is legitimate live/as-of divergence), and that the new
+race-immunity case genuinely locks the invariant. The drift index, the rollup, and this build report advance
+to "A through AP". Phase AP is gated but not a milestone; the wave continues with Phase AQ (the outcome loop
+closure).

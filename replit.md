@@ -160,6 +160,41 @@ Backup/DR env (all optional):
 - `GCS_ARCHIVE_TOKEN_SOURCE` is `metadata` (default) or `env`.
 - `GCS_ARCHIVE_ACCESS_TOKEN` is required only when the token source is `env`.
 
+## The sovereign seat and the as-of data-source regime (Phase AP)
+
+The split pipeline routes the two Lens stages (perceive, hypothesise) to an in-boundary
+"sovereign" seat when a tenant runs in connected data mode, while the external Synthesist and
+the adversarial seats receive only the profile, the in-boundary Lens output, and the math-only
+derived-signal grounding, never raw client content. The in-boundary adapter
+(`lib/cortex/src/clients/local.ts`) speaks the OpenAI-compatible `/v1/chat/completions` wire
+over the Node global fetch (no SDK, no new dependency), with strict JSON mode, a Bearer only
+when an api key is set, 429 backoff, and one corrective retry.
+
+The seat is "available, not connected" by default, mirroring the KMS and archive seams:
+`resolveLocalSeat(env)` reads the model from the environment and `getExtractionRuntime(env)`
+returns the runtime only when one is configured, null otherwise. An unconfigured connected
+Lens fails loud ("local extraction seat available, not connected: set LOCAL_MODEL_BASE_URL and
+LOCAL_MODEL_MODEL to run the Lens in-boundary") with no silent external fallback.
+
+Sovereign seat env (all optional and lazy):
+
+- `LOCAL_MODEL_BASE_URL` is the OpenAI-compatible endpoint base; its absence is the
+  available-not-connected state.
+- `LOCAL_MODEL_MODEL` is the model identifier, kept in the environment so no model literal
+  enters source (the no-literal-model invariant holds).
+- `LOCAL_MODEL_API_KEY` is sent as a Bearer only when set; a keyless local endpoint is
+  supported.
+
+The as-of data-source regime invariant: an as-of replay snapshot records the DATA-SOURCE regime
+the build was actually grounded on (`outside_in` or `connected`), decided once at the seed
+decision point and threaded through `runLayers` and `runLayer` as an explicit `dataSourceMode`
+argument. It is deliberately NOT re-read from the mutable `tenants.dataMode` column at snapshot
+time, and NOT conflated with the model-execution mode (which can be `sovereign`). This keeps an
+as-of replay's efficacy ceiling equal to the regime the build ran under: a sovereign build of an
+outside-in tenant records `outside_in`, and a tenant mode flip after the build starts is
+preserved as legitimate live/as-of divergence rather than retroactively restamping a historical
+snapshot with a regime that build never used.
+
 ## Working with this repo
 
 - Run checks through the configured workflows (`typecheck`, `build`, `test`), not a direct
