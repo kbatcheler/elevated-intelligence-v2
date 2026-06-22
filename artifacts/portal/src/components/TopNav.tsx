@@ -27,6 +27,7 @@ const PRIMARY: NavItem[] = [
   { to: "/reasoning", label: "Architecture" },
   { to: "/actions", label: "Actions" },
   { to: "/decisions", label: "Decisions" },
+  { to: "/outcome-loop", label: "Outcome loop" },
   { to: "/as-of", label: "Replay" },
   { to: "/diligence", label: "Diligence" },
 ];

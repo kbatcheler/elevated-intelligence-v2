@@ -6,7 +6,6 @@ import {
   committedActionsTable,
   db,
   decisionRecordsTable,
-  derivedSignalsTable,
   edgeAgentsTable,
   layersTable,
   orgTenantsTable,
@@ -25,17 +24,7 @@ import {
   serializeChallenge,
 } from "../lib/challenge/findingChallenge";
 import { isOwner, isProvider } from "../lib/auth/access";
-import {
-  linkForecastToCommittedActionTx,
-  resolveForecastsForMeasurement,
-} from "../lib/calibration/forecastResolution";
-import {
-  loadRecommendationSnapshot,
-  recordDecisionTx,
-  recordStandaloneDecision,
-  snapshotLayerEvidence,
-  type RecommendationSnapshot,
-} from "../lib/decisions/decisionRecord";
+import { recordStandaloneDecision } from "../lib/decisions/decisionRecord";
 import { runDecisionPreMortem } from "../lib/decisions/preMortem";
 import { getDecisionTimeline } from "../lib/decisions/timeline";
 import { buildTenantAsOf } from "../lib/replay/asOf";
@@ -45,13 +34,10 @@ import { loadLayerEfficacy, loadTenantEfficacy } from "../lib/efficacy/efficacyS
 import { getBenchmarkMinCohort } from "../lib/benchmarks/benchmarks";
 import { segmentKeyFor } from "../lib/benchmarks/benchmarkMath";
 import { logger } from "../lib/logger";
-import {
-  computeOutcomeSummary,
-  computeVariance,
-  deriveMeasurementStatus,
-  toNum,
-} from "../lib/outcomes/outcomeMath";
-import { parsePredictedValueUsd } from "../lib/outcomes/predictedValue";
+import { computeOutcomeSummary, toNum } from "../lib/outcomes/outcomeMath";
+import { commitRecommendedAction } from "../lib/outcomes/commitAction";
+import { getOutcomeLoop } from "../lib/outcomes/outcomeLoop";
+import { recordOutcomeMeasurement } from "../lib/outcomes/recordMeasurement";
 import { assertSeedWithinBudget, BudgetExceededError } from "../lib/pipeline/budget";
 import { seedTenant } from "../lib/pipeline/orchestrator";
 import { readDecryptedSignalsForMachine } from "../lib/security/signalRead";
@@ -1106,136 +1092,41 @@ tenantsRouter.post("/tenants/:id/actions", requireTenantAccess, async (req, res,
   }
   try {
     const d = parsed.data;
-    const tenantId = String(req.params.id);
-    // Snapshot the numeric prediction from the real impact string. Null when the
-    // impact carries no parseable dollar figure; the platform never invents one.
-    const predicted = parsePredictedValueUsd(d.predictedImpact);
-    // Snapshot the baseline metric only when a real scalar derived signal is
-    // named and present (connected mode). Otherwise the baseline stays null,
-    // which is the honest state for an outside-in tenant.
-    let baselineMetric: string | null = null;
-    let baselineAt: Date | null = null;
-    if (d.baselineSignalKey) {
-      const signalRows = await db
-        .select()
-        .from(derivedSignalsTable)
-        .where(
-          and(
-            eq(derivedSignalsTable.tenantId, tenantId),
-            eq(derivedSignalsTable.layerKey, d.layerKey),
-            eq(derivedSignalsTable.signalKey, d.baselineSignalKey),
-            ...(d.baselineWindow ? [eq(derivedSignalsTable.window, d.baselineWindow)] : []),
-          ),
-        )
-        .orderBy(desc(derivedSignalsTable.computedAt))
-        .limit(1);
-      const row = signalRows[0];
-      // A baseline must be a single finite number. An encrypted envelope or a
-      // numeric vector is not a scalar baseline, so it is left null rather than
-      // coerced.
-      if (row && typeof row.value === "number" && Number.isFinite(row.value)) {
-        baselineMetric = String(row.value);
-        baselineAt = row.computedAt;
-      }
-    }
-    // The decision record's recommendation snapshot is read SERVER-SIDE from the
-    // live layer content when the commit names an actionRef, so the audit binds to
-    // the recommendation the system actually made, never the client's description
-    // of it. A bad ref fails the whole commit (no half-written action), since a
-    // commit that misnames its recommendation is a data-integrity fault, not a
-    // benign one. A freeform commit with no actionRef keeps the client snapshot,
-    // honestly marked unverified.
-    let decisionSnapshot: RecommendationSnapshot;
-    let recommendationVerified: boolean;
-    if (d.actionRef) {
-      const loaded = await loadRecommendationSnapshot(tenantId, d.layerKey, d.actionRef);
-      if (loaded.kind === "layer_not_found") {
-        res.status(404).json({ error: "layer_not_found" });
-        return;
-      }
-      if (loaded.kind === "finding_not_found") {
-        res.status(404).json({ error: "action_not_found" });
-        return;
-      }
-      if (loaded.kind === "not_an_action") {
-        res.status(422).json({ error: "not_an_action" });
-        return;
-      }
-      decisionSnapshot = loaded.snapshot;
-      recommendationVerified = true;
-    } else {
-      decisionSnapshot = {
-        title: d.title,
-        detail: d.detail ?? null,
-        impact: d.predictedImpact ?? null,
-        predictedValueUsd: predicted,
-        confidence: d.confidence,
-        basis: d.basis,
-      };
-      recommendationVerified = false;
-    }
-    // Snapshot the provenance refs grounding the layer's diagnosis at commit time,
-    // so the audit shows the evidence the recommendation rested on. References
-    // only; an empty array is honest for a layer with no graded claims.
-    const evidenceRefs = await snapshotLayerEvidence(tenantId, d.layerKey);
-
-    // A commit creates the committed action, binds its forecast, AND records a
-    // board-grade decision record, all atomically: every commit yields exactly
-    // one decision, and the decision's provenance entry cannot exist without the
-    // action it records. The forecast anchor falls back to the actionRef when no
-    // explicit forecast reference is given, so the decision snapshots the right
-    // forecast even for the common path.
-    const sourcePath = d.forecastSourcePath ?? d.actionRef ?? null;
-    const { action, linkedForecastId, decisionRecordId } = await db.transaction(async (tx) => {
-      const insertedRows = await tx
-        .insert(committedActionsTable)
-        .values({
-          tenantId,
-          layerKey: d.layerKey,
-          title: d.title,
-          detail: d.detail ?? null,
-          predictedImpact: d.predictedImpact ?? null,
-          predictedValueUsd: predicted === null ? null : predicted.toFixed(2),
-          baselineMetric,
-          baselineAt,
-          timing: d.timing ?? null,
-          actionOwner: d.owner ?? null,
-          basis: d.basis,
-          confidence: d.confidence,
-          committedBy: user.id,
-        })
-        .returning();
-      const created = insertedRows[0];
-      // Phase AJ: bind the action_outcome forecast to this committed action when
-      // a reference (explicit or the action anchor) names one. The link is what
-      // lets a later outcome measurement resolve the forecast and score it; an
-      // unbound commit simply leaves the forecast resolvable by owner adjudication.
-      let linkedId: string | null = null;
-      if (d.forecastId || sourcePath) {
-        linkedId = await linkForecastToCommittedActionTx(tx, {
-          tenantId,
-          actionId: created.id,
-          layerKey: d.layerKey,
-          forecastId: d.forecastId ?? null,
-          sourcePath: d.forecastSourcePath ?? d.actionRef ?? null,
-        });
-      }
-      const record = await recordDecisionTx(tx, {
-        tenantId,
-        layerKey: d.layerKey,
-        actionRef: d.actionRef ?? null,
-        decision: "commit",
-        committedActionId: created.id,
-        decidedBy: user.id,
-        snapshot: decisionSnapshot,
-        recommendationVerified,
-        evidenceRefs,
-        rationale: d.rationale ?? null,
-        forecastId: linkedId,
-      });
-      return { action: created, linkedForecastId: linkedId, decisionRecordId: record.id };
+    // The commit logic lives in the commitRecommendedAction service so the live
+    // seed closes a loop through the EXACT same honest path: it snapshots the
+    // prediction and baseline, binds the forecast, and records the decision, all
+    // atomically. The route keeps only the zod parse, the seat gate, and the
+    // mapping of the service's discriminated result onto HTTP status codes.
+    const result = await commitRecommendedAction({
+      tenantId: String(req.params.id),
+      committedBy: user.id,
+      layerKey: d.layerKey,
+      title: d.title,
+      detail: d.detail ?? null,
+      predictedImpact: d.predictedImpact ?? null,
+      timing: d.timing ?? null,
+      owner: d.owner ?? null,
+      basis: d.basis,
+      confidence: d.confidence,
+      baselineSignalKey: d.baselineSignalKey ?? null,
+      baselineWindow: d.baselineWindow ?? null,
+      forecastId: d.forecastId ?? null,
+      forecastSourcePath: d.forecastSourcePath ?? null,
+      actionRef: d.actionRef ?? null,
+      rationale: d.rationale ?? null,
     });
-    res.status(201).json({ action, linkedForecastId, decisionRecordId });
+    if (!result.ok) {
+      // A misnamed recommendation is a data-integrity fault: a missing layer or
+      // action is a 404, an actionRef that points at a cause or hypothesis (not
+      // an action a board commits) is a 422.
+      res.status(result.reason === "not_an_action" ? 422 : 404).json({ error: result.reason });
+      return;
+    }
+    res.status(201).json({
+      action: result.action,
+      linkedForecastId: result.linkedForecastId,
+      decisionRecordId: result.decisionRecordId,
+    });
   } catch (err) {
     next(err);
   }
@@ -1521,88 +1412,35 @@ tenantsRouter.post(
       return;
     }
     try {
-      const tenantId = String(req.params.id);
-      const actionId = String(req.params.actionId);
-      const actionRows = await db
-        .select()
-        .from(committedActionsTable)
-        .where(
-          and(
-            eq(committedActionsTable.id, actionId),
-            eq(committedActionsTable.tenantId, tenantId),
-          ),
-        )
-        .limit(1);
-      const action = actionRows[0];
-      if (!action) {
-        res.status(404).json({ error: "not_found" });
+      const d = parsed.data;
+      // The measurement logic lives in the recordOutcomeMeasurement service so the
+      // live seed grades a loop through the EXACT same honest path: it resolves the
+      // basis (measured only when a real scalar signal backs it), derives status
+      // and variance from the numbers, and auto-resolves every open forecast bound
+      // to the action. The route keeps only the zod parse, the provider gate, and
+      // the mapping of the service's result onto HTTP status codes.
+      const result = await recordOutcomeMeasurement({
+        tenantId: String(req.params.id),
+        actionId: String(req.params.actionId),
+        recordedBy: user.id,
+        realizedValueUsd: d.realizedValueUsd ?? null,
+        actualMetric: d.actualMetric ?? null,
+        signalKey: d.signalKey ?? null,
+        window: d.window ?? null,
+        note: d.note ?? null,
+        final: d.final ?? false,
+      });
+      if (!result.ok) {
+        // An action that does not belong to the tenant is a 404; a named signal
+        // that is missing or not a scalar is a 400 (the caller asked for a measured
+        // basis that cannot honestly be backed).
+        res.status(result.reason === "not_found" ? 404 : 400).json({ error: result.reason });
         return;
       }
-
-      const d = parsed.data;
-      let basis: "measured" | "modelled" = "modelled";
-      let actualMetric: number | null = d.actualMetric ?? null;
-      if (d.signalKey) {
-        const signalRows = await db
-          .select()
-          .from(derivedSignalsTable)
-          .where(
-            and(
-              eq(derivedSignalsTable.tenantId, tenantId),
-              eq(derivedSignalsTable.layerKey, action.layerKey),
-              eq(derivedSignalsTable.signalKey, d.signalKey),
-              ...(d.window ? [eq(derivedSignalsTable.window, d.window)] : []),
-            ),
-          )
-          .orderBy(desc(derivedSignalsTable.computedAt))
-          .limit(1);
-        const sig = signalRows[0];
-        // A measured basis is only honest when a real scalar signal backs it. A
-        // missing signal, an encrypted envelope, or a vector is rejected rather
-        // than silently downgraded to a modelled estimate the caller did not ask
-        // for.
-        if (!sig || typeof sig.value !== "number" || !Number.isFinite(sig.value)) {
-          res.status(400).json({ error: "signal_not_found" });
-          return;
-        }
-        actualMetric = sig.value;
-        basis = "measured";
-      }
-
-      const predicted = toNum(action.predictedValueUsd);
-      const realized = d.realizedValueUsd ?? null;
-      const final = d.final ?? false;
-      const status = deriveMeasurementStatus({
-        predictedValueUsd: predicted,
-        realizedValueUsd: realized,
-        final,
+      res.status(201).json({
+        measurement: result.measurement,
+        resolvedForecasts: result.resolvedForecasts,
       });
-      const variance = computeVariance(realized, predicted);
-
-      const inserted = await db
-        .insert(outcomeMeasurementsTable)
-        .values({
-          actionId,
-          actualMetric: actualMetric === null ? null : String(actualMetric),
-          realizedValueUsd: realized === null ? null : realized.toFixed(2),
-          varianceVsPrediction: variance === null ? null : variance.toFixed(2),
-          basis,
-          status,
-          note: d.note ?? null,
-          recordedBy: user.id,
-        })
-        .returning();
-      const measurement = inserted[0];
-      // Phase AJ: a terminal measurement (realized or missed) resolves every
-      // open forecast bound to this action and scores it. A pending or on_track
-      // measurement resolves nothing, so a forecast is never graded on a guess.
-      const resolvedForecasts = await resolveForecastsForMeasurement({
-        actionId,
-        measurementId: measurement.id,
-        status,
-        basis,
-      });
-      res.status(201).json({ measurement, resolvedForecasts });
     } catch (err) {
       next(err);
     }
@@ -1643,6 +1481,19 @@ tenantsRouter.get(
     }
   },
 );
+
+// The tenant's outcome loop: every committed decision joined to the action it
+// created, the forecast that prediction bound, and the measurement and
+// Brier-scored resolution that graded it. A read scoped to the tenant; a stage
+// that has not happened yet is null, never a fabricated zero.
+tenantsRouter.get("/tenants/:id/outcome-loop", requireTenantAccess, async (req, res, next) => {
+  try {
+    const loop = await getOutcomeLoop(String(req.params.id));
+    res.json(loop);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // The tenant's outcome summary: cumulative value identified versus value
 // realized, plus the simple calibration grade, and the measurements behind them.

@@ -15,6 +15,7 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { ReasoningPage } from "./pages/ReasoningPage";
 import { ActionsPage } from "./pages/ActionsPage";
 import { DecisionsPage } from "./pages/DecisionsPage";
+import { OutcomeLoopPage } from "./pages/OutcomeLoopPage";
 import { AnomaliesPage } from "./pages/AnomaliesPage";
 import { WarRoomPage } from "./pages/WarRoomPage";
 import { AskDifferentDayPage } from "./pages/AskDifferentDayPage";
@@ -113,6 +114,8 @@ function Routes({ role }: { role: UserRole }) {
       return <ActionsPage />;
     case "/decisions":
       return <DecisionsPage />;
+    case "/outcome-loop":
+      return <OutcomeLoopPage />;
     case "/as-of":
       return <AsOfReplayPage />;
     case "/diligence":

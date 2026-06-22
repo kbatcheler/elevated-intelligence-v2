@@ -727,6 +727,74 @@ export interface TenantOutcomes {
   measurements: OutcomeMeasurement[];
 }
 
+// ── Outcome loop closure (GET /api/tenants/:id/outcome-loop) ──
+// A read that closes the loop on committed decisions: the recommendation the
+// board acted on, the action it created, the forecast that prediction bound, and
+// the measurement and Brier-scored resolution that graded it. A stage that has
+// not happened yet is null, never a fabricated zero.
+export interface OutcomeLoopRecommendation {
+  title: string;
+  detail: string | null;
+  impact: string | null;
+  predictedValueUsd: number | null;
+  confidence: number;
+  // "verified" or "modelled" as stored; the page maps it to a provenance pill.
+  basis: string;
+  verified: boolean;
+  evidenceRefs: { claimPath: string; contentHash: string }[];
+  provenanceContentHash: string;
+}
+
+export interface OutcomeLoopForecast {
+  id: string;
+  statement: string;
+  probability: number | null;
+  outcome: 0 | 1 | null;
+  resolved: boolean;
+  resolvedAt: string | null;
+  brierScore: number | null;
+  // measured, modelled, or owner: how the forecast was resolved. Null while open.
+  resolutionBasis: string | null;
+}
+
+export interface OutcomeLoopMeasurement {
+  id: string;
+  status: string;
+  // measured only when a real scalar signal backed it; otherwise modelled.
+  basis: string;
+  realizedValueUsd: number | null;
+  varianceVsPrediction: number | null;
+  measuredAt: string;
+}
+
+export interface OutcomeLoopEntry {
+  decisionId: string;
+  decidedAt: string;
+  layerKey: string;
+  actionRef: string | null;
+  rationale: string | null;
+  decidedByEmail: string | null;
+  state: "open" | "resolved";
+  recommendation: OutcomeLoopRecommendation;
+  action: { id: string; status: string } | null;
+  forecast: OutcomeLoopForecast | null;
+  measurement: OutcomeLoopMeasurement | null;
+}
+
+export interface OutcomeLoopSummary {
+  total: number;
+  closed: number;
+  open: number;
+  // Mean Brier over the resolved loops, or null when none have resolved.
+  brierMean: number | null;
+}
+
+export interface OutcomeLoop {
+  tenantId: string;
+  summary: OutcomeLoopSummary;
+  loops: OutcomeLoopEntry[];
+}
+
 // The stored tenant profile blob (homepage ground truth). Loosely typed: the
 // shell reads a few known fields and tolerates the rest.
 export interface TenantProfile {

@@ -3027,3 +3027,63 @@ validation is correct (a post-build mode flip is legitimate live/as-of divergenc
 race-immunity case genuinely locks the invariant. The drift index, the rollup, and this build report advance
 to "A through AP". Phase AP is gated but not a milestone; the wave continues with Phase AQ (the outcome loop
 closure).
+
+## Phase AQ: outcome loop closure
+
+Phase AQ is the third phase of the Robustness and Magic wave (AO through AS). It closes the outcome loop end to
+end so a tenant can see, from real persisted state only, the full arc from a recommendation to a committed
+decision to a calibrated forecast to a realised-versus-predicted measurement and the Brier score that grades
+it. The grounding services already existed (the commit and measurement services, the Phase AJ calibration
+ledger's auto-resolution and owner adjudication, the outcome math, and the predicted-value parser); AQ binds
+them into one read model, one tenant-scoped route, one portal surface, and one real-state demo loop, and
+removes the live-versus-seed drift by routing the write paths through the same services the seed walks.
+
+The read model `getOutcomeLoop` assembles, per committed decision and from persisted rows only, the
+recommendation, the committed action, the calibration forecast, the latest measurement, and the Brier score,
+with strictly honest nulls: an open loop's measurement is null, an unresolved forecast's outcome and Brier and
+resolution basis are null, and the summary `brierMean` is null when no loop has resolved rather than a
+fabricated zero. `GET /api/tenants/:id/outcome-loop` returns the loop behind `requireTenantAccess` (tenant
+scoped, not owner-only), and the commit and measurement write routes now delegate to the same services the
+live seed uses. The portal page is built from existing primitives with four honest data states kept distinct
+(loading, no-tenant, empty, error, ready), dashes for absent figures rather than zeros, provenance pills, and
+one new nav entry. `closeOneLoop` in the live seed stands up exactly one fully closed loop on the Hillman demo
+tenant from real pipeline recommendation state, idempotently, recording realised equals predicted as a
+modelled basis and skipping when the predicted value is null so it never fabricates a figure.
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both).
+- The full suite is green with zero failures (api-server 651 tests across 79 files, up from 647 across 78 with
+  the new four-test `outcomeLoop.integration.test.ts`; edge-agent 10; plus the portal, cortex, connectors, db,
+  and scripts suites). The new integration test proves the four cases: a fully closed loop scoring Brier 0.09
+  (the forecast probability 0.7 against an outcome of 1), an open loop with a null measurement and a null
+  headline Brier, an empty tenant returning zero counts and a null mean, and a 401 without auth. A first run
+  launched while api-server source was still being edited flaked many tests on 5000ms timeouts because the
+  tsx-watch process reloads and re-runs the bootstrap and scheduled loops, bursting DB connections past the
+  pool ceiling; a clean re-run with no concurrent editing passed all 651.
+- Long-dash sweep zero on both sides: the source guard is green over authored source including this Phase AQ
+  Markdown, and a fresh database-wide row-cast over 185 text and jsonb columns across all 44 public base tables
+  reports zero hits (the one seeded demo loop is written through the real services and is all ASCII).
+- Zero new npm dependencies (the phase wired existing services, one route, one portal page, and one seed
+  function only).
+
+### Honest marking
+
+What is TEST-PROVEN: that the loop read model returns honest nulls (open stages null, `brierMean` null on an
+empty record), that a closed loop computes the stored Brier (0.09) from a real forecast probability and
+outcome, that an empty tenant returns zero counts and a null mean rather than a fabricated zero, and that the
+route 401s without auth and is fenced by `requireTenantAccess`. What is the accepted boundary (logged drift):
+the seeded closed loop records realised equals predicted as a MODELLED basis (it stands up the demo arc from
+real pipeline recommendation state, not a measured external outcome, and is labelled modelled throughout); the
+single demo loop is the one Hillman loop the seed binds, while every other loop stays genuinely open. The
+portal uses American "organization" sitewide, so the new page matches that house convention and a portal-wide
+British-English copy normalisation is deferred to Phase AS (which owns `artifacts/portal` in full); the
+`"realized"` status enum and `realizedValueUsd` fields keep American spelling as data-contract identifiers
+while user-visible labels are British.
+
+### Close
+
+Phase AQ passed its architect `evaluate_task` review (PASS) with no blocking correctness or honesty issue. The
+hard constraints hold (zero new dependencies, ASCII hyphen only in source and data, no fabricated figure). The
+drift index, the rollup, and this build report advance to "A through AQ". Phase AQ is gated but not a
+milestone; the wave continues with Phase AR (the operational hardening).

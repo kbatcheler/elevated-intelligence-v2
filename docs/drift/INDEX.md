@@ -50,6 +50,7 @@ Milestones (hard stops for owner review): C, G, H and I, K, T, X, AI, AJ.
 | AN | Final Verification and the Consolidated Report (closes Stage 6 and the whole build) | Pass | yes (closing milestone of Stage 6 and the whole build; owner-authorized AK-AL-AM-AN sequence complete, build closed) |
 | AO | Priority Connectors (opens the Robustness and Magic wave) | Pass | no (gated; reopens the build closed at AN as the first of the AO-AS Robustness and Magic wave; advances to AP) |
 | AP | Sovereign Seat Realisation (correctness audit) | Pass | no (gated, Robustness and Magic wave; advances to AQ) |
+| AQ | Outcome Loop Closure | Pass | no (gated, Robustness and Magic wave; advances to AR) |
 
 ## Notes
 

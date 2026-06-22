@@ -1,4 +1,4 @@
-# Drift rollup: Phases A through AP
+# Drift rollup: Phases A through AQ
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
@@ -9,10 +9,33 @@ Phase AJ (the Brier-scored calibration ledger) followed it, and Phase AK (the Da
 opened Stage 6, the final stage, followed by Phase AL (the decision ledger and pre-mortem) and Phase AM (the
 as-of replay and the diligence pack), then closed by Phase AN (the final verification and the consolidated
 report). The Robustness and Magic wave (AO through AS) then reopened the build to harden it and sharpen its
-surface; its first phase AO realises the priority connectors and its second phase AP audits and hardens the
-sovereign seat, so the rollup now spans Phases A through AP.
+surface; its first phase AO realises the priority connectors, its second phase AP audits and hardens the
+sovereign seat, and its third phase AQ closes the outcome loop, so the rollup now spans Phases A through AQ.
 
-Last updated after Phase AP (the sovereign seat realisation, the second phase of the Robustness and Magic
+Last updated after Phase AQ (the outcome loop closure, the third phase of the Robustness and Magic wave). AQ
+closes the outcome loop end to end: a new read model assembles, per committed decision and from persisted rows
+only, the arc from a recommendation to a forecast to a realised-versus-predicted measurement and its Brier
+score, exposed at a tenant-scoped `GET /api/tenants/:id/outcome-loop` behind `requireTenantAccess`; the commit
+and measurement write routes now delegate to the same services the live seed walks, so the live and seed paths
+cannot drift. A new portal page built from existing primitives renders the loop with provenance pills and four
+honest data states (a missing figure is a dash, an open stage is null, never a fabricated zero), behind one new
+nav line. `closeOneLoop` in the live seed stands up exactly one fully closed loop on the Hillman demo tenant
+from real pipeline recommendation state, idempotently, recording realised equals predicted as a MODELLED basis
+and skipping when the predicted value is null so it never fabricates a figure. A new
+`outcomeLoop.integration.test.ts` proves the four cases (a closed loop scoring Brier 0.09, an open loop with a
+null measurement and a null headline Brier, an empty tenant returning zero counts and a null mean, and a 401
+without auth). Typecheck and build are clean; the full suite is green (api-server 651 across 79 files, up from
+647/78; edge-agent 10; plus portal, cortex, connectors, db, scripts); the two-sided long-dash sweep is zero
+(the source guard plus a fresh database cast over 185 text and jsonb columns across all 44 public tables);
+zero new npm dependencies. The architect returned PASS with no blocking issue. AQ adds one logged drift item:
+the portal uses American "organization" sitewide, so the new page matches that house convention and a
+portal-wide British-English copy normalisation is deferred to Phase AS (which owns `artifacts/portal` in full);
+the `OutcomeMeasurementStatus` `"realized"` enum and the `realizedValueUsd` fields keep American spelling as
+data-contract identifiers while user-visible labels are British. A first test run launched during active
+api-server editing flaked many tests on tsx-watch-reload DB-connection contention; a clean re-run with no
+concurrent editing passed all 651 (the recurring environmental flake, not a regression).
+
+Earlier, updated after Phase AP (the sovereign seat realisation, the second phase of the Robustness and Magic
 wave, redefined on inspection as a CORRECTNESS AUDIT because the in-boundary sovereign seat was already real
 and proven from Phases J and AF). The audit found and fixed one honesty defect at the as-of replay snapshot
 sink: a build's recorded data-source regime collapsed a `sovereign` model-execution mode into a connected
