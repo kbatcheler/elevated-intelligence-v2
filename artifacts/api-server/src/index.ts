@@ -6,6 +6,7 @@ import { startBenchmarkRecompute } from "./lib/benchmarks/benchmarkLoop";
 import { startConnectorMaintenance } from "./lib/connectors/oauthRefresh";
 import { startSftpDropWatcher } from "./lib/ingestion/sftpDrop";
 import { logger } from "./lib/logger";
+import { logStartupPosture } from "./lib/ops/startupPosture";
 import { startPushMorningBrief } from "./lib/push/pushBrief";
 import { startRetentionPurge } from "./lib/retention/retention";
 
@@ -29,6 +30,11 @@ async function start(): Promise<void> {
   app.listen(port, () => {
     logger.info({ port }, "api-server listening");
   });
+
+  // Log the operational posture at boot (Phase AR): the active rate-limit store
+  // and the single loop-runner requirement of the scheduled loops started below.
+  // Boot-time observability only; it changes no request behaviour.
+  logStartupPosture(logger);
 
   // Start the in-process connector maintenance loop (OAuth token renewal). Only
   // here in the entrypoint, never in app.ts, so importing the app in tests does

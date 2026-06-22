@@ -1,4 +1,4 @@
-# Drift rollup: Phases A through AQ
+# Drift rollup: Phases A through AR
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
@@ -10,9 +10,32 @@ opened Stage 6, the final stage, followed by Phase AL (the decision ledger and p
 as-of replay and the diligence pack), then closed by Phase AN (the final verification and the consolidated
 report). The Robustness and Magic wave (AO through AS) then reopened the build to harden it and sharpen its
 surface; its first phase AO realises the priority connectors, its second phase AP audits and hardens the
-sovereign seat, and its third phase AQ closes the outcome loop, so the rollup now spans Phases A through AQ.
+sovereign seat, its third phase AQ closes the outcome loop, and its fourth phase AR hardens the operational
+deploy posture, so the rollup now spans Phases A through AR.
 
-Last updated after Phase AQ (the outcome loop closure, the third phase of the Robustness and Magic wave). AQ
+Last updated after Phase AR (operational hardening, the fourth phase of the Robustness and Magic wave). AR
+changes no product behaviour; it makes the deployment posture explicit and self-consistent across code, infra,
+and the runbooks. Two of its three substrate pieces were already real from the post-AN remediation (the
+config-gated `RATE_LIMIT_STORE` shared store and the fail-loud provenance append-only database role SQL); AR
+keeps the code default `memory` so the checks run with no environment, does not rewrite the role SQL, and
+instead states the production posture, logs it at boot, and aligns the Terraform with the runbook. A new pure
+`startupPosture.ts` logs two boot posture lines once (a WARN on the in-memory single-instance rate-limit
+default, an INFO on the shared `postgres` store; and the seven in-process scheduled loops with the
+single-loop-runner requirement); `infra/gcp/main.tf` pins one always-on instance (min and max instance count 1,
+was 0 and 4) and sets `RATE_LIMIT_STORE=postgres`; a new `docs/go-live-checklist.md` turns the deploy facts
+into nine operator checkbox sections; `docs/deploy-readiness.md` gains a single-instance loop-runner section
+with an honest steady-state-versus-rollout caveat; `docs/migration-runbook.md` marks the append-only step
+REQUIRED and adds the env bullet, a Scaling posture paragraph, and the env-table row. A new pure
+`startupPosture.test.ts` (five tests) proves the posture lines and their boot emission. Typecheck and build are
+clean; the full suite is green (api-server 656 across 80 files, up from 651/79; edge-agent 10; plus portal,
+cortex, connectors, db, scripts); the two-sided long-dash sweep is zero (the source guard over authored source
+plus the infra and Dockerfile roots swept manually, and a fresh database cast over 185 text and jsonb columns
+across all 44 public tables); zero new npm dependencies. The architect returned PASS after one
+documentation-precision remediation (the rollout caveat). AR adds one new still-live drift item: the single
+loop-runner is a deployment posture (one always-on instance), not code-level leader election, so a
+multi-instance request tier needs a separate loop-runner instance or per-loop leader election.
+
+Earlier, updated after Phase AQ (the outcome loop closure, the third phase of the Robustness and Magic wave). AQ
 closes the outcome loop end to end: a new read model assembles, per committed decision and from persisted rows
 only, the arc from a recommendation to a forecast to a realised-versus-predicted measurement and its Brier
 score, exposed at a tenant-scoped `GET /api/tenants/:id/outcome-loop` behind `requireTenantAccess`; the commit
@@ -472,6 +495,9 @@ consolidated into one bullet that remains in "Still live". The full record is `d
 | AM | As-of Replay and the Diligence Pack | Pass | no (gated, Stage 6; owner-authorized AK-AL-AM-AN sequence run linearly, advances to AN) |
 | AN | Final Verification and the Consolidated Report (closes Stage 6 and the whole build) | Pass | yes (closing milestone of Stage 6 and the whole build; owner-authorized AK-AL-AM-AN sequence complete, build closed) |
 | AO | Priority Connectors (opens the Robustness and Magic wave) | Pass | no (gated; reopens the build closed at AN as the first of the AO-AS wave; advances to AP) |
+| AP | Sovereign Seat Realisation (correctness audit) | Pass | no (gated, Robustness and Magic wave; advances to AQ) |
+| AQ | Outcome Loop Closure | Pass | no (gated, Robustness and Magic wave; advances to AR) |
+| AR | Operational Hardening | Pass | no (gated, Robustness and Magic wave; advances to AS) |
 
 ## Recurring environmental drift (accepted, not fixable in code)
 
@@ -490,6 +516,12 @@ consolidated into one bullet that remains in "Still live". The full record is `d
 - SESSION_SECRET coupling (D). PIN code hashes and session signatures both derive
   from it, so rotating it invalidates all sessions and all outstanding PINs at
   once. Operational caveat, captured in `docs/deploy-readiness.md`.
+- Scheduled loops require a single loop-runner instance (AR). The seven in-process
+  scheduled loops have no cross-instance coordination, so the deployed target pins
+  one always-on instance and that instance is the loop runner; a multi-instance
+  request tier needs a separate single loop-runner instance or per-loop leader
+  election. A deployment posture (logged at boot), not code-level coordination,
+  captured in `docs/deploy-readiness.md` and `docs/go-live-checklist.md`.
 - Live seed concurrency held at LAYER_CONCURRENCY=2 (F). The Anthropic integration
   rate-limits hard; above about four concurrent claimers a seed hits a 429 storm,
   and an errored layer is terminal, so the live runs were benched at 2 for zero

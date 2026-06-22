@@ -3087,3 +3087,56 @@ Phase AQ passed its architect `evaluate_task` review (PASS) with no blocking cor
 hard constraints hold (zero new dependencies, ASCII hyphen only in source and data, no fabricated figure). The
 drift index, the rollup, and this build report advance to "A through AQ". Phase AQ is gated but not a
 milestone; the wave continues with Phase AR (the operational hardening).
+
+## Phase AR: operational hardening
+
+Phase AR is the fourth phase of the Robustness and Magic wave (AO through AS). It changes no product behaviour;
+it makes the deployment posture explicit and self-consistent across code, infrastructure, and the runbooks. Two
+of its three substrate pieces were already real from the post-AN remediation: the config-gated rate-limit store
+(`RATE_LIMIT_STORE` default `memory`, opt-in `postgres` routing both the auth fixed window and the connector
+token bucket through shared `rate_limit_*` tables) and the provenance append-only database role SQL, fail-loud
+under `ON_ERROR_STOP`. AR keeps the code default `memory` so the checks run with no environment, does not
+rewrite the role SQL, and instead states the production posture, logs it at boot, and aligns the Terraform with
+the runbook.
+
+A new pure module `startupPosture.ts` computes and logs two posture lines once at boot: a rate-limit line (WARN
+on the in-memory single-instance default, INFO on the shared `postgres` store) and a scheduled-loop line naming
+the seven in-process loops (connector maintenance, alert notifier, retention purge, backup archive, benchmark
+recompute, push morning brief, sftp drop watcher) and the single-loop-runner requirement, so the running
+configuration is visible in the logs rather than inferred. `infra/gcp/main.tf` pins one always-on instance
+(`min_instance_count = 1`, `max_instance_count = 1`, was 0 and 4) and sets `RATE_LIMIT_STORE=postgres` with
+explanatory comments. A new `docs/go-live-checklist.md` turns the deploy facts into nine operator checkbox
+sections; `docs/deploy-readiness.md` gains a single-instance loop-runner section with the honest
+steady-state-versus-rollout caveat; `docs/migration-runbook.md` adds the env bullet, a Scaling posture
+paragraph, the REQUIRED fail-loud append-only step, and the env-table row.
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both).
+- The full suite is green with zero failures (api-server 656 tests across 80 files, up from 651 across 79 with
+  the new five-test `startupPosture.test.ts`; edge-agent 10; plus the portal, cortex, connectors, db, and
+  scripts suites).
+- Long-dash sweep zero on both sides: the source guard is green over authored source including this Phase AR
+  Markdown AND the infra and Dockerfile roots (swept manually because they sit outside the guard's configured
+  roots), and a fresh database-wide row-cast over 185 text and jsonb columns across all 44 public base tables
+  reports zero hits (AR writes no schema and no data).
+- Zero new npm dependencies (one pure module, one unit test, Terraform values, and documentation only).
+
+### Honest marking
+
+What is TEST-PROVEN: that the startup posture lines are correct for each store and that both are emitted at boot
+at their levels through an injected logger. What is the accepted boundary (logged drift): the single loop-runner
+is a DEPLOYMENT posture (one always-on instance), not code-level leader election; a multi-instance request tier
+needs a separate single loop-runner instance or per-loop leader election. The shared rate-limit store and the
+append-only role are operator deploy steps the application documents and makes fail-loud where it owns the path;
+durable Postgres storage and point-in-time recovery remain the platform's responsibility, stated rather than
+faked. The code default for `RATE_LIMIT_STORE` stays `memory`; `postgres` is the documented production posture
+set by the Terraform. A revision rollout briefly overlaps two revisions, a bounded duplicate-tick window, not a
+steady-state multiplier.
+
+### Close
+
+Phase AR passed its architect `evaluate_task` review (PASS) after one documentation-precision remediation (the
+steady-state-versus-rollout caveat). The hard constraints hold (zero new dependencies, ASCII hyphen only in
+source and data, no fabricated figure). The drift index, the rollup, and this build report advance to "A
+through AR". Phase AR is gated but not a milestone; the wave continues with Phase AS (the signature surface).

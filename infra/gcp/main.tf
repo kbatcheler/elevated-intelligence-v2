@@ -175,9 +175,19 @@ resource "google_cloud_run_v2_service" "app" {
   template {
     service_account = google_service_account.app.email
 
+    # One always-on instance is the single loop runner. The seven in-process
+    # scheduled loops (connector maintenance, alert notifier, retention purge,
+    # backup archive, benchmark recompute, push morning brief, sftp drop watcher)
+    # run once per instance with no cross-instance coordination, and each runs
+    # only while its instance is alive, so the target pins exactly one instance
+    # and keeps it warm. RATE_LIMIT_STORE=postgres below already shares the rate
+    # limits (so they hold across the brief revision overlap during a rollout,
+    # and so a future bump above one instance starts from a shared limit), but
+    # scaling the request tier past one instance also needs a separate loop
+    # runner or per-loop leader election. See docs/go-live-checklist.md.
     scaling {
-      min_instance_count = 0
-      max_instance_count = 4
+      min_instance_count = 1
+      max_instance_count = 1
     }
 
     volumes {
@@ -205,6 +215,15 @@ resource "google_cloud_run_v2_service" "app" {
       env {
         name  = "GCS_ARCHIVE_BUCKET"
         value = google_storage_bucket.archives.name
+      }
+      # Route both rate-limit stores (the auth fixed window and the connector
+      # token bucket) through the shared Postgres tables, so the limit holds
+      # across the brief revision overlap during a rollout and a future
+      # multi-instance request tier starts from a shared limit. The application
+      # default stays "memory" for local and single-VM development.
+      env {
+        name  = "RATE_LIMIT_STORE"
+        value = "postgres"
       }
       env {
         name  = "OWNER_EMAIL"

@@ -2,7 +2,9 @@
 
 Operational caveats to settle before a production deploy. None block phase
 progress; they are facts an operator needs at go-live. Sourced from the Phase D
-drift report and the cross-phase rollup.
+drift report and the cross-phase rollup. For the actionable, tick-box version of
+these facts, see `docs/go-live-checklist.md`; this file is the rationale behind
+each item.
 
 ## Rate limiter: in-memory by default, opt-in shared Postgres store
 
@@ -34,6 +36,42 @@ bucket, so the effective quota multiplies by the instance count. The same
 `rate_limit_buckets` table (keyed by the same one-way HMAC, never a raw connection id),
 so the quota holds across instances. Leave the flag unset to keep the single-worker
 default, or pin connector refresh to a single worker instead.
+
+## The deployed target runs a single always-on instance (the loop runner)
+
+The seven in-process scheduled loops (connector maintenance, alert notifier,
+retention purge, backup archive, benchmark recompute, push morning brief, sftp
+drop watcher) are started once in the server entrypoint on unref'd,
+non-overlapping timers. They have no cross-instance coordination, and a loop only
+runs while its instance is alive. Two consequences follow:
+
+- More than one instance runs every loop once per instance. Some ticks are
+  idempotent or set-based (the backup archive skips an unchanged ledger, push
+  events are recorded idempotently, the retention purge is set-based), but
+  duplicate benchmark recompute, connector maintenance, sftp scans, and backup
+  attempts are still wasted work and avoidable risk.
+- A scale-to-zero instance suspends the loops until the next request wakes it.
+
+So the provided GCP target pins exactly one always-on instance
+(`min_instance_count = 1`, `max_instance_count = 1` in `infra/gcp/main.tf`) and
+that instance is the single loop runner. It also sets `RATE_LIMIT_STORE=postgres`
+so the rate limits hold across the brief two-revision overlap during a rollout
+and so a future bump above one instance starts from a shared limit. Scaling the
+request tier past one instance is a deliberate future posture that needs either a
+separate single loop-runner instance or per-loop leader election; it is not the
+shipped default.
+
+The "exactly one" is the steady-state count. During a revision rollout Cloud Run
+briefly runs the old and new revisions together, so a few duplicate loop ticks can
+occur in that bounded window even at this setting. The set-based and idempotent
+ticks (retention purge, backup archive, push events) absorb a duplicate; the rest
+is brief, bounded wasted work that ends when the old revision drains, not a
+steady-state multiplier. A drained or careful cut-over narrows the window further.
+
+At boot the server logs this posture: the active rate-limit store (a warning when
+it is the in-memory default, since that is single-instance only) and the single
+loop-runner requirement, so an operator reads the running configuration from the
+logs rather than inferring it.
 
 ## SESSION_SECRET is load bearing and should not be rotated casually
 

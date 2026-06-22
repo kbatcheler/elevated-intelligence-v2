@@ -79,6 +79,19 @@ Environment on Cloud Run (set by the Terraform):
 - `OWNER_EMAIL` in the clear (not a secret), `DATABASE_URL` injected as a secret
   env (the pg driver reads it from the environment, not through the store).
 - `PORT` is injected by Cloud Run; `PORTAL_DIST_DIR` is already set in the image.
+- `RATE_LIMIT_STORE=postgres` so both rate-limit stores use the shared Postgres
+  tables, which holds the limit across the brief two-revision overlap during a
+  rollout and readies a future multi-instance request tier.
+
+Scaling posture: the target pins a single always-on instance
+(`min_instance_count = 1`, `max_instance_count = 1`). That instance is the single
+runner for the seven in-process scheduled loops (connector maintenance, alert
+notifier, retention purge, backup archive, benchmark recompute, push morning
+brief, sftp drop watcher), which have no cross-instance coordination and run only
+while an instance is alive. Scaling the request tier past one instance is a
+deliberate future posture that needs a separate single loop-runner instance or
+per-loop leader election; see `docs/deploy-readiness.md` and
+`docs/go-live-checklist.md`.
 
 The service is reachable by default: the Terraform grants `roles/run.invoker` to
 `allUsers`, so the Cloud Run URL answers browsers and the `GET /health` smoke test
@@ -160,9 +173,13 @@ backup and restore.
    time objective is the time to provision a restored instance plus redeploy the
    stateless app. See `docs/backup-and-dr-runbook.md` for the application-side
    crown-jewel logical backup and the proven scratch-restore drill.
-5. Append-only hardening. After the schema is pushed, remove UPDATE and DELETE on
-   `provenance_ledger` from the runtime role so the append-only contract is
-   enforced at the database layer as well as in the application:
+5. Append-only hardening (REQUIRED, not optional). After the schema is pushed,
+   remove UPDATE and DELETE on `provenance_ledger` from the runtime role so the
+   append-only contract is enforced at the database layer as well as in the
+   application. The script is fail-loud: under `ON_ERROR_STOP` it aborts if the
+   runtime role can still UPDATE, DELETE, or TRUNCATE the ledger through any path,
+   or is missing SELECT or INSERT, so a partial hardening can never look complete.
+   Run it once per environment:
    `psql "$ADMIN_DATABASE_URL" -v app_role=YOUR_RUNTIME_ROLE -f infra/sql/provenance-ledger-append-only.sql`.
    Run it as a privileged role; it is idempotent and prints the runtime role's
    remaining grants (expect only SELECT and INSERT). See
@@ -212,6 +229,7 @@ backup and restore.
 | `AWS_SECRETS_MANAGER_REGION`    | Region for the AWS SecretStore (falls back to `AWS_REGION`).            |
 | `AWS_ACCESS_KEY_ID` and friends | AWS credentials when not using a task or instance role.                 |
 | `ARCHIVE_STORE_PROVIDER`        | `local` (default), `gcs`, or `s3`.                                       |
+| `RATE_LIMIT_STORE`              | `memory` (default) or `postgres` (limits shared across instances).      |
 | `GCS_ARCHIVE_BUCKET`            | Required to connect the GCS archive store.                              |
 | `S3_ARCHIVE_BUCKET`             | Required to connect the S3 archive store.                               |
 | `S3_ARCHIVE_REGION`             | Region for S3 archives (falls back to `AWS_REGION`).                    |
