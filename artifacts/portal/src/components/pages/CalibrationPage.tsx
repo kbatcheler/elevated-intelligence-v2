@@ -30,6 +30,19 @@ type State =
   | { kind: "ready"; data: CalibrationSummary }
   | { kind: "error" };
 
+// The headline tone arrives from the view layer as a CSS var string; map it to a
+// full utility class so a data-driven colour never becomes an inline style.
+const HEADLINE_TONE: Record<string, string> = {
+  "var(--slate)": "text-slate-base",
+  "var(--teal)": "text-teal",
+  "var(--coral)": "text-coral",
+};
+
+const ALIGN: Record<"left" | "right", string> = {
+  left: "text-left",
+  right: "text-right",
+};
+
 // The owner-only Brier-scored calibration ledger (Phase AJ). Every figure is a
 // real computation over resolved forecasts: a probability the real Evaluator
 // stated, resolved only from a persisted measurement or an owner adjudication.
@@ -54,14 +67,14 @@ export function CalibrationPage() {
   }, [load]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 96 }}>
+    <PageWidth space="tall">
       <PageHeader
         eyebrow="Operations"
         title="Calibration ledger"
         subtitle="How well the system's stated probabilities have matched reality, scored with the Brier rule. Every figure is computed from forecasts the Evaluator made and that a real measurement or an owner adjudication later resolved. Misses are always included; a thin sample is labelled as such, never dressed up as a track record."
       />
 
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={8} />}
         {state.kind === "error" && (
           <ErrorState message="The calibration summary could not be loaded." onRetry={load} />
@@ -88,13 +101,10 @@ function CalibrationBody({ data }: { data: CalibrationSummary }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: 32 }}>
+    <div className="grid gap-8">
       <HeadlinePanel data={data} />
       <CurvePanel curve={data.curve} />
-      <div
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 28 }}
-        className="calibration-cols"
-      >
+      <div className="calibration-cols grid grid-cols-[1fr_1fr_1fr] gap-7">
         <SegmentTable eyebrow="By layer" title="Brier by layer" rows={data.byLayer} keyLabel="Layer" />
         <SegmentTable eyebrow="By kind" title="Brier by forecast kind" rows={data.byKind} keyLabel="Kind" />
         <SegmentTable eyebrow="By seat" title="Brier by subject seat" rows={data.bySeat} keyLabel="Seat" />
@@ -119,33 +129,23 @@ function HeadlinePanel({ data }: { data: CalibrationSummary }) {
         eyebrow="Headline"
         title="Mean Brier score"
         action={
-          <span style={{ fontSize: 13, color: "var(--slate)" }}>
+          <span className="text-caption text-slate-base">
             {established ? "Established" : headline.label.label}
           </span>
         }
       />
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <span
-          className="font-mono"
-          style={{ fontSize: 32, fontWeight: 500, color: tone, lineHeight: 1 }}
-        >
+      <div className="flex items-baseline gap-2.5 flex-wrap">
+        <span className={`font-mono text-[32px] font-medium leading-none ${HEADLINE_TONE[tone] ?? "text-slate-base"}`}>
           {formatBrier(headline.meanBrier)}
         </span>
-        <span style={{ fontSize: 15, color: "var(--slate)" }}>
+        <span className="text-body text-slate-base">
           vs {baseline.toFixed(2)} coin-flip baseline
         </span>
       </div>
-      <div style={{ marginTop: 14, fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
+      <div className="mt-3.5 text-caption text-slate-base leading-normal">
         {reading} Lower is better: 0 is a perfect forecaster, 1 is perfectly wrong.
       </div>
-      <div
-        style={{
-          marginTop: 18,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-          gap: 16,
-        }}
-      >
+      <div className="mt-[18px] grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] gap-4">
         <MetricTile label="Resolved forecasts" value={formatInt(resolvedCount)} />
         <MetricTile label="Open forecasts" value={formatInt(openCount)} />
         <MetricTile label="Established at" value={formatInt(data.threshold) + " resolved"} />
@@ -173,17 +173,9 @@ function CurvePanel({ curve }: { curve: CalibrationBand[] }) {
           message="The curve fills in as forecasts across the probability range resolve. The dashed diagonal is perfect calibration."
         />
       ) : (
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card p-5">
           <CurveSvg curve={curve} />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: 10,
-              fontSize: 12,
-              color: "var(--slate-light)",
-            }}
-          >
+          <div className="flex justify-between mt-2.5 text-xs text-slate-light">
             <span>Stated probability, left to right 0 to 100%</span>
             <span>Dot size scales with resolved count</span>
           </div>
@@ -203,7 +195,7 @@ function CurveSvg({ curve }: { curve: CalibrationBand[] }) {
     <svg
       viewBox={`0 0 ${size} ${size}`}
       width="100%"
-      style={{ maxWidth: 360, display: "block", margin: "0 auto" }}
+      className="max-w-[360px] block mx-auto"
       role="img"
       aria-label="Calibration curve: stated probability against observed frequency, with a perfect-calibration diagonal"
     >
@@ -258,10 +250,10 @@ function SegmentTable({
       {rows.length === 0 ? (
         <EmptyState title="Nothing resolved yet" />
       ) : (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        <div className="card p-0 overflow-hidden">
+          <table className="w-full border-collapse text-[14px]">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr className="border-b border-border-base">
                 <Th align="left">{keyLabel}</Th>
                 <Th align="right">n</Th>
                 <Th align="right">Brier</Th>
@@ -269,22 +261,22 @@ function SegmentTable({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.key} style={{ borderTop: "1px solid var(--cream-dark)" }}>
+                <tr key={r.key} className="border-t border-cream-dark">
                   <Td>
-                    <span style={{ color: "var(--navy)", fontWeight: 500 }}>{r.key}</span>
+                    <span className="text-navy font-medium">{r.key}</span>
                     {!r.label.established && (
-                      <span style={{ marginLeft: 8, fontSize: 12, color: "var(--slate-light)" }}>
+                      <span className="ml-2 text-xs text-slate-light">
                         {r.label.label}
                       </span>
                     )}
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--slate)" }}>
+                    <span className="font-mono text-slate-base">
                       {formatInt(r.n)}
                     </span>
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--navy)" }}>
+                    <span className="font-mono text-navy">
                       {formatBrier(r.meanBrier)}
                     </span>
                   </Td>
@@ -308,16 +300,16 @@ function LedgerPanel({ rows }: { rows: CalibrationLedgerRow[] }) {
         eyebrow="Track record"
         title="Resolved forecasts"
         action={
-          <span style={{ fontSize: 13, color: "var(--slate)" }}>Misses included</span>
+          <span className="text-caption text-slate-base">Misses included</span>
         }
       />
       {rows.length === 0 ? (
         <EmptyState title="No forecasts have resolved yet" />
       ) : (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        <div className="card p-0 overflow-hidden">
+          <table className="w-full border-collapse text-[14px]">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr className="border-b border-border-base">
                 <Th align="left">Forecast</Th>
                 <Th align="left">Layer</Th>
                 <Th align="right">Stated</Th>
@@ -329,20 +321,20 @@ function LedgerPanel({ rows }: { rows: CalibrationLedgerRow[] }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} style={{ borderTop: "1px solid var(--cream-dark)" }}>
+                <tr key={r.id} className="border-t border-cream-dark">
                   <Td>
-                    <span style={{ color: "var(--navy)", fontWeight: 500 }}>{r.statement}</span>
-                    <span style={{ display: "block", fontSize: 12, color: "var(--slate-light)" }}>
+                    <span className="text-navy font-medium">{r.statement}</span>
+                    <span className="block text-xs text-slate-light">
                       {r.kind} | {r.subjectSeat}
                     </span>
                   </Td>
                   <Td>
-                    <span className="font-mono" style={{ color: "var(--slate)" }}>
+                    <span className="font-mono text-slate-base">
                       {r.layerKey}
                     </span>
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--slate)" }}>
+                    <span className="font-mono text-slate-base">
                       {formatRatioPct(r.probability)}
                     </span>
                   </Td>
@@ -350,15 +342,15 @@ function LedgerPanel({ rows }: { rows: CalibrationLedgerRow[] }) {
                     <OutcomePill outcome={r.outcome} />
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--navy)" }}>
+                    <span className="font-mono text-navy">
                       {formatBrier(r.brierScore)}
                     </span>
                   </Td>
                   <Td>
-                    <span style={{ color: "var(--slate)" }}>{r.resolutionBasis ?? "-"}</span>
+                    <span className="text-slate-base">{r.resolutionBasis ?? "-"}</span>
                   </Td>
                   <Td>
-                    <span style={{ color: "var(--slate)" }}>{formatDateTime(r.resolvedAt)}</span>
+                    <span className="text-slate-base">{formatDateTime(r.resolvedAt)}</span>
                   </Td>
                 </tr>
               ))}
@@ -374,34 +366,23 @@ function OutcomePill({ outcome }: { outcome: number }) {
   const hit = outcome === 1;
   return (
     <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "2px 8px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600,
-        color: hit ? "var(--teal-deep, var(--teal))" : "var(--coral)",
-        background: hit ? "var(--teal-faint, var(--cream-dark))" : "var(--coral-faint, var(--cream-dark))",
-        border: "1px solid " + (hit ? "var(--teal)" : "var(--coral)"),
-      }}
+      className={`inline-flex items-center py-0.5 px-2 rounded-full text-xs font-semibold border ${
+        hit ? "text-teal-ink bg-teal-faint border-teal" : "text-coral-ink bg-coral-faint border-coral"
+      }`}
     >
-      {hit ? "Realized" : "Missed"}
+      {hit ? "Realised" : "Missed"}
     </span>
   );
 }
 
 function Th({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
   return (
-    <th
-      className="eyebrow"
-      style={{ textAlign: align, padding: "12px 16px", color: "var(--slate-light)", fontWeight: 600 }}
-    >
+    <th className={`eyebrow ${ALIGN[align]} py-3 px-4 text-slate-light font-semibold`}>
       {children}
     </th>
   );
 }
 
 function Td({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return <td style={{ textAlign: align, padding: "12px 16px", verticalAlign: "top" }}>{children}</td>;
+  return <td className={`${ALIGN[align]} py-3 px-4 align-top`}>{children}</td>;
 }

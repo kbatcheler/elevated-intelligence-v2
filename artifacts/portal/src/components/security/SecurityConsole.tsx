@@ -21,29 +21,22 @@ export function SecurityConsole() {
   const [tab, setTab] = useState<TabKey>("posture");
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 96 }}>
+    <PageWidth space="tall">
       <PageHeader
         eyebrow="Security"
         title="Security console"
         subtitle="Tenant key lifecycle, connection protection, break-glass access, and ledger integrity."
       />
-      <div style={{ margin: "24px 0 28px", display: "flex", gap: 16, borderBottom: "1px solid var(--border)", overflowX: "auto" }}>
+      <div className="mt-6 mb-7 flex gap-4 border-b border-border-base overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            style={{
-              padding: "12px 4px",
-              background: "transparent",
-              border: "none",
-              borderBottom: tab === t.key ? "2px solid var(--navy)" : "2px solid transparent",
-              color: tab === t.key ? "var(--navy)" : "var(--slate-light)",
-              fontWeight: tab === t.key ? 600 : 500,
-              cursor: "pointer",
-              fontSize: 14,
-              whiteSpace: "nowrap",
-              fontFamily: "Inter, sans-serif",
-            }}
+            className={`py-3 px-1 bg-transparent border-b-2 cursor-pointer text-[14px] whitespace-nowrap font-sans ${
+              tab === t.key
+                ? "border-navy text-navy font-semibold"
+                : "border-transparent text-slate-light font-medium"
+            }`}
           >
             {t.label}
           </button>

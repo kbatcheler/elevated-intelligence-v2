@@ -26,11 +26,11 @@ type LayerSummary = { key: string; name: string; archetype: string; moduleGroup:
 
 function Section({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
   return (
-    <section style={{ marginBottom: 48 }}>
-      <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 6 }}>
+    <section className="mb-12">
+      <div className="eyebrow text-coral-ink mb-1.5">
         {eyebrow}
       </div>
-      <h2 className="font-serif" style={{ fontSize: 26, color: "var(--navy)", fontWeight: 600, marginBottom: 20 }}>
+      <h2 className="font-serif text-[26px] text-navy font-semibold mb-5">
         {title}
       </h2>
       {children}
@@ -63,9 +63,9 @@ function RegistryProof() {
 
   if (state === "loading") {
     return (
-      <div style={{ display: "grid", gap: 8 }}>
+      <div className="grid gap-2">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="skeleton" style={{ height: 44 }} />
+          <div key={i} className="skeleton h-11" />
         ))}
       </div>
     );
@@ -73,11 +73,11 @@ function RegistryProof() {
 
   if (state === "error") {
     return (
-      <div className="card card-accent-coral" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <TriangleAlert size={18} color="var(--coral)" style={{ marginTop: 2, flexShrink: 0 }} />
+      <div className="card card-accent-coral flex gap-3 items-start">
+        <TriangleAlert size={18} color="var(--coral)" className="mt-0.5 shrink-0" />
         <div>
-          <div style={{ fontWeight: 600, color: "var(--navy)" }}>Registry unavailable</div>
-          <div style={{ fontSize: 13, color: "var(--slate-light)" }}>
+          <div className="font-semibold text-navy">Registry unavailable</div>
+          <div className="text-caption text-slate-light">
             The api-server is not responding on /api/layers. Start it to load the canonical layer
             registry. The portal fails loudly rather than showing placeholder data.
           </div>
@@ -88,21 +88,21 @@ function RegistryProof() {
 
   if (state === "empty") {
     return (
-      <div className="card" style={{ textAlign: "center", color: "var(--slate-light)" }}>
+      <div className="card text-center text-slate-light">
         The registry is reachable but holds no layers yet. Run the canonical layer seed.
       </div>
     );
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+    <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
       {layers.map((layer) => (
-        <div key={layer.key} className="card card-accent-navy" style={{ padding: 16 }}>
-          <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)", fontWeight: 600 }}>
+        <div key={layer.key} className="card card-accent-navy p-4">
+          <div className="font-serif text-[16px] text-navy font-semibold">
             {layer.name}
           </div>
-          <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 4 }}>{layer.archetype}</div>
-          <div className="eyebrow" style={{ color: "var(--gold-ink)", marginTop: 10 }}>
+          <div className="text-xs text-slate-light mt-1">{layer.archetype}</div>
+          <div className="eyebrow text-gold-ink mt-2.5">
             {layer.moduleGroup}
           </div>
         </div>
@@ -114,15 +114,15 @@ function RegistryProof() {
 export function Dashboard() {
   return (
     <div>
-      <header style={{ background: "var(--navy-deep)", color: "var(--cream-light)", padding: "40px 0" }}>
-        <div style={{ maxWidth: 1080, margin: "0 auto", padding: "0 32px" }}>
-          <div className="eyebrow" style={{ color: "var(--gold-light)", marginBottom: 10 }}>
+      <header className="bg-navy-deep text-cream-light py-10">
+        <div className="max-w-[1080px] mx-auto px-8">
+          <div className="eyebrow text-gold-light mb-2.5">
             Different Day · Elevated Intelligence V2
           </div>
-          <h1 className="font-serif" style={{ fontSize: 44, fontWeight: 700, lineHeight: 1.05 }}>
+          <h1 className="font-serif text-[44px] font-bold leading-[1.05]">
             Design Language
           </h1>
-          <p style={{ maxWidth: 640, marginTop: 12, color: "rgba(244,241,234,0.75)", fontSize: 15 }}>
+          <p className="max-w-[640px] mt-3 text-cream/75 text-body">
             The foundation of the per-tenant intelligence layer. Authority in navy, elevation in
             gold, paper in cream. Surfaces are drawn with one-pixel borders and a three-pixel top
             accent, never with shadows or gradients. This page is the living specification.
@@ -130,15 +130,15 @@ export function Dashboard() {
         </div>
       </header>
 
-      <main style={{ maxWidth: 1080, margin: "0 auto", padding: "48px 32px 96px" }}>
+      <main className="max-w-[1080px] mx-auto pt-12 px-8 pb-24">
         <Section eyebrow="Foundation" title="Palette">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
             {palette.map((s) => (
-              <div key={s.varName} className="card" style={{ padding: 0, overflow: "hidden" }}>
-                <div style={{ height: 64, background: s.hex }} />
-                <div style={{ padding: "10px 12px" }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, color: "var(--navy)" }}>{s.name}</div>
-                  <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>
+              <div key={s.varName} className="card p-0 overflow-hidden">
+                <div className="h-16" style={{ background: s.hex }} />
+                <div className="py-2.5 px-3">
+                  <div className="font-semibold text-caption text-navy">{s.name}</div>
+                  <div className="font-mono text-meta text-slate-light">
                     {s.hex}
                   </div>
                 </div>
@@ -148,22 +148,22 @@ export function Dashboard() {
         </Section>
 
         <Section eyebrow="Foundation" title="Typography">
-          <div className="card" style={{ display: "grid", gap: 16 }}>
+          <div className="card grid gap-4">
             <div>
-              <div className="eyebrow" style={{ color: "var(--slate-light)" }}>Serif · Crimson Pro</div>
-              <div className="font-serif" style={{ fontSize: 38, color: "var(--navy)", fontWeight: 700 }}>
+              <div className="eyebrow text-slate-light">Serif · Crimson Pro</div>
+              <div className="font-serif text-[38px] text-navy font-bold">
                 The diagnosis, stated plainly
               </div>
             </div>
             <div>
-              <div className="eyebrow" style={{ color: "var(--slate-light)" }}>Sans · Inter</div>
-              <div style={{ fontSize: 15, color: "var(--ink)" }}>
+              <div className="eyebrow text-slate-light">Sans · Inter</div>
+              <div className="text-body text-ink">
                 Body and interface text. Measured, quiet, and legible at small sizes.
               </div>
             </div>
             <div>
-              <div className="eyebrow" style={{ color: "var(--slate-light)" }}>Mono · JetBrains Mono</div>
-              <div className="font-mono" style={{ fontSize: 14, color: "var(--slate)" }}>
+              <div className="eyebrow text-slate-light">Mono · JetBrains Mono</div>
+              <div className="font-mono text-[14px] text-slate-base">
                 metrics · 142 · 0.62 · -3.4
               </div>
             </div>
@@ -171,11 +171,11 @@ export function Dashboard() {
         </Section>
 
         <Section eyebrow="Primitives" title="Cards and accents">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(220px,1fr))]">
             {(["navy", "coral", "teal", "gold", "amber"] as const).map((accent) => (
               <div key={accent} className={"card card-accent-" + accent}>
-                <div className="eyebrow" style={{ color: "var(--slate-light)" }}>Accent</div>
-                <div className="font-serif" style={{ fontSize: 18, color: "var(--navy)", fontWeight: 600 }}>
+                <div className="eyebrow text-slate-light">Accent</div>
+                <div className="font-serif text-[18px] text-navy font-semibold">
                   {accent}
                 </div>
               </div>
@@ -184,18 +184,18 @@ export function Dashboard() {
         </Section>
 
         <Section eyebrow="Primitives" title="Provenance, pills and actions">
-          <div className="card" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+          <div className="card flex flex-wrap gap-3 items-center">
             <span className="pill pill-verified">
-              <ShieldCheck size={13} style={{ marginRight: 4 }} /> Verified
+              <ShieldCheck size={13} className="mr-1" /> Verified
             </span>
             <span className="pill pill-modelled">
-              <Sparkles size={13} style={{ marginRight: 4 }} /> Modelled
+              <Sparkles size={13} className="mr-1" /> Modelled
             </span>
             <span className="pill pill-navy">Layer</span>
             <span className="tag tag-signal">Signal</span>
             <span className="tag tag-model">Model</span>
             <span className="tag tag-data">Data</span>
-            <div style={{ flex: 1 }} />
+            <div className="flex-1" />
             <button className="btn-ghost">Secondary</button>
             <button className="btn-primary">
               Primary <ArrowRight size={14} />
@@ -204,7 +204,7 @@ export function Dashboard() {
         </Section>
 
         <Section eyebrow="Proof" title="The canonical layer registry, consumed live">
-          <p style={{ color: "var(--slate-light)", fontSize: 14, marginBottom: 16, maxWidth: 640 }}>
+          <p className="text-slate-light text-[14px] mb-4 max-w-[640px]">
             The portal reads the fourteen layers from the registry through the api-server, the same
             source the pipeline and prompts read. Below it renders the four designed data states:
             loading, ready, empty and error.

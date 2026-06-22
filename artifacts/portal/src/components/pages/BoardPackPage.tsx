@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Check, Copy, Printer, Share2 } from "lucide-react";
-import type { MintedShareToken, OverviewLayer, ShareToken, TenantEfficacy } from "../../types";
+import type { MintedShareToken, OverviewLayer, ShareToken, TenantEfficacy, Tone } from "../../types";
 import { fetchOverview } from "../../lib/tenantApi";
 import { fetchTenantEfficacy } from "../../lib/efficacyApi";
 import { fetchShareTokens, mintShareToken, revokeShareToken } from "../../lib/sellabilityApi";
@@ -20,7 +20,6 @@ import {
   basisPillClass,
   formatDate,
   pct,
-  toneColorVar,
 } from "../primitives";
 
 type State =
@@ -29,6 +28,15 @@ type State =
   | { kind: "empty" }
   | { kind: "no-tenant" }
   | { kind: "error" };
+
+// Data-driven tone routed through the token scale, never an inline colour. The
+// strong (non-ink) variant suits the large leading display figure.
+const TONE_TEXT: Record<Tone, string> = {
+  good: "text-teal",
+  warn: "text-amber-base",
+  bad: "text-coral",
+  neutral: "text-navy",
+};
 
 // The Board Pack. A board-ready compilation of the real per-tenant intelligence:
 // per layer, the finding, the leading figure, the narrative, the recommended
@@ -72,7 +80,7 @@ export function BoardPackPage() {
     .at(-1);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 64 }}>
+    <PageWidth space="wide">
       <PageHeader
         eyebrow="Board pack"
         title={current ? current.name : "Board pack"}
@@ -86,9 +94,8 @@ export function BoardPackPage() {
         actions={
           generated.length > 0 ? (
             <button
-              className="btn-ghost"
+              className="btn-ghost inline-flex items-center gap-1.5"
               onClick={() => window.print()}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               <Printer size={14} /> Print
             </button>
@@ -102,7 +109,7 @@ export function BoardPackPage() {
         <BoardEfficacy tenantId={currentId} />
       )}
 
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The board pack could not be assembled." onRetry={() => location.reload()} />
@@ -120,7 +127,7 @@ export function BoardPackPage() {
           />
         )}
         {state.kind === "ready" && generated.length > 0 && (
-          <div style={{ display: "grid", gap: 16 }}>
+          <div className="grid gap-4">
             {generated.map((l) => (
               <BoardEntry key={l.key} layer={l} />
             ))}
@@ -158,21 +165,14 @@ function BoardEfficacy({ tenantId }: { tenantId: string }) {
     };
   }, [tenantId, logout]);
 
-  const frameStyle = {
-    padding: 18,
-    marginTop: 20,
-    display: "flex",
-    alignItems: "baseline" as const,
-    gap: 14,
-    flexWrap: "wrap" as const,
-  };
+  const frameClass = "card p-[18px] mt-5 flex items-baseline gap-3.5 flex-wrap";
   if (state.status === "loading") {
     return (
-      <section className="card" style={frameStyle}>
-        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+      <section className={frameClass}>
+        <span className="eyebrow text-slate-light">
           Data efficacy
         </span>
-        <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+        <span className="font-mono text-slate-light">
           Loading...
         </span>
       </section>
@@ -180,11 +180,11 @@ function BoardEfficacy({ tenantId }: { tenantId: string }) {
   }
   if (state.status === "error") {
     return (
-      <section className="card" style={frameStyle}>
-        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+      <section className={frameClass}>
+        <span className="eyebrow text-slate-light">
           Data efficacy
         </span>
-        <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+        <span className="font-mono text-slate-light">
           Efficacy unavailable right now
         </span>
       </section>
@@ -195,21 +195,21 @@ function BoardEfficacy({ tenantId }: { tenantId: string }) {
   const capped = state.data.modeCeiling < 100;
 
   return (
-    <section className="card" style={frameStyle}>
-      <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+    <section className={frameClass}>
+      <span className="eyebrow text-slate-light">
         Data efficacy
       </span>
       {rollup.score == null ? (
-        <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+        <span className="font-mono text-slate-light">
           - (no generated layer to score)
         </span>
       ) : (
         <>
-          <span className="font-mono" style={{ fontSize: 24, fontWeight: 600, color: "var(--navy)" }}>
+          <span className="font-mono text-section font-semibold text-navy">
             {rollup.score}
           </span>
-          <span style={{ color: "var(--slate)" }}>/ 100</span>
-          <span style={{ fontSize: 13, color: "var(--slate-light)" }}>
+          <span className="text-slate-base">/ 100</span>
+          <span className="text-caption text-slate-light">
             mean across {rollup.n} generated layer{rollup.n === 1 ? "" : "s"}
           </span>
         </>
@@ -217,7 +217,7 @@ function BoardEfficacy({ tenantId }: { tenantId: string }) {
       {capped && (
         <span
           title="Outside-in mode: the connector-grounded drivers (coverage, freshness) are structurally zero, so the index cannot reach 100. Connect data to raise the ceiling."
-          style={{ fontSize: 13, color: "var(--slate-light)" }}
+          className="text-caption text-slate-light"
         >
           ceiling {state.data.modeCeiling} (outside-in)
         </span>
@@ -232,37 +232,37 @@ function BoardEntry({ layer }: { layer: OverviewLayer }) {
   const metricLabel = layer.hero?.metricLabel ?? layer.leadMetric?.label;
 
   return (
-    <section className="card" style={{ padding: 22 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <Link to={`/layers/${layer.key}`} style={{ textDecoration: "none" }}>
-          <h2 className="font-serif" style={{ fontSize: 19, fontWeight: 700, color: "var(--navy)", margin: 0 }}>
+    <section className="card p-[22px]">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <Link to={`/layers/${layer.key}`} className="no-underline">
+          <h2 className="font-serif text-[19px] font-bold text-navy m-0">
             {layer.name}
           </h2>
         </Link>
         <Tag kind="model">{layer.archetype}</Tag>
       </div>
 
-      <div style={{ display: "flex", gap: 20, marginTop: 14, flexWrap: "wrap" }}>
+      <div className="flex gap-5 mt-3.5 flex-wrap">
         {metricValue && (
-          <div style={{ flexShrink: 0 }}>
-            <div className="font-mono" style={{ fontSize: 26, fontWeight: 500, color: toneColorVar[tone], lineHeight: 1 }}>
+          <div className="shrink-0">
+            <div className={`font-mono text-[26px] font-medium leading-none ${TONE_TEXT[tone]}`}>
               {metricValue}
             </div>
             {metricLabel && (
-              <div className="eyebrow" style={{ color: "var(--slate-light)", marginTop: 6 }}>
+              <div className="eyebrow text-slate-light mt-1.5">
                 {metricLabel}
               </div>
             )}
           </div>
         )}
-        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+        <div className="flex-[1_1_320px] min-w-0">
           {layer.headlineFinding && (
-            <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)", lineHeight: 1.45 }}>
+            <div className="font-serif text-[16px] text-navy leading-normal">
               {layer.headlineFinding}
             </div>
           )}
           {layer.narrative && (
-            <p style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.6, margin: "10px 0 0" }}>
+            <p className="text-[13.5px] text-slate-base leading-relaxed mt-2.5">
               {layer.narrative}
             </p>
           )}
@@ -270,22 +270,22 @@ function BoardEntry({ layer }: { layer: OverviewLayer }) {
       </div>
 
       {layer.topAction && (layer.topAction.title || layer.topAction.impact) && (
-        <div style={{ marginTop: 16, borderLeft: "3px solid var(--teal)", paddingLeft: 14 }}>
-          <div className="eyebrow" style={{ color: "var(--slate-light)", marginBottom: 4 }}>
+        <div className="mt-4 border-l-[3px] border-teal pl-3.5">
+          <div className="eyebrow text-slate-light mb-1">
             Recommended move
           </div>
           {layer.topAction.title && (
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>{layer.topAction.title}</div>
+            <div className="text-[14px] font-semibold text-navy">{layer.topAction.title}</div>
           )}
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+          <div className="flex gap-2.5 items-center flex-wrap mt-1.5">
             {layer.topAction.impact && (
-              <span style={{ fontSize: 13, color: "var(--slate)" }}>{layer.topAction.impact}</span>
+              <span className="text-caption text-slate-base">{layer.topAction.impact}</span>
             )}
             {layer.topAction.basis && (
               <span className={`pill ${basisPillClass(layer.topAction.basis)}`}>{basisLabel(layer.topAction.basis)}</span>
             )}
             {layer.topAction.confidence != null && (
-              <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+              <span className="eyebrow text-slate-light">
                 {pct(layer.topAction.confidence)} confidence
               </span>
             )}
@@ -294,11 +294,11 @@ function BoardEntry({ layer }: { layer: OverviewLayer }) {
       )}
 
       {layer.topGap && layer.topGap.description && (
-        <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-          <span className="eyebrow" style={{ color: "var(--amber-ink)" }}>
+        <div className="mt-3.5 flex gap-2 items-baseline flex-wrap">
+          <span className="eyebrow text-amber-ink">
             Still unknown
           </span>
-          <span style={{ fontSize: 13, color: "var(--slate)" }}>
+          <span className="text-caption text-slate-base">
             {layer.topGap.description}
             {layer.topGap.closes ? ` Closed by ${layer.topGap.closes}.` : ""}
           </span>
@@ -386,62 +386,51 @@ function ShareLinks({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <section className="card" style={{ padding: 22, marginTop: 24 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <section className="card p-[22px] mt-6">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div>
-          <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
+          <div className="eyebrow text-slate-light">
             Share
           </div>
-          <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)", marginTop: 2 }}>
+          <div className="font-serif text-[16px] text-navy mt-0.5">
             Read-only diagnosis link
           </div>
         </div>
         <button
-          className="btn-primary"
+          className="btn-primary inline-flex items-center gap-1.5"
           onClick={onMint}
           disabled={busy}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
         >
           <Share2 size={14} /> Create link
         </button>
       </div>
 
-      <p style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.6, margin: "10px 0 0" }}>
+      <p className="text-caption text-slate-base leading-relaxed mt-2.5">
         A shared link shows a board-pack summary only, with no login, no raw data, and no
         provenance. It carries the Powered by Elevated Intelligence mark and expires
         automatically.
       </p>
 
       {actionError && (
-        <div style={{ marginTop: 12, fontSize: 13, color: "var(--coral-ink)" }}>
+        <div className="mt-3 text-caption text-coral-ink">
           The link action did not complete ({actionError}).
         </div>
       )}
 
       {minted && shareUrl && (
-        <div
-          style={{
-            marginTop: 14,
-            border: "1px solid var(--cream-dark)",
-            borderRadius: 8,
-            padding: 14,
-            background: "var(--cream-light)",
-          }}
-        >
-          <div className="eyebrow" style={{ color: "var(--teal-ink)", marginBottom: 6 }}>
+        <div className="mt-3.5 border border-cream-dark rounded-lg p-3.5 bg-cream-light">
+          <div className="eyebrow text-teal-ink mb-1.5">
             New link, copy it now
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="flex gap-2 items-center flex-wrap">
             <code
-              className="font-mono"
-              style={{ fontSize: 12.5, color: "var(--navy)", wordBreak: "break-all", flex: "1 1 280px" }}
+              className="font-mono text-[12.5px] text-navy break-all flex-[1_1_280px]"
             >
               {shareUrl}
             </code>
             <button
-              className="btn-ghost"
+              className="btn-ghost inline-flex items-center gap-1.5"
               onClick={onCopy}
-              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
             >
               {copied ? (
                 <>
@@ -454,52 +443,43 @@ function ShareLinks({ tenantId }: { tenantId: string }) {
               )}
             </button>
           </div>
-          <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 8 }}>
+          <div className="text-xs text-slate-light mt-2">
             This full link is shown once and cannot be retrieved later. Expires{" "}
             {formatDate(minted.expiresAt)}.
           </div>
         </div>
       )}
 
-      <div style={{ marginTop: 16 }}>
+      <div className="mt-4">
         {loadError && (
-          <div style={{ fontSize: 13, color: "var(--coral-ink)" }}>
+          <div className="text-caption text-coral-ink">
             The existing links could not be loaded.
           </div>
         )}
         {!loadError && shares && shares.length === 0 && (
-          <div style={{ fontSize: 13, color: "var(--slate-light)" }}>No links yet.</div>
+          <div className="text-caption text-slate-light">No links yet.</div>
         )}
         {!loadError && shares && shares.length > 0 && (
-          <div style={{ display: "grid", gap: 8 }}>
+          <div className="grid gap-2">
             {shares.map((s) => (
               <div
                 key={s.id}
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  flexWrap: "wrap",
-                  borderTop: "1px solid var(--cream-dark)",
-                  paddingTop: 8,
-                }}
+                className="flex gap-2.5 items-center justify-between flex-wrap border-t border-cream-dark pt-2"
               >
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="flex gap-2 items-center flex-wrap">
                   <Pill color={s.status === "active" ? "teal" : s.status === "revoked" ? "coral" : "gray"}>
                     {s.status}
                   </Pill>
-                  <span style={{ fontSize: 13, color: "var(--slate)" }}>{s.label ?? "Untitled link"}</span>
-                  <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+                  <span className="text-caption text-slate-base">{s.label ?? "Untitled link"}</span>
+                  <span className="eyebrow text-slate-light">
                     {s.accessCount} {s.accessCount === 1 ? "view" : "views"}, expires {formatDate(s.expiresAt)}
                   </span>
                 </div>
                 {s.status === "active" && (
                   <button
-                    className="btn-ghost"
+                    className="btn-ghost text-[12.5px]"
                     onClick={() => onRevoke(s.id)}
                     disabled={busy}
-                    style={{ fontSize: 12.5 }}
                   >
                     Revoke
                   </button>

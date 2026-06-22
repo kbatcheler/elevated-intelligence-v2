@@ -66,13 +66,13 @@ export function AnomaliesPage() {
   const anomalies = state.kind === "ready" ? deriveAnomalies(state.signals, state.runs) : [];
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Anomaly inbox"
         title="What needs a second look"
         subtitle={current ? `Open items across ${current.name}'s intelligence, most urgent first.` : undefined}
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={5} />}
         {state.kind === "error" && (
           <ErrorState message="The anomaly inbox could not be loaded." onRetry={() => location.reload()} />
@@ -93,7 +93,7 @@ export function AnomaliesPage() {
           />
         )}
         {state.kind === "ready" && anomalies.length > 0 && (
-          <div style={{ display: "grid", gap: 10 }}>
+          <div className="grid gap-2.5">
             {anomalies.map((a, i) => (
               <AnomalyRow key={`${a.kind}-${a.layerKey}-${i}`} anomaly={a} />
             ))}
@@ -109,25 +109,25 @@ function AnomalyRow({ anomaly }: { anomaly: Anomaly }) {
   const metric = metricText(anomaly);
   const Icon = meta.Icon;
   return (
-    <Link to={`/layers/${anomaly.layerKey}`} style={{ textDecoration: "none" }}>
-      <div className="card" style={{ display: "flex", gap: 14, alignItems: "flex-start", padding: "16px 18px" }}>
-        <Icon size={18} color={meta.color} style={{ flexShrink: 0, marginTop: 2 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <Link to={`/layers/${anomaly.layerKey}`} className="no-underline">
+      <div className="card flex gap-3.5 items-start py-4 px-[18px]">
+        <Icon size={18} color={meta.color} className="shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`pill ${meta.pill}`}>{meta.label}</span>
-            <span className="eyebrow" style={{ color: "var(--slate-light)" }}>{anomaly.layerName}</span>
+            <span className="eyebrow text-slate-light">{anomaly.layerName}</span>
             {metric && (
-              <span className="font-mono" style={{ fontSize: 12, color: "var(--slate)", marginLeft: "auto" }}>
+              <span className="font-mono text-xs text-slate-base ml-auto">
                 {metric}
               </span>
             )}
           </div>
-          <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)", marginTop: 6 }}>
+          <div className="font-serif text-[16px] text-navy mt-1.5">
             {anomaly.title}
           </div>
-          <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, marginTop: 2 }}>{anomaly.detail}</div>
+          <div className="text-[13.5px] text-slate-base leading-normal mt-0.5">{anomaly.detail}</div>
         </div>
-        <ArrowRight size={16} color="var(--gold)" style={{ flexShrink: 0, marginTop: 2 }} />
+        <ArrowRight size={16} color="var(--gold)" className="shrink-0 mt-0.5" />
       </div>
     </Link>
   );

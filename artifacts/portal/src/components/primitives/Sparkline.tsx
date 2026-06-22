@@ -45,7 +45,7 @@ export function Sparkline({
       viewBox={`0 0 ${width} ${height}`}
       role="img"
       aria-label="Trend"
-      style={{ display: "block", overflow: "visible" }}
+      className="block overflow-visible"
     >
       <path d={line} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       <circle cx={lastX} cy={lastY} r={2.5} fill={color} />

@@ -95,18 +95,18 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
   const clientOrgs = orgs.filter(o => o.type === "client" || o.type === "portfolio");
 
   return (
-    <div style={{ display: "grid", gap: 32 }}>
+    <div className="grid gap-8">
       <div className="card card-accent-gold">
-        <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+        <h3 className="font-serif text-title font-semibold text-navy mb-4">
           Mint Invite PIN
         </h3>
         {errorMsg && (
-          <div className="alert-error" style={{ marginBottom: 16 }}>
+          <div className="alert-error mb-4">
             <TriangleAlert size={16} />
             <span>{errorMsg}</span>
           </div>
         )}
-        <form onSubmit={handleMint} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "end" }}>
+        <form onSubmit={handleMint} className="grid grid-cols-[1fr_1fr] gap-4 items-end">
           <div>
             <label className="label-base">Label (optional)</label>
             <input className="input-base" value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Acme Corp Batch" />
@@ -130,17 +130,17 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
               </select>
             </div>
           )}
-          <div style={{ display: "flex", gap: 16 }}>
-            <div style={{ flex: 1 }}>
+          <div className="flex gap-4">
+            <div className="flex-1">
               <label className="label-base">Max Uses</label>
               <input type="number" min={1} className="input-base" value={maxUses} onChange={e => setMaxUses(parseInt(e.target.value))} />
             </div>
-            <div style={{ flex: 1 }}>
+            <div className="flex-1">
               <label className="label-base">Expires In (Days)</label>
               <input type="number" min={1} className="input-base" value={expiresInDays} onChange={e => setExpiresInDays(parseInt(e.target.value))} />
             </div>
           </div>
-          <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+          <div className="col-span-full flex justify-end">
             <button type="submit" className="btn-primary" disabled={minting}>
               {minting ? <Loader2 size={16} className="animate-spin" /> : "Mint PIN"}
             </button>
@@ -148,12 +148,12 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
         </form>
 
         {mintedCode && (
-          <div style={{ marginTop: 24, padding: 24, background: "var(--cream-light)", border: "1px dashed var(--gold)", borderRadius: 4, textAlign: "center" }}>
-            <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 8 }}>Copy it now, it will not be shown again</div>
-            <div className="font-mono" style={{ fontSize: 32, color: "var(--navy)", fontWeight: 500, marginBottom: 16, letterSpacing: "0.1em" }}>
+          <div className="mt-6 p-6 bg-cream-light border border-dashed border-gold rounded text-center">
+            <div className="eyebrow text-coral-ink mb-2">Copy it now, it will not be shown again</div>
+            <div className="font-mono text-[32px] text-navy font-medium mb-4 tracking-[0.1em]">
               {mintedCode}
             </div>
-            <button onClick={copyCode} className="btn-ghost" style={{ margin: "0 auto" }}>
+            <button onClick={copyCode} className="btn-ghost mx-auto">
               {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy to Clipboard</>}
             </button>
           </div>
@@ -161,18 +161,18 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
       </div>
 
       <div>
-        <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+        <h3 className="font-serif text-title font-semibold text-navy mb-4">
           Existing PINs
         </h3>
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="card p-0 overflow-hidden">
           {state === "loading" ? (
-            <div style={{ padding: 24 }}><div className="skeleton" style={{ height: 100 }} /></div>
+            <div className="p-6"><div className="skeleton h-25" /></div>
           ) : state === "error" ? (
-            <div style={{ padding: 24, color: "var(--red)" }}>Failed to load PINs.</div>
+            <div className="p-6 text-red-base">Failed to load PINs.</div>
           ) : state === "empty" ? (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--slate-light)" }}>No PINs have been minted yet.</div>
+            <div className="p-8 text-center text-slate-light">No PINs have been minted yet.</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
+            <div className="overflow-x-auto">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -188,19 +188,19 @@ export function PinsPanel({ orgs }: { orgs: { id: string; name: string; type: st
                   {pins.map(pin => (
                     <tr key={pin.id}>
                       <td>
-                        <div style={{ fontWeight: 500, color: "var(--navy)" }}>{pin.label || "Untitled"}</div>
-                        <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>{pin.id.slice(0, 8)}...</div>
+                        <div className="font-medium text-navy">{pin.label || "Untitled"}</div>
+                        <div className="font-mono text-meta text-slate-light">{pin.id.slice(0, 8)}...</div>
                       </td>
                       <td>{getStatePill(pin.state)}</td>
                       <td>
                         <div className="tag tag-data">{pin.scopeRole}</div>
-                        {pin.scopeOrgId && <div style={{ fontSize: 11, color: "var(--slate-light)", marginTop: 4 }}>Org: {pin.scopeOrgId.slice(0, 8)}</div>}
+                        {pin.scopeOrgId && <div className="text-meta text-slate-light mt-1">Org: {pin.scopeOrgId.slice(0, 8)}</div>}
                       </td>
                       <td><span className="font-mono">{pin.useCount} / {pin.maxUses}</span></td>
                       <td>{new Date(pin.createdAt).toLocaleDateString()}</td>
                       <td>
                         {pin.state === "active" && (
-                          <button onClick={() => handleRevoke(pin.id)} className="btn-ghost" style={{ height: 24, padding: "0 8px", fontSize: 11 }}>
+                          <button onClick={() => handleRevoke(pin.id)} className="btn-ghost h-6 px-2 py-0 text-meta">
                             Revoke
                           </button>
                         )}

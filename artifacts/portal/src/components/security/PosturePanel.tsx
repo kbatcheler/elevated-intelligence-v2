@@ -73,16 +73,16 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
   const { key } = state;
 
   return (
-    <div style={{ display: "grid", gap: 28 }}>
+    <div className="grid gap-7">
       <div className="card">
         <SectionHeading eyebrow="Encryption" title="Per-tenant data key" />
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div className="flex items-center gap-3 flex-wrap">
           <KeyStatusPill status={key.status} />
           {key.status === "revoked" && key.revokedAt && (
-            <span style={{ fontSize: 13, color: "var(--slate)" }}>Revoked {formatDateTime(key.revokedAt)}</span>
+            <span className="text-caption text-slate-base">Revoked {formatDateTime(key.revokedAt)}</span>
           )}
         </div>
-        <p style={{ fontSize: 14, color: "var(--slate)", marginTop: 14, marginBottom: 0, lineHeight: 1.5, maxWidth: 640 }}>
+        <p className="text-[14px] text-slate-base mt-3.5 mb-0 leading-normal max-w-[640px]">
           {key.status === "active" &&
             "A per-tenant key encrypts this tenant's human signals at rest. Revoking it crypto-shreds the data: the ciphertext remains but can never be decrypted again."}
           {key.status === "revoked" &&
@@ -91,11 +91,11 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
             "No key has been provisioned for this tenant yet. Provision one to encrypt human signals at rest."}
         </p>
         {actionError && (
-          <div className="alert-error" style={{ marginTop: 16 }}>
+          <div className="alert-error mt-4">
             <span>{actionError}</span>
           </div>
         )}
-        <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="flex gap-2.5 mt-[18px] flex-wrap items-center">
           {key.status !== "active" && (
             <button className="btn-primary" onClick={provision} disabled={busy}>
               {busy ? (
@@ -114,10 +114,10 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
           )}
           {key.status === "active" && confirmRevoke && (
             <>
-              <span style={{ fontSize: 13, color: "var(--coral-ink)", fontWeight: 600 }}>
+              <span className="text-caption text-coral-ink font-semibold">
                 This permanently shreds this tenant's signals. Continue?
               </span>
-              <button className="btn-primary" onClick={revoke} disabled={busy} style={{ background: "var(--coral)" }}>
+              <button className="btn-primary bg-coral" onClick={revoke} disabled={busy}>
                 {busy ? <Loader2 size={16} className="animate-spin" /> : "Yes, revoke"}
               </button>
               <button className="btn-ghost" onClick={() => setConfirmRevoke(false)} disabled={busy}>
@@ -130,7 +130,7 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
 
       <div>
         <SectionHeading eyebrow="Key management" title="Key management service" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div className="grid grid-cols-2 gap-4">
           <KmsCard title="Active KMS" kms={key.kms} />
           <KmsCard title="Customer-managed KMS" kms={key.customerKms} />
         </div>
@@ -143,17 +143,17 @@ export function PosturePanel({ tenantId }: { tenantId: string }) {
 
 function KmsCard({ title, kms }: { title: string; kms: KmsStatus }) {
   return (
-    <div className="card" style={{ display: "grid", gap: 10 }}>
-      <div className="eyebrow" style={{ color: "var(--gold-ink)" }}>
+    <div className="card grid gap-2.5">
+      <div className="eyebrow text-gold-ink">
         {title}
       </div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span className="font-mono" style={{ fontSize: 14, color: "var(--navy)" }}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[14px] text-navy">
           {kms.provider}
         </span>
         <ConnectedPill connected={kms.connected} />
       </div>
-      <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{kms.detail}</div>
+      <div className="text-caption text-slate-base leading-normal">{kms.detail}</div>
     </div>
   );
 }

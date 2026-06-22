@@ -5,4 +5,5 @@ export * from "./MetricTile";
 export * from "./DataState";
 export * from "./Breadcrumbs";
 export * from "./ReasoningStrip";
+export * from "./Signature";
 export * from "./layout";

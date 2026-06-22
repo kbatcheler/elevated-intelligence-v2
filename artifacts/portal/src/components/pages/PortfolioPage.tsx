@@ -57,13 +57,13 @@ export function PortfolioPage() {
   }, [load]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 96 }}>
+    <PageWidth space="tall">
       <PageHeader
         eyebrow="Portfolio"
         title="Portfolio intelligence"
         subtitle="Every company you hold on one board, ranked by the value still on the table. Identified value is the sum of committed predictions, realized is the sum of measured outcomes, and the difference is what is unrealized. A company with no numeric prediction shows a dash, never a fabricated figure."
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={8} />}
         {state.kind === "forbidden" && (
           <EmptyState
@@ -90,7 +90,7 @@ function PortfolioBody({ data }: { data: PortfolioSummary }) {
     );
   }
   return (
-    <div style={{ display: "grid", gap: 32 }}>
+    <div className="grid gap-8">
       <TotalsPanel data={data} />
       <PatternsPanel patterns={data.patterns} />
       <RankedPanel tenants={data.tenants} />
@@ -106,7 +106,7 @@ function TotalsPanel({ data }: { data: PortfolioSummary }) {
         eyebrow={data.scope.type === "provider" ? "All companies" : data.scope.orgName ?? "Portfolio"}
         title="Across the portfolio"
       />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 16 }}>
+      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(170px,1fr))] gap-4">
         <MetricTile label="Companies" value={formatInt(t.tenantCount)} />
         <MetricTile label="Value on the table" value={formatUsd(t.unrealizedValueUsd)} tone="warn" />
         <MetricTile label="Value identified" value={formatUsd(t.valueIdentifiedUsd)} />
@@ -132,31 +132,23 @@ function PatternsPanel({ patterns }: { patterns: PortfolioPattern[] }) {
           message="A pattern appears once two or more companies share the same gap in the same layer. With fewer companies or no overlap, each company's gaps live in its own diagnosis."
         />
       ) : (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div className="grid gap-3">
           {patterns.map((p) => (
-            <div key={`${p.layerKey}:${p.kind ?? "UNKNOWN"}`} className="card" style={{ padding: 18 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                  <span className="font-serif" style={{ fontSize: 17, color: "var(--navy)" }}>
+            <div key={`${p.layerKey}:${p.kind ?? "UNKNOWN"}`} className="card p-[18px]">
+              <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="font-serif text-lead text-navy">
                     {p.affectedTenants} of {p.totalTenants} companies
                   </span>
                   <Pill color={SEVERITY_COLOR[p.severity]}>{p.severity}</Pill>
                   {p.kind && <Pill color="navy">{p.kind}</Pill>}
                 </div>
-                <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+                <span className="eyebrow text-slate-light">
                   {p.layerName}
                 </span>
               </div>
               {p.examples.length > 0 && (
-                <ul style={{ margin: "12px 0 0", paddingLeft: 18, color: "var(--slate)", fontSize: 14, lineHeight: 1.5 }}>
+                <ul className="mt-3 pl-[18px] text-slate-base text-[14px] leading-normal">
                   {p.examples.map((ex, i) => (
                     <li key={i}>{ex}</li>
                   ))}
@@ -180,11 +172,11 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
   return (
     <div>
       <SectionHeading eyebrow="Ranked" title="Companies by value on the table" />
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="card p-0 overflow-hidden">
         <div className="table-scroll">
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+        <table className="w-full border-collapse text-[14px]">
           <thead>
-            <tr style={{ borderBottom: "1px solid var(--border)" }}>
+            <tr className="border-b border-border-base">
               <Th align="right">#</Th>
               <Th align="left">Company</Th>
               <Th align="right">On the table</Th>
@@ -198,15 +190,15 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
           </thead>
           <tbody>
             {tenants.map((t) => (
-              <tr key={t.tenantId} style={{ borderTop: "1px solid var(--cream-dark)" }}>
+              <tr key={t.tenantId} className="border-t border-cream-dark">
                 <Td align="right">
-                  <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+                  <span className="font-mono text-slate-light">
                     {t.rank}
                   </span>
                 </Td>
                 <Td>
-                  <span style={{ color: "var(--navy)", fontWeight: 600 }}>{t.tenantName}</span>
-                  <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 2 }}>
+                  <span className="text-navy font-semibold">{t.tenantName}</span>
+                  <div className="text-xs text-slate-light mt-0.5">
                     {t.generatedLayers} of {t.totalLayers} layers
                     {t.completeness.missing.length > 0 &&
                       ` - missing ${t.completeness.missing.map(labelMissing).join(", ")}`}
@@ -214,41 +206,40 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
                 </Td>
                 <Td align="right">
                   <span
-                    className="font-mono"
-                    style={{ color: t.unrealizedValueUsd == null ? "var(--slate-light)" : "var(--coral-ink)" }}
+                    className={`font-mono ${t.unrealizedValueUsd == null ? "text-slate-light" : "text-coral-ink"}`}
                   >
                     {formatUsd(t.unrealizedValueUsd)}
                   </span>
                 </Td>
                 <Td align="right">
-                  <span className="font-mono" style={{ color: "var(--navy)" }}>
+                  <span className="font-mono text-navy">
                     {formatUsd(t.valueIdentifiedUsd)}
                   </span>
                 </Td>
                 <Td align="right">
-                  <span className="font-mono" style={{ color: "var(--teal-ink)" }}>
+                  <span className="font-mono text-teal-ink">
                     {formatUsd(t.valueRealizedUsd)}
                   </span>
                 </Td>
                 <Td align="right">
-                  <span className="font-mono" style={{ color: "var(--slate)" }}>
+                  <span className="font-mono text-slate-base">
                     {t.overallConfidence == null ? "-" : pct(t.overallConfidence)}
                   </span>
                 </Td>
                 <Td align="right">
                   {t.efficacyScore == null ? (
-                    <span className="font-mono" style={{ color: "var(--slate-light)" }}>
+                    <span className="font-mono text-slate-light">
                       -
                     </span>
                   ) : (
                     <span
                       title={`Data efficacy ${t.efficacyScore} of 100 across ${t.efficacyLayers} generated layer(s); #${t.efficacyRank} by data quality in this portfolio.`}
-                      style={{ display: "inline-flex", gap: 6, alignItems: "baseline" }}
+                      className="inline-flex gap-1.5 items-baseline"
                     >
-                      <span className="font-mono" style={{ color: "var(--navy)", fontWeight: 600 }}>
+                      <span className="font-mono text-navy font-semibold">
                         {t.efficacyScore}
                       </span>
-                      <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+                      <span className="text-xs text-slate-light">
                         #{t.efficacyRank}
                       </span>
                     </span>
@@ -256,10 +247,10 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
                 </Td>
                 <Td>
                   {t.openGaps.total === 0 ? (
-                    <span style={{ color: "var(--slate-light)" }}>none</span>
+                    <span className="text-slate-light">none</span>
                   ) : (
-                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      <span className="font-mono" style={{ color: "var(--navy)" }}>
+                    <span className="inline-flex gap-1.5 items-center flex-wrap">
+                      <span className="font-mono text-navy">
                         {t.openGaps.total}
                       </span>
                       {t.openGaps.high > 0 && <Pill color="coral">{t.openGaps.high} high</Pill>}
@@ -286,8 +277,7 @@ function RankedPanel({ tenants }: { tenants: PortfolioTenant[] }) {
 function Th({ children, align = "left" }: { children?: React.ReactNode; align?: "left" | "right" }) {
   return (
     <th
-      className="eyebrow"
-      style={{ textAlign: align, padding: "12px 16px", color: "var(--slate-light)", fontWeight: 600 }}
+      className={`eyebrow py-3 px-4 text-slate-light font-semibold ${align === "right" ? "text-right" : "text-left"}`}
     >
       {children}
     </th>
@@ -295,5 +285,5 @@ function Th({ children, align = "left" }: { children?: React.ReactNode; align?: 
 }
 
 function Td({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return <td style={{ textAlign: align, padding: "12px 16px" }}>{children}</td>;
+  return <td className={`py-3 px-4 ${align === "right" ? "text-right" : "text-left"}`}>{children}</td>;
 }

@@ -24,21 +24,20 @@ export function IngestionPanel({ tenants }: { tenants: Tenant[] }) {
 
   if (tenants.length === 0) {
     return (
-      <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--slate-light)" }}>
+      <div className="card p-8 text-center text-slate-light">
         No tenants exist yet. Create a tenant before configuring ingestion.
       </div>
     );
   }
 
   return (
-    <div style={{ display: "grid", gap: 32 }}>
+    <div className="grid gap-8">
       <div>
         <label className="label-base">Tenant</label>
         <select
-          className="input-base"
+          className="input-base max-w-[420px]"
           value={tenantId}
           onChange={(e) => setTenantId(e.target.value)}
-          style={{ maxWidth: 420 }}
         >
           <option value="">Select a tenant...</option>
           {tenants.map((t) => (
@@ -50,7 +49,7 @@ export function IngestionPanel({ tenants }: { tenants: Tenant[] }) {
       </div>
 
       {tenantId === "" ? (
-        <div className="card" style={{ padding: 32, textAlign: "center", color: "var(--slate-light)" }}>
+        <div className="card p-8 text-center text-slate-light">
           Select a tenant to manage its ingestion keys, webhook sources, and uploads.
         </div>
       ) : (
@@ -72,22 +71,11 @@ function RevealBox({ title, value, hint }: { title: string; value: string; hint:
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <div
-      style={{
-        marginTop: 24,
-        padding: 24,
-        background: "var(--cream-light)",
-        border: "1px dashed var(--gold)",
-        borderRadius: 4,
-      }}
-    >
-      <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 8 }}>
+    <div className="mt-6 p-6 bg-cream-light border border-dashed border-gold rounded">
+      <div className="eyebrow text-coral-ink mb-2">
         {title} - {hint}
       </div>
-      <div
-        className="font-mono"
-        style={{ fontSize: 14, color: "var(--navy)", wordBreak: "break-all", marginBottom: 16 }}
-      >
+      <div className="font-mono text-[14px] text-navy break-all mb-4">
         {value}
       </div>
       <button onClick={copy} className="btn-ghost">
@@ -160,21 +148,21 @@ function KeysSection({ tenantId, logout }: { tenantId: string; logout: () => voi
 
   return (
     <div className="card card-accent-gold">
-      <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+      <h3 className="font-serif text-title font-semibold text-navy mb-4">
         Ingestion Keys
       </h3>
-      <p style={{ color: "var(--slate-light)", fontSize: 13, marginBottom: 16 }}>
+      <p className="text-slate-light text-caption mb-4">
         Bearer keys for the Ingestion API, SFTP drop, and MCP server. Hashed at rest and
         revocable; the token is shown once at mint.
       </p>
       {errorMsg && (
-        <div className="alert-error" style={{ marginBottom: 16 }}>
+        <div className="alert-error mb-4">
           <TriangleAlert size={16} />
           <span>{errorMsg}</span>
         </div>
       )}
-      <form onSubmit={handleMint} style={{ display: "flex", gap: 16, alignItems: "end" }}>
-        <div style={{ flex: 1 }}>
+      <form onSubmit={handleMint} className="flex gap-4 items-end">
+        <div className="flex-1">
           <label className="label-base">Label</label>
           <input
             className="input-base"
@@ -193,17 +181,17 @@ function KeysSection({ tenantId, logout }: { tenantId: string; logout: () => voi
         <RevealBox title="Ingestion key" value={minted.token} hint="copy it now, it will not be shown again" />
       )}
 
-      <div style={{ marginTop: 24 }}>
+      <div className="mt-6">
         {state === "loading" ? (
-          <div className="skeleton" style={{ height: 80 }} />
+          <div className="skeleton h-20" />
         ) : state === "error" ? (
-          <div style={{ color: "var(--red)" }}>Failed to load ingestion keys.</div>
+          <div className="text-red-base">Failed to load ingestion keys.</div>
         ) : state === "empty" ? (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--slate-light)" }}>
+          <div className="p-6 text-center text-slate-light">
             No ingestion keys minted for this tenant.
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
@@ -218,8 +206,8 @@ function KeysSection({ tenantId, logout }: { tenantId: string; logout: () => voi
                 {keys.map((k) => (
                   <tr key={k.id}>
                     <td>
-                      <div style={{ fontWeight: 500, color: "var(--navy)" }}>{k.label}</div>
-                      <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>
+                      <div className="font-medium text-navy">{k.label}</div>
+                      <div className="font-mono text-meta text-slate-light">
                         {k.id.slice(0, 8)}...
                       </div>
                     </td>
@@ -230,8 +218,7 @@ function KeysSection({ tenantId, logout }: { tenantId: string; logout: () => voi
                       {k.status === "active" && (
                         <button
                           onClick={() => handleRevoke(k.id)}
-                          className="btn-ghost"
-                          style={{ height: 24, padding: "0 8px", fontSize: 11 }}
+                          className="btn-ghost h-6 px-2 py-0 text-meta"
                         >
                           Revoke
                         </button>
@@ -304,21 +291,21 @@ function WebhookSection({ tenantId, logout }: { tenantId: string; logout: () => 
 
   return (
     <div className="card">
-      <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+      <h3 className="font-serif text-title font-semibold text-navy mb-4">
         Webhook Sources
       </h3>
-      <p style={{ color: "var(--slate-light)", fontSize: 13, marginBottom: 16 }}>
+      <p className="text-slate-light text-caption mb-4">
         Each source has its own signing secret and delivery path. Payloads are
         HMAC-verified; the secret is sealed under the tenant key and shown once.
       </p>
       {errorMsg && (
-        <div className="alert-error" style={{ marginBottom: 16 }}>
+        <div className="alert-error mb-4">
           <TriangleAlert size={16} />
           <span>{errorMsg}</span>
         </div>
       )}
-      <form onSubmit={handleMint} style={{ display: "flex", gap: 16, alignItems: "end" }}>
-        <div style={{ flex: 1 }}>
+      <form onSubmit={handleMint} className="flex gap-4 items-end">
+        <div className="flex-1">
           <label className="label-base">Label</label>
           <input
             className="input-base"
@@ -328,7 +315,7 @@ function WebhookSection({ tenantId, logout }: { tenantId: string; logout: () => 
             required
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="flex-1">
           <label className="label-base">Target Layer</label>
           <input
             className="input-base"
@@ -354,17 +341,17 @@ function WebhookSection({ tenantId, logout }: { tenantId: string; logout: () => 
         </>
       )}
 
-      <div style={{ marginTop: 24 }}>
+      <div className="mt-6">
         {state === "loading" ? (
-          <div className="skeleton" style={{ height: 80 }} />
+          <div className="skeleton h-20" />
         ) : state === "error" ? (
-          <div style={{ color: "var(--red)" }}>Failed to load webhook sources.</div>
+          <div className="text-red-base">Failed to load webhook sources.</div>
         ) : state === "empty" ? (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--slate-light)" }}>
+          <div className="p-6 text-center text-slate-light">
             No webhook sources configured for this tenant.
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
@@ -379,8 +366,8 @@ function WebhookSection({ tenantId, logout }: { tenantId: string; logout: () => 
                 {sources.map((s) => (
                   <tr key={s.id}>
                     <td>
-                      <div style={{ fontWeight: 500, color: "var(--navy)" }}>{s.label}</div>
-                      <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>
+                      <div className="font-medium text-navy">{s.label}</div>
+                      <div className="font-mono text-meta text-slate-light">
                         {s.id.slice(0, 8)}...
                       </div>
                     </td>
@@ -393,8 +380,7 @@ function WebhookSection({ tenantId, logout }: { tenantId: string; logout: () => 
                       {s.status === "active" && (
                         <button
                           onClick={() => handleRevoke(s.id)}
-                          className="btn-ghost"
-                          style={{ height: 24, padding: "0 8px", fontSize: 11 }}
+                          className="btn-ghost h-6 px-2 py-0 text-meta"
                         >
                           Revoke
                         </button>
@@ -442,22 +428,22 @@ function UploadSection({ tenantId, logout }: { tenantId: string; logout: () => v
 
   return (
     <div className="card">
-      <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+      <h3 className="font-serif text-title font-semibold text-navy mb-4">
         Manual Upload
       </h3>
-      <p style={{ color: "var(--slate-light)", fontSize: 13, marginBottom: 16 }}>
+      <p className="text-slate-light text-caption mb-4">
         Upload a spreadsheet (.csv, .xlsx) or contract (.pdf, .docx). The file is parsed in
         memory, only numeric math is stored, and the raw bytes are discarded. The result
         below shows exactly what was derived versus what was discarded.
       </p>
       {errorMsg && (
-        <div className="alert-error" style={{ marginBottom: 16 }}>
+        <div className="alert-error mb-4">
           <TriangleAlert size={16} />
           <span>{errorMsg}</span>
         </div>
       )}
-      <form onSubmit={handleUpload} style={{ display: "flex", gap: 16, alignItems: "end" }}>
-        <div style={{ flex: 1 }}>
+      <form onSubmit={handleUpload} className="flex gap-4 items-end">
+        <div className="flex-1">
           <label className="label-base">Target Layer</label>
           <input
             className="input-base"
@@ -467,7 +453,7 @@ function UploadSection({ tenantId, logout }: { tenantId: string; logout: () => v
             required
           />
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="flex-1">
           <label className="label-base">File</label>
           <input
             type="file"
@@ -489,46 +475,39 @@ function UploadSection({ tenantId, logout }: { tenantId: string; logout: () => v
       </form>
 
       {report && (
-        <div
-          style={{
-            marginTop: 24,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 16,
-          }}
-        >
-          <div style={{ padding: 20, background: "var(--cream-light)", borderRadius: 4 }}>
-            <div className="eyebrow" style={{ color: "var(--teal-ink)", marginBottom: 12 }}>
+        <div className="mt-6 grid grid-cols-[1fr_1fr] gap-4">
+          <div className="p-5 bg-cream-light rounded">
+            <div className="eyebrow text-teal-ink mb-3">
               Derived and stored ({report.signalsCount})
             </div>
-            <div style={{ fontSize: 12, color: "var(--slate-light)", marginBottom: 8 }}>
+            <div className="text-xs text-slate-light mb-2">
               {report.fileType.toUpperCase()} - {report.kind} - layer {report.layer}
             </div>
-            <ul className="font-mono" style={{ fontSize: 12, color: "var(--navy)", paddingLeft: 16, margin: 0 }}>
+            <ul className="font-mono text-xs text-navy pl-4 m-0">
               {report.derived.map((d, i) => (
                 <li key={i}>{d}</li>
               ))}
             </ul>
-            <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)", marginTop: 12, wordBreak: "break-all" }}>
+            <div className="font-mono text-meta text-slate-light mt-3 break-all">
               root {report.rootHash.slice(0, 24)}...
             </div>
           </div>
-          <div style={{ padding: 20, background: "var(--cream-light)", borderRadius: 4 }}>
-            <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 12 }}>
+          <div className="p-5 bg-cream-light rounded">
+            <div className="eyebrow text-coral-ink mb-3">
               Discarded
             </div>
-            <div style={{ fontSize: 13, color: "var(--navy)", marginBottom: 8 }}>
+            <div className="text-caption text-navy mb-2">
               {report.discarded.filename} - {report.discarded.bytes} bytes
             </div>
             {report.discarded.rawRows != null && (
-              <div style={{ fontSize: 13, color: "var(--navy)" }}>{report.discarded.rawRows} raw rows</div>
+              <div className="text-caption text-navy">{report.discarded.rawRows} raw rows</div>
             )}
             {report.discarded.rawTextChars != null && (
-              <div style={{ fontSize: 13, color: "var(--navy)" }}>
+              <div className="text-caption text-navy">
                 {report.discarded.rawTextChars} raw text characters
               </div>
             )}
-            <div style={{ fontSize: 12, color: "var(--slate-light)", marginTop: 12, fontStyle: "italic" }}>
+            <div className="text-xs text-slate-light mt-3 italic">
               {report.discarded.note}
             </div>
           </div>

@@ -59,9 +59,9 @@ function ShellInner({ role }: { role: UserRole }) {
   if (!booted) return <BootSplash onDone={finishBoot} />;
 
   return (
-    <div className="scroll-area" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <div className="scroll-area h-full flex flex-col">
       <TopNav />
-      <div className="scroll-area app-scroll" style={{ flex: 1, overflowY: "auto" }}>
+      <div className="scroll-area app-scroll flex-1 overflow-y-auto">
         <Routes role={role} />
       </div>
     </div>
@@ -143,12 +143,12 @@ function Routes({ role }: { role: UserRole }) {
 
 function NotFound() {
   return (
-    <PageWidth style={{ paddingTop: 48, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <EmptyState
         title="Page not found"
         message="This surface does not exist."
         action={
-          <Link to="/" className="btn-primary" style={{ textDecoration: "none" }}>
+          <Link to="/" className="btn-primary no-underline">
             Back to the brief
           </Link>
         }

@@ -2,7 +2,16 @@ import React from "react";
 import type { ArchetypeHeroProps } from "./types";
 import { GenericHero } from "./GenericHero";
 import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend } from "./shared";
-import { heroToneInkVar } from "./types";
+import type { Tone } from "../../types";
+
+// The AA-passing ink colour class per tone for the stage value, indexed by the
+// metric tone so the colour stays data-driven without inline style.
+const stageValueClass: Record<Tone, string> = {
+  good: "text-teal-ink",
+  warn: "text-amber-ink",
+  bad: "text-coral-ink",
+  neutral: "text-navy",
+};
 
 // Flow and funnel: the headline metric and trend, then the leading metrics
 // stacked as ordered stages with downward connectors. The stages are the real
@@ -24,27 +33,17 @@ export function FlowFunnelHero({ entry, detail }: ArchetypeHeroProps) {
       <HeroRead>{panel.one_line_read || detail.content.headline_finding}</HeroRead>
 
       {stages.length > 1 && (
-        <div style={{ display: "grid", gap: 6, marginTop: 18, maxWidth: 420 }}>
+        <div className="grid gap-1.5 mt-[18px] max-w-[420px]">
           {stages.map((m, i) => (
             <React.Fragment key={i}>
               {i > 0 && (
-                <span aria-hidden style={{ textAlign: "center", color: "var(--slate-light)", fontSize: 14, lineHeight: 1 }}>
+                <span aria-hidden className="text-center text-slate-light text-[14px] leading-none">
                   &darr;
                 </span>
               )}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "baseline",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  border: "1px solid var(--cream-dark)",
-                  borderRadius: 8,
-                  padding: "9px 12px",
-                }}
-              >
-                <span style={{ fontSize: 13, color: "var(--slate)" }}>{m.label}</span>
-                <span className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: `var(--${heroToneInkVar(m.tone)})` }}>
+              <div className="flex items-baseline justify-between gap-3 border border-cream-dark rounded-lg py-[9px] px-3">
+                <span className="text-caption text-slate-base">{m.label}</span>
+                <span className={`font-mono text-[16px] font-medium ${stageValueClass[m.tone]}`}>
                   {m.value}
                 </span>
               </div>

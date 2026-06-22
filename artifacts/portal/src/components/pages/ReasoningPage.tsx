@@ -59,7 +59,7 @@ export function ReasoningPage() {
   }, [currentId, logout]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Intelligence"
         title="Intelligence architecture"
@@ -69,7 +69,7 @@ export function ReasoningPage() {
             : "The fixed reasoning engine behind every layer."
         }
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The intelligence architecture could not be loaded." onRetry={() => location.reload()} />
@@ -111,18 +111,11 @@ function Architecture({
   const seats = Object.entries(arch.seats);
 
   return (
-    <div style={{ display: "grid", gap: 40 }}>
+    <div className="grid gap-10">
       <section>
         <SectionHeading eyebrow="Seats" title="Who does the reasoning" />
         <TelemetryNote hasTenant={hasTenant} hasRuns={runs.length > 0} runsError={runsError} tenantName={tenantName} />
-        <div
-          style={{
-            display: "grid",
-            gap: 16,
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-            marginTop: 16,
-          }}
-        >
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))] mt-4">
           {seats.map(([name, seat]) => (
             <SeatCard key={name} name={name} provider={seat.provider} model={seat.model} agg={agg.get(name) ?? null} />
           ))}
@@ -131,36 +124,35 @@ function Architecture({
 
       <section>
         <SectionHeading eyebrow="Pipeline" title="The reasoning stages, in order" />
-        <div style={{ display: "grid", gap: 8 }}>
+        <div className="grid gap-2">
           {arch.stages.map((stage, i) => (
             <div
               key={`${stage.name}-${i}`}
-              className="card"
-              style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 18px", flexWrap: "wrap" }}
+              className="card flex items-center gap-4 py-3.5 px-[18px] flex-wrap"
             >
-              <span className="font-mono" style={{ fontSize: 13, color: "var(--slate-light)", width: 24, flexShrink: 0 }}>
+              <span className="font-mono text-caption text-slate-light w-6 shrink-0">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>
+              <div className="flex-[1_1_220px] min-w-0">
+                <div className="font-serif text-[16px] text-navy">
                   {stage.name}
                 </div>
-                <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.4, marginTop: 2 }}>{stage.role}</div>
+                <div className="text-caption text-slate-base leading-snug mt-0.5">{stage.role}</div>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", minWidth: 0 }}>
+              <div className="flex flex-col gap-1.5 items-end min-w-0">
                 <span className={`pill pill-navy`}>{stage.seat}</span>
-                <span className="font-mono" style={{ fontSize: 12, color: "var(--slate-light)" }}>
+                <span className="font-mono text-xs text-slate-light">
                   {stage.provider} / {stage.model}
                 </span>
               </div>
-              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+              <div className="flex gap-2 shrink-0">
                 {stage.webSearch && (
-                  <span className="pill pill-blue" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                  <span className="pill pill-blue inline-flex gap-1 items-center">
                     <Globe size={11} /> Web search
                   </span>
                 )}
                 {stage.grounding && (
-                  <span className="pill pill-teal" style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                  <span className="pill pill-teal inline-flex gap-1 items-center">
                     <Anchor size={11} /> Grounded
                   </span>
                 )}

@@ -34,41 +34,53 @@
   --font-serif: 'Crimson Pro', Georgia, serif;
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* The portal type scale, named so a size lives in one place and reads as
+     intent (text-caption, text-lead) rather than a magic number. The signature
+     surfaces and primitives speak this scale. */
+  --text-meta: 11px;
+  --text-caption: 13px;
+  --text-body: 15px;
+  --text-lead: 17px;
+  --text-title: 20px;
+  --text-section: 24px;
+  --text-display: 28px;
 }
 
 :root {
-  --cream: #F4F1EA;
-  --cream-light: #FAF8F2;
-  --cream-dark: #E8E2D2;
-  --paper: #FFFFFF;
-  --border: #E5E2D8;
-  --navy: #1B2A4E;
-  --navy-deep: #0F1A33;
-  --navy-soft: #4A5878;
-  --gold: #C8A24A;
-  --gold-light: #E5C97B;
-  /* gold-ink: the AA-passing gold for text on light surfaces. Brand gold stays
-     for accents, fills, and gold on dark. */
-  --gold-ink: #826930;
-  --slate: #3F4858;
-  /* slate-light darkened to clear AA (4.5:1) for captions on the cream page. */
-  --slate-light: #666D7A;
-  --ink: #1F1F1F;
-  --coral: #D85A30;
-  --coral-ink: #B04927;
-  --coral-faint: #FBE8DF;
-  --teal: #1D9E75;
-  --teal-ink: #177B5B;
-  --teal-faint: #E1F5EE;
-  --amber: #BA7517;
-  --amber-ink: #975F13;
-  --amber-faint: #FAEEDA;
-  --red: #A32D2D;
-  --red-faint: #FCEBEB;
-  --blue: #185FA5;
-  --blue-faint: #E6F1FB;
-  --purple: #534AB7;
-  --purple-faint: #EEEDFE;
+  /* Legacy variable names alias the @theme tokens above. This keeps a single
+     source of truth for every colour: change a value once in @theme and both the
+     generated Tailwind utilities (text-navy, bg-paper) and the var(--navy)
+     references in component CSS and primitives move together. The AA notes that
+     justified gold-ink and slate-light live on their @theme tokens. */
+  --cream: var(--color-cream);
+  --cream-light: var(--color-cream-light);
+  --cream-dark: var(--color-cream-dark);
+  --paper: var(--color-paper);
+  --border: var(--color-border-base);
+  --navy: var(--color-navy);
+  --navy-deep: var(--color-navy-deep);
+  --navy-soft: var(--color-navy-soft);
+  --gold: var(--color-gold);
+  --gold-light: var(--color-gold-light);
+  --gold-ink: var(--color-gold-ink);
+  --slate: var(--color-slate-base);
+  --slate-light: var(--color-slate-light);
+  --ink: var(--color-ink);
+  --coral: var(--color-coral);
+  --coral-ink: var(--color-coral-ink);
+  --coral-faint: var(--color-coral-faint);
+  --teal: var(--color-teal);
+  --teal-ink: var(--color-teal-ink);
+  --teal-faint: var(--color-teal-faint);
+  --amber: var(--color-amber-base);
+  --amber-ink: var(--color-amber-ink);
+  --amber-faint: var(--color-amber-faint);
+  --red: var(--color-red-base);
+  --red-faint: var(--color-red-faint);
+  --blue: var(--color-blue-base);
+  --blue-faint: var(--color-blue-faint);
+  --purple: var(--color-purple-base);
+  --purple-faint: var(--color-purple-faint);
 }
 
 html, body, #root {
@@ -84,275 +96,359 @@ body {
   line-height: 1.55;
 }
 
-.font-serif { font-family: 'Crimson Pro', Georgia, serif; }
-.font-sans  { font-family: 'Inter', system-ui, sans-serif; }
-.font-mono  { font-family: var(--font-mono); }
-
-.eyebrow {
-  font-family: 'Inter', sans-serif;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  line-height: 1.3;
-}
-
-.card {
-  background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 24px;
-  position: relative;
-}
-
-.card-hero { padding: 32px; }
-
-.card-accent-coral::before,
-.card-accent-navy::before,
-.card-accent-teal::before,
-.card-accent-gold::before,
-.card-accent-amber::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  border-radius: 4px 4px 0 0;
-}
-.card-accent-coral::before { background: var(--coral); }
-.card-accent-navy::before  { background: var(--navy); }
-.card-accent-teal::before  { background: var(--teal); }
-.card-accent-gold::before  { background: var(--gold); }
-.card-accent-amber::before { background: var(--amber); }
-
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 4px;
-  border: 1px solid var(--navy);
-  background: transparent;
-  color: var(--navy);
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-.btn-ghost:hover:not(:disabled) { background: var(--cream-light); }
-.btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 14px;
-  border-radius: 4px;
-  border: 1px solid var(--navy);
-  background: var(--navy);
-  color: var(--cream-light);
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 120ms ease;
-}
-.btn-primary:hover:not(:disabled) { background: var(--navy-deep); }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 10px;
-  border-radius: 11px;
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-/* Pill text uses the AA-passing ink shades on their faint backgrounds; the
-   faint background keeps the hue, the ink text keeps it legible. */
-.pill-coral { background: var(--coral-faint); color: var(--coral-ink); }
-.pill-teal  { background: var(--teal-faint);  color: var(--teal-ink); }
-.pill-amber { background: var(--amber-faint); color: var(--amber-ink); }
-.pill-navy  { background: #E8ECF4; color: var(--navy); }
-.pill-blue  { background: var(--blue-faint);  color: var(--blue); }
-.pill-purple{ background: var(--purple-faint); color: var(--purple); }
-
-.pill-verified { background: var(--teal-faint); color: var(--teal-ink); }
-.pill-modelled { background: var(--amber-faint); color: var(--amber-ink); }
-.pill-gray { background: var(--cream-dark); color: var(--slate); }
-.pill-red { background: var(--red-faint); color: var(--red); }
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 2px;
-  font-family: 'Inter', sans-serif;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-.tag-data     { background: var(--blue-faint);   color: var(--blue); }
-.tag-integ    { background: var(--purple-faint); color: var(--purple); }
-.tag-model    { background: var(--coral-faint);  color: var(--coral-ink); }
-.tag-workflow { background: var(--teal-faint);   color: var(--teal-ink); }
-.tag-signal   { background: var(--amber-faint);  color: var(--amber-ink); }
-
 @keyframes shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
-.skeleton {
-  background: linear-gradient(90deg, var(--cream-dark) 25%, var(--cream-light) 37%, var(--cream-dark) 63%);
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-  border-radius: 4px;
+
+/* The gold value sweep: a thin gold rule that wipes in once from the left over
+   120ms. No loop. It plays on mount, and GoldUnderlineSweep remounts it (via a
+   key) when a value is recomputed so the wipe replays exactly once per refresh. */
+@keyframes gold-sweep {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
 
-.scroll-area {
-  scrollbar-width: thin;
-  scrollbar-color: var(--cream-dark) transparent;
-}
-.scroll-area::-webkit-scrollbar { width: 6px; }
-.scroll-area::-webkit-scrollbar-thumb { background: var(--cream-dark); border-radius: 3px; }
+/* Component classes live in the components layer so a Tailwind utility (which
+   sits in the later utilities layer) reliably overrides a single property, e.g.
+   className="card p-0" or "btn-ghost text-coral-ink". Unlayered global rules
+   (the focus ring, the responsive media queries) come after and win over both,
+   which is what an accessibility or small-screen override should do. */
+@layer components {
+  .font-serif { font-family: 'Crimson Pro', Georgia, serif; }
+  .font-sans  { font-family: 'Inter', system-ui, sans-serif; }
+  .font-mono  { font-family: var(--font-mono); }
 
-/* Forms additions */
-.input-base {
-  height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: 'Inter', sans-serif;
-  font-size: 14px;
-  width: 100%;
-  transition: border-color 120ms ease;
-  outline: none;
-}
-.input-base:focus {
-  border-color: var(--navy-soft);
-}
-.input-base:focus-visible {
-  outline: 2px solid var(--navy-soft);
-  outline-offset: 1px;
-  border-color: var(--navy-soft);
-}
-.input-base:disabled {
-  background: var(--cream-light);
-  color: var(--slate-light);
-  cursor: not-allowed;
-}
+  .eyebrow {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    line-height: 1.3;
+  }
 
-select.input-base {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233F4858' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  padding-right: 32px;
-}
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    position: relative;
+  }
 
-.label-base {
-  display: block;
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--navy);
-  margin-bottom: 6px;
-}
+  .card-hero { padding: 32px; }
 
-/* Tables */
-.table-base {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.table-base th, .table-base td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-.table-base th {
-  font-weight: 600;
-  color: var(--slate);
-  background: var(--cream-light);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.table-base tr:last-child td {
-  border-bottom: none;
-}
+  .card-accent-coral::before,
+  .card-accent-navy::before,
+  .card-accent-teal::before,
+  .card-accent-gold::before,
+  .card-accent-amber::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 4px 4px 0 0;
+  }
+  .card-accent-coral::before { background: var(--coral); }
+  .card-accent-navy::before  { background: var(--navy); }
+  .card-accent-teal::before  { background: var(--teal); }
+  .card-accent-gold::before  { background: var(--gold); }
+  .card-accent-amber::before { background: var(--amber); }
 
-.alert-error {
-  background: var(--red-faint);
-  border: 1px solid var(--red);
-  color: var(--red);
-  padding: 12px 16px;
-  border-radius: 4px;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 4px;
+    border: 1px solid var(--navy);
+    background: transparent;
+    color: var(--navy);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .btn-ghost:hover:not(:disabled) { background: var(--cream-light); }
+  .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 4px;
+    border: 1px solid var(--navy);
+    background: var(--navy);
+    color: var(--cream-light);
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--navy-deep); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 10px;
+    border-radius: 11px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  /* Pill text uses the AA-passing ink shades on their faint backgrounds; the
+     faint background keeps the hue, the ink text keeps it legible. */
+  .pill-coral { background: var(--coral-faint); color: var(--coral-ink); }
+  .pill-teal  { background: var(--teal-faint);  color: var(--teal-ink); }
+  .pill-amber { background: var(--amber-faint); color: var(--amber-ink); }
+  .pill-navy  { background: #E8ECF4; color: var(--navy); }
+  .pill-blue  { background: var(--blue-faint);  color: var(--blue); }
+  .pill-purple{ background: var(--purple-faint); color: var(--purple); }
+
+  .pill-verified { background: var(--teal-faint); color: var(--teal-ink); }
+  .pill-modelled { background: var(--amber-faint); color: var(--amber-ink); }
+  .pill-gray { background: var(--cream-dark); color: var(--slate); }
+  .pill-red { background: var(--red-faint); color: var(--red); }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 2px;
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .tag-data     { background: var(--blue-faint);   color: var(--blue); }
+  .tag-integ    { background: var(--purple-faint); color: var(--purple); }
+  .tag-model    { background: var(--coral-faint);  color: var(--coral-ink); }
+  .tag-workflow { background: var(--teal-faint);   color: var(--teal-ink); }
+  .tag-signal   { background: var(--amber-faint);  color: var(--amber-ink); }
+
+  .skeleton {
+    background: linear-gradient(90deg, var(--cream-dark) 25%, var(--cream-light) 37%, var(--cream-dark) 63%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    border-radius: 4px;
+  }
+
+  .scroll-area {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cream-dark) transparent;
+  }
+  .scroll-area::-webkit-scrollbar { width: 6px; }
+  .scroll-area::-webkit-scrollbar-thumb { background: var(--cream-dark); border-radius: 3px; }
+
+  /* Forms */
+  .input-base {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    width: 100%;
+    transition: border-color 120ms ease;
+    outline: none;
+  }
+  .input-base:focus {
+    border-color: var(--navy-soft);
+  }
+  .input-base:focus-visible {
+    outline: 2px solid var(--navy-soft);
+    outline-offset: 1px;
+    border-color: var(--navy-soft);
+  }
+  .input-base:disabled {
+    background: var(--cream-light);
+    color: var(--slate-light);
+    cursor: not-allowed;
+  }
+
+  select.input-base {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%233F4858' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 32px;
+  }
+
+  .label-base {
+    display: block;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--navy);
+    margin-bottom: 6px;
+  }
+
+  /* Tables */
+  .table-base {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .table-base th, .table-base td {
+    padding: 12px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-base th {
+    font-weight: 600;
+    color: var(--slate);
+    background: var(--cream-light);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .table-base tr:last-child td {
+    border-bottom: none;
+  }
+
+  .alert-error {
+    background: var(--red-faint);
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 12px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Shared layout chrome as classes (not inline styles) so a media query can
+     adjust them. The horizontal measure lives here; vertical breathing room is
+     applied by the PageWidth primitive from a named space scale (Tailwind pt/pb
+     utilities), which the utilities layer lets override the padding here. */
+  .page-width {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .top-nav-row {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .top-nav-bar {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  /* A horizontal-scroll guard so a wide table never forces the whole page
+     sideways on a narrow screen. */
+  .table-scroll {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  /* A plain bordered surface: the card without its 24px padding, so a tile can
+     set its own. Used by the metric tile and the small bordered boxes that
+     previously hand-rolled the same border + radius + paper inline. */
+  .surface {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+  .surface-cream { background: var(--cream-light); }
+  .surface-dashed { border-style: dashed; border-color: var(--cream-dark); }
+
+  /* The signature serif diagnosis: one confident conclusion set in the serif at
+     a fluid size that stays readable from 375px up, on a comfortable reading
+     measure. This is the voice of the Morning Brief and the public diagnosis. */
+  .serif-diagnosis {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-weight: 600;
+    color: var(--navy);
+    font-size: clamp(22px, 4.5vw, 30px);
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    max-width: 34ch;
+    text-wrap: balance;
+  }
+  .serif-diagnosis-lead {
+    font-size: clamp(27px, 6vw, 42px);
+    line-height: 1.12;
+    max-width: 22ch;
+  }
+
+  /* A quiet metadata row: small, slate, wraps on a narrow screen. Replaces the
+     repeated inline flex-wrap caption rows under headings and figures. */
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    font-size: 12px;
+    color: var(--slate-light);
+  }
+
+  /* The gold underline sweep marks a value as freshly computed. The line wipes
+     in once with the gold-sweep keyframe (no library, no loop); reduced motion
+     holds it fully drawn. These classes place the value and the line beneath. */
+  .gold-sweep {
+    position: relative;
+    display: inline-block;
+  }
+  .gold-sweep-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -3px;
+    height: 2px;
+    background: var(--gold);
+    transform-origin: left center;
+    border-radius: 1px;
+    animation: gold-sweep 120ms ease-out both;
+  }
 }
 
 /* Accessibility: a visible keyboard focus ring on every interactive surface.
    :focus-visible only fires for keyboard navigation, so a mouse click does not
-   draw the ring. This replaces the input outline that was suppressed for the
-   resting state. */
+   draw the ring. Unlayered so it wins over any component or utility class. */
 :focus-visible {
   outline: 2px solid var(--navy-soft);
   outline-offset: 2px;
 }
 
-/* Shared layout chrome as classes (not inline styles) so a media query can
-   adjust them: an inline style object outranks a class on specificity, so the
-   responsive measure has to live on a class to be overridable at small widths. */
-.page-width {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 0 24px;
-}
-
-.top-nav-row {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 12px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.top-nav-bar {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 0 24px;
-  display: flex;
-  gap: 4px;
-  overflow-x: auto;
-}
-
-/* A horizontal-scroll guard so a wide table never forces the whole page
-   sideways on a narrow screen. */
-.table-scroll {
-  width: 100%;
-  overflow-x: auto;
+/* Reduced motion: the shimmer and the value sweep are decorative, so when the OS
+   asks for reduced motion they hold still rather than animate. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+  .gold-sweep-line { animation: none; transform: scaleX(1); }
 }
 
 @media (max-width: 480px) {
   body { font-size: 14px; }
-  .page-width { padding: 0 16px; }
+  /* Only the horizontal measure narrows; the vertical space utilities from the
+     PageWidth primitive are left intact. */
+  .page-width { padding-left: 16px; padding-right: 16px; }
   .top-nav-row { padding: 10px 16px; gap: 10px; }
   .top-nav-bar { padding: 0 10px; }
   /* Operator and admin tables (the admin console, Break-glass, Onboarding) carry

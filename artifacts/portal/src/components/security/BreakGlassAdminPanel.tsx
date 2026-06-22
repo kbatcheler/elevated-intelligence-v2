@@ -120,35 +120,34 @@ export function BreakGlassAdminPanel({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <div style={{ display: "grid", gap: 32 }}>
+    <div className="grid gap-8">
       <div className="card card-accent-gold">
-        <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+        <h3 className="font-serif text-title font-semibold text-navy mb-4">
           Grant break-glass access
         </h3>
         {formError && (
-          <div className="alert-error" style={{ marginBottom: 16 }}>
+          <div className="alert-error mb-4">
             <span>{formError}</span>
           </div>
         )}
-        <form onSubmit={handleCreate} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "end" }}>
+        <form onSubmit={handleCreate} className="grid grid-cols-2 gap-4 items-end">
           <div>
             <label className="label-base">User</label>
             {users.kind === "loading" ? (
-              <div className="skeleton" style={{ height: 38 }} />
+              <div className="skeleton h-[38px]" />
             ) : users.kind === "error" ? (
-              <div style={{ fontSize: 13, color: "var(--red)", padding: "9px 0" }}>
+              <div className="text-caption text-red-base py-[9px]">
                 The user list could not be loaded.{" "}
                 <button
                   type="button"
-                  className="btn-ghost"
-                  style={{ height: 24, padding: "0 8px", fontSize: 11 }}
+                  className="btn-ghost h-6 px-2 text-meta"
                   onClick={loadUsers}
                 >
                   Retry
                 </button>
               </div>
             ) : users.kind === "empty" ? (
-              <div style={{ fontSize: 13, color: "var(--slate-light)", padding: "9px 0" }}>
+              <div className="text-caption text-slate-light py-[9px]">
                 No users are available to grant access to.
               </div>
             ) : (
@@ -173,7 +172,7 @@ export function BreakGlassAdminPanel({ tenantId }: { tenantId: string }) {
               onChange={(e) => setExpiresInMinutes(parseInt(e.target.value) || 1)}
             />
           </div>
-          <div style={{ gridColumn: "1 / -1" }}>
+          <div className="col-span-full">
             <label className="label-base">Reason (recorded in the audit log)</label>
             <input
               className="input-base"
@@ -183,7 +182,7 @@ export function BreakGlassAdminPanel({ tenantId }: { tenantId: string }) {
               maxLength={500}
             />
           </div>
-          <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+          <div className="col-span-full flex justify-end">
             <button type="submit" className="btn-primary" disabled={creating || users.kind !== "ready"}>
               {creating ? <Loader2 size={16} className="animate-spin" /> : "Grant access"}
             </button>
@@ -194,7 +193,7 @@ export function BreakGlassAdminPanel({ tenantId }: { tenantId: string }) {
       <div>
         <SectionHeading eyebrow="Standing grants" title="Break-glass grants" />
         {revokeError && (
-          <div className="alert-error" style={{ marginBottom: 16 }}>
+          <div className="alert-error mb-4">
             <span>{revokeError}</span>
           </div>
         )}
@@ -219,19 +218,19 @@ function GrantsTable({
   userLabel: (id: string) => string;
 }) {
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <div className="card p-0 overflow-hidden">
       {state.kind === "loading" ? (
-        <div style={{ padding: 24 }}>
-          <div className="skeleton" style={{ height: 80 }} />
+        <div className="p-6">
+          <div className="skeleton h-20" />
         </div>
       ) : state.kind === "error" ? (
-        <div style={{ padding: 24, color: "var(--red)" }}>Grants could not be loaded.</div>
+        <div className="p-6 text-red-base">Grants could not be loaded.</div>
       ) : state.kind === "empty" ? (
-        <div style={{ padding: 32, textAlign: "center", color: "var(--slate-light)" }}>
+        <div className="p-8 text-center text-slate-light">
           No break-glass grants have been issued for this tenant.
         </div>
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div className="overflow-x-auto">
           <table className="table-base">
             <thead>
               <tr>
@@ -248,8 +247,8 @@ function GrantsTable({
                 const s = grantStatus(g);
                 return (
                   <tr key={g.id}>
-                    <td style={{ fontWeight: 500, color: "var(--navy)" }}>{userLabel(g.userId)}</td>
-                    <td style={{ maxWidth: 280, color: "var(--slate)" }}>{g.reason}</td>
+                    <td className="font-medium text-navy">{userLabel(g.userId)}</td>
+                    <td className="max-w-[280px] text-slate-base">{g.reason}</td>
                     <td>{formatDateTime(g.grantedAt)}</td>
                     <td>{formatDateTime(g.expiresAt)}</td>
                     <td>
@@ -259,8 +258,7 @@ function GrantsTable({
                       {s.active && (
                         <button
                           onClick={() => onRevoke(g.id)}
-                          className="btn-ghost"
-                          style={{ height: 24, padding: "0 8px", fontSize: 11 }}
+                          className="btn-ghost h-6 px-2 text-meta"
                         >
                           Revoke
                         </button>
@@ -279,19 +277,19 @@ function GrantsTable({
 
 function EventsTable({ state, userLabel }: { state: ListState<AccessEvent>; userLabel: (id: string) => string }) {
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <div className="card p-0 overflow-hidden">
       {state.kind === "loading" ? (
-        <div style={{ padding: 24 }}>
-          <div className="skeleton" style={{ height: 80 }} />
+        <div className="p-6">
+          <div className="skeleton h-20" />
         </div>
       ) : state.kind === "error" ? (
-        <div style={{ padding: 24, color: "var(--red)" }}>Access events could not be loaded.</div>
+        <div className="p-6 text-red-base">Access events could not be loaded.</div>
       ) : state.kind === "empty" ? (
-        <div style={{ padding: 32, textAlign: "center", color: "var(--slate-light)" }}>
+        <div className="p-8 text-center text-slate-light">
           No access has been recorded against this tenant yet.
         </div>
       ) : (
-        <div style={{ overflowX: "auto" }}>
+        <div className="overflow-x-auto">
           <table className="table-base">
             <thead>
               <tr>
@@ -305,11 +303,11 @@ function EventsTable({ state, userLabel }: { state: ListState<AccessEvent>; user
               {state.items.map((ev) => (
                 <tr key={ev.id}>
                   <td>{formatDateTime(ev.createdAt)}</td>
-                  <td style={{ color: "var(--navy)" }}>{userLabel(ev.userId)}</td>
+                  <td className="text-navy">{userLabel(ev.userId)}</td>
                   <td>
                     <span className="tag tag-signal">{ev.action}</span>
                   </td>
-                  <td className="font-mono" style={{ fontSize: 12, color: "var(--slate)" }}>
+                  <td className="font-mono text-xs text-slate-base">
                     {ev.detail ?? "-"}
                   </td>
                 </tr>

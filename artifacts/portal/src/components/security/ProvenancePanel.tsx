@@ -33,7 +33,7 @@ export function ProvenancePanel({ tenantId }: { tenantId: string }) {
   }, [load]);
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
+    <div className="grid gap-5">
       <SectionHeading
         eyebrow="Provenance"
         title="Signal ledger integrity"
@@ -53,11 +53,11 @@ export function ProvenancePanel({ tenantId }: { tenantId: string }) {
 function VerifyResultCard({ result }: { result: VerifyResult }) {
   if (result.ok) {
     return (
-      <div className="card card-accent-teal" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-        <CheckCircle2 size={18} color="var(--teal)" style={{ flexShrink: 0, marginTop: 2 }} />
+      <div className="card card-accent-teal flex gap-3 items-start">
+        <CheckCircle2 size={18} color="var(--teal)" className="shrink-0 mt-0.5" />
         <div>
-          <div style={{ fontWeight: 600, color: "var(--navy)", marginBottom: 4 }}>Chain intact</div>
-          <div style={{ fontSize: 13, color: "var(--slate)" }}>
+          <div className="font-semibold text-navy mb-1">Chain intact</div>
+          <div className="text-caption text-slate-base">
             All {result.length} {result.length === 1 ? "entry" : "entries"} hash-link cleanly back to the genesis record. No tampering detected.
           </div>
         </div>
@@ -65,13 +65,13 @@ function VerifyResultCard({ result }: { result: VerifyResult }) {
     );
   }
   return (
-    <div className="card card-accent-coral" style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-      <AlertTriangle size={18} color="var(--coral)" style={{ flexShrink: 0, marginTop: 2 }} />
+    <div className="card card-accent-coral flex gap-3 items-start">
+      <AlertTriangle size={18} color="var(--coral)" className="shrink-0 mt-0.5" />
       <div>
-        <div style={{ fontWeight: 600, color: "var(--coral-ink)", marginBottom: 4 }}>
+        <div className="font-semibold text-coral-ink mb-1">
           Chain broken{typeof result.brokenAt === "number" ? ` at entry #${result.brokenAt}` : ""}
         </div>
-        <div style={{ fontSize: 13, color: "var(--slate)" }}>
+        <div className="text-caption text-slate-base">
           {result.detail ?? "The ledger failed verification."} Chain length at failure: {result.length}.
         </div>
       </div>

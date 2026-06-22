@@ -13,13 +13,13 @@ import { TenantGate } from "../security/shared";
 // list. Values are rendered exactly as decrypted and never cached or exported.
 export function BreakGlassPage() {
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 96 }}>
+    <PageWidth space="tall">
       <PageHeader
         eyebrow="Break-glass"
         title="Human signal read"
         subtitle="Decrypted human signals for the current tenant. Reachable only under an active, owner-approved break-glass grant. Every read is recorded."
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         <TenantGate>{(tenantId) => <SignalsReader tenantId={tenantId} />}</TenantGate>
       </div>
     </PageWidth>
@@ -109,8 +109,8 @@ function SignalsReader({ tenantId }: { tenantId: string }) {
   }
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ overflowX: "auto" }}>
+    <div className="card p-0 overflow-hidden">
+      <div className="overflow-x-auto">
         <table className="table-base">
           <thead>
             <tr>
@@ -125,18 +125,18 @@ function SignalsReader({ tenantId }: { tenantId: string }) {
           <tbody>
             {state.signals.map((s, i) => (
               <tr key={`${s.layerKey}:${s.signalKey}:${i}`}>
-                <td className="font-mono" style={{ fontSize: 12, color: "var(--navy)" }}>
+                <td className="font-mono text-xs text-navy">
                   {s.layerKey}
                 </td>
-                <td className="font-mono" style={{ fontSize: 12, color: "var(--navy)" }}>
+                <td className="font-mono text-xs text-navy">
                   {s.signalKey}
                 </td>
-                <td className="font-mono" style={{ fontSize: 12, color: "var(--slate)" }}>
+                <td className="font-mono text-xs text-slate-base">
                   {formatValue(s.value)}
                 </td>
-                <td style={{ fontSize: 12, color: "var(--slate)" }}>{s.window ?? "-"}</td>
-                <td style={{ fontSize: 12, color: "var(--slate)" }}>{s.sourceConnectorKey ?? "-"}</td>
-                <td style={{ fontSize: 12, color: "var(--slate)" }}>{formatDateTime(s.computedAt)}</td>
+                <td className="text-xs text-slate-base">{s.window ?? "-"}</td>
+                <td className="text-xs text-slate-base">{s.sourceConnectorKey ?? "-"}</td>
+                <td className="text-xs text-slate-base">{formatDateTime(s.computedAt)}</td>
               </tr>
             ))}
           </tbody>
@@ -167,13 +167,13 @@ function Notice({
   body: string;
 }) {
   return (
-    <div className={`card card-accent-${tone}`} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-      <div style={{ flexShrink: 0, marginTop: 2 }}>{icon}</div>
+    <div className={`card card-accent-${tone} flex gap-3 items-start`}>
+      <div className="shrink-0 mt-0.5">{icon}</div>
       <div>
-        <div style={{ fontWeight: 600, color: tone === "coral" ? "var(--coral-ink)" : "var(--navy)", marginBottom: 4 }}>
+        <div className={`font-semibold mb-1 ${tone === "coral" ? "text-coral-ink" : "text-navy"}`}>
           {title}
         </div>
-        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{body}</div>
+        <div className="text-caption text-slate-base leading-normal">{body}</div>
       </div>
     </div>
   );

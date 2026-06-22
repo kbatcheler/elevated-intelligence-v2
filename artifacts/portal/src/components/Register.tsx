@@ -29,22 +29,22 @@ export function Register({ onSwitch }: { onSwitch: () => void }) {
   };
 
   return (
-    <div className="card card-accent-gold" style={{ maxWidth: 400, width: "100%", margin: "0 auto" }}>
-      <h2 className="font-serif" style={{ fontSize: 24, fontWeight: 600, color: "var(--navy)", marginBottom: 8 }}>
+    <div className="card card-accent-gold max-w-[400px] w-full mx-auto">
+      <h2 className="font-serif text-section font-semibold text-navy mb-2">
         Create Account
       </h2>
-      <p style={{ fontSize: 14, color: "var(--slate-light)", marginBottom: 24 }}>
+      <p className="text-[14px] text-slate-light mb-6">
         Join the intelligence layer with your invite PIN.
       </p>
 
       {errorMsg && (
-        <div className="alert-error" style={{ marginBottom: 20 }}>
+        <div className="alert-error mb-5">
           <TriangleAlert size={16} />
           <span>{errorMsg}</span>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div>
           <label className="label-base" htmlFor="email">Email</label>
           <input
@@ -90,14 +90,14 @@ export function Register({ onSwitch }: { onSwitch: () => void }) {
             required
           />
         </div>
-        <button type="submit" className="btn-primary" style={{ marginTop: 8, height: 40 }} disabled={loading}>
+        <button type="submit" className="btn-primary mt-2 h-10" disabled={loading}>
           {loading ? <Loader2 size={16} className="animate-spin" /> : "Create Account"}
         </button>
       </form>
 
-      <div style={{ marginTop: 24, textAlign: "center", fontSize: 13, color: "var(--slate-light)" }}>
+      <div className="mt-6 text-center text-caption text-slate-light">
         Already have an account?{" "}
-        <button onClick={onSwitch} style={{ color: "var(--navy)", fontWeight: 600, cursor: "pointer" }}>
+        <button onClick={onSwitch} className="text-navy font-semibold cursor-pointer">
           Sign In
         </button>
       </div>

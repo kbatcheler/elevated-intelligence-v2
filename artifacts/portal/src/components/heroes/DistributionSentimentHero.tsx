@@ -23,7 +23,7 @@ export function DistributionSentimentHero({ entry, detail }: ArchetypeHeroProps)
       <HeroRead>{panel.one_line_read || detail.content.headline_finding}</HeroRead>
 
       {chips.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
+        <div className="flex flex-wrap gap-2 mt-[18px]">
           {chips.map((m, i) => (
             <ToneChip key={i} label={m.label} value={m.value} tone={m.tone} />
           ))}

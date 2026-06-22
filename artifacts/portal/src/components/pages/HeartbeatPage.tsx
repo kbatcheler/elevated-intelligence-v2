@@ -89,7 +89,7 @@ export function HeartbeatPage() {
   const live = state.kind === "ready" && state.runs.some((r) => r.status === "queued" || r.status === "running");
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Data heartbeat"
         title="Feeds and how alive they are"
@@ -97,21 +97,14 @@ export function HeartbeatPage() {
         actions={
           state.kind === "ready" ? (
             <span
-              className="pill"
-              style={{
-                background: live ? "var(--blue-faint)" : "var(--cream-dark)",
-                color: live ? "var(--blue)" : "var(--slate)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-              }}
+              className={`pill inline-flex items-center gap-1.5 ${live ? "bg-blue-faint text-blue-base" : "bg-cream-dark text-slate-base"}`}
             >
               <Activity size={12} /> {live ? "Updating live" : "At rest"}
             </span>
           ) : undefined
         }
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The data heartbeat could not be loaded." onRetry={() => location.reload()} />
@@ -129,7 +122,7 @@ export function HeartbeatPage() {
           <EmptyState title="No feeds declared" message="No layer in the registry declares a data feed." />
         )}
         {state.kind === "ready" && pulses.length > 0 && (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className="grid gap-3">
             {pulses.map((p) => (
               <PulseRow key={p.feed} pulse={p} />
             ))}
@@ -143,42 +136,36 @@ export function HeartbeatPage() {
 function PulseRow({ pulse }: { pulse: FeedPulse }) {
   const alive = pulse.lastFinishedAt != null;
   return (
-    <div className="card" style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+    <div className="card grid gap-3">
+      <div className="flex items-center gap-2.5 flex-wrap">
         <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            background: alive ? "var(--teal)" : "var(--slate-light)",
-            flexShrink: 0,
-          }}
+          className={`w-2 h-2 rounded shrink-0 ${alive ? "bg-teal" : "bg-slate-light"}`}
         />
-        <span className="font-mono" style={{ fontSize: 14, color: "var(--navy)" }}>
+        <span className="font-mono text-[14px] text-navy">
           {pulse.feed}
         </span>
-        <span className="eyebrow" style={{ color: "var(--slate-light)", marginLeft: "auto" }}>
+        <span className="eyebrow text-slate-light ml-auto">
           {alive ? `Last active ${formatDateTime(pulse.lastFinishedAt)}` : "Not run yet"}
         </span>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 8px", alignItems: "center" }}>
-        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>Consumed by</span>
+      <div className="flex flex-wrap gap-y-1.5 gap-x-2 items-center">
+        <span className="eyebrow text-slate-light">Consumed by</span>
         {pulse.consumingLayers.map((l) => (
-          <Link key={l.key} to={`/layers/${l.key}`} className="pill pill-navy" style={{ textDecoration: "none" }}>
+          <Link key={l.key} to={`/layers/${l.key}`} className="pill pill-navy no-underline">
             {l.name}
           </Link>
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 18, flexWrap: "wrap", fontSize: 12.5, color: "var(--slate)" }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <div className="flex gap-[18px] flex-wrap text-[12.5px] text-slate-base">
+        <span className="inline-flex items-center gap-[5px]">
           <LayersIcon size={13} color="var(--slate-light)" /> {formatInt(pulse.runCount)} runs
         </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+        <span className="inline-flex items-center gap-[5px]">
           <Search size={13} color="var(--slate-light)" /> {formatInt(pulse.searchCalls)} search calls
         </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+        <span className="inline-flex items-center gap-[5px]">
           <Clock size={13} color="var(--slate-light)" /> {formatDuration(pulse.totalDurationMs)} compute
         </span>
       </div>

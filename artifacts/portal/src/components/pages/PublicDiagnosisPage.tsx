@@ -4,6 +4,7 @@ import type {
   PoweredByMark,
   PublicDiagnosis,
   PublicDiagnosisLayer,
+  Tone,
 } from "../../types";
 import { fetchPublicDiagnosis } from "../../lib/publicApi";
 import { withBase } from "../../lib/router";
@@ -19,7 +20,6 @@ import {
   basisPillClass,
   formatUsd,
   pct,
-  toneColorVar,
 } from "../primitives";
 
 // The public, unauthenticated shareable diagnosis (Phase AB). It renders OUTSIDE
@@ -36,6 +36,15 @@ type State =
   | { kind: "ready"; diagnosis: PublicDiagnosis }
   | { kind: "unavailable" }
   | { kind: "error" };
+
+// Data-driven tone routed through the token scale. The ink variants are AA on the
+// light card surface at any figure size.
+const TONE_INK: Record<Tone, string> = {
+  good: "text-teal-ink",
+  warn: "text-amber-ink",
+  bad: "text-coral-ink",
+  neutral: "text-navy",
+};
 
 export function PublicDiagnosisPage({ token }: { token: string }) {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -58,15 +67,15 @@ export function PublicDiagnosisPage({ token }: { token: string }) {
     state.kind === "ready" ? state.diagnosis.layers.filter((l) => l.generated) : [];
 
   return (
-    <div className="scroll-area" style={{ height: "100%", overflowY: "auto", background: "var(--cream)" }}>
-      <PageWidth style={{ paddingTop: 28, paddingBottom: 64 }}>
+    <div className="scroll-area h-full overflow-y-auto bg-cream">
+      <PageWidth space="wide">
         <PageHeader
           eyebrow="Shared diagnosis"
           title="Diagnosis"
           subtitle="A read-only summary, shared with you. No account needed."
         />
 
-        <div style={{ marginTop: 28 }}>
+        <div className="mt-7">
           {state.kind === "loading" && <SkeletonLines lines={6} />}
           {state.kind === "error" && (
             <ErrorState
@@ -87,7 +96,7 @@ export function PublicDiagnosisPage({ token }: { token: string }) {
             />
           )}
           {state.kind === "ready" && generated.length > 0 && (
-            <div style={{ display: "grid", gap: 16 }}>
+            <div className="grid gap-4">
               {generated.map((l) => (
                 <PublicLayerCard key={l.key} layer={l} />
               ))}
@@ -103,76 +112,60 @@ export function PublicDiagnosisPage({ token }: { token: string }) {
 }
 
 function PublicLayerCard({ layer }: { layer: PublicDiagnosisLayer }) {
-  const tone = layer.hero?.tone ?? layer.leadMetric?.tone ?? "neutral";
+  const tone: Tone = layer.hero?.tone ?? layer.leadMetric?.tone ?? "neutral";
   const metricValue = layer.hero?.metricValue ?? layer.leadMetric?.value;
   const metricLabel = layer.hero?.metricLabel ?? layer.leadMetric?.label;
 
   return (
-    <section className="card" style={{ padding: 22 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <h2 className="font-serif" style={{ fontSize: 19, fontWeight: 700, color: "var(--navy)", margin: 0 }}>
-          {layer.name}
-        </h2>
+    <section className="card p-6">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h2 className="font-serif text-title font-bold text-navy m-0">{layer.name}</h2>
         <Tag kind="model">{layer.archetype}</Tag>
       </div>
 
-      <div style={{ display: "flex", gap: 20, marginTop: 14, flexWrap: "wrap" }}>
+      <div className="flex gap-5 mt-3.5 flex-wrap">
         {metricValue && (
-          <div style={{ flexShrink: 0 }}>
-            <div className="font-mono" style={{ fontSize: 26, fontWeight: 500, color: toneColorVar[tone], lineHeight: 1 }}>
+          <div className="shrink-0">
+            <div className={`font-mono text-section font-medium leading-none break-words ${TONE_INK[tone]}`}>
               {metricValue}
             </div>
-            {metricLabel && (
-              <div className="eyebrow" style={{ color: "var(--slate-light)", marginTop: 6 }}>
-                {metricLabel}
-              </div>
-            )}
+            {metricLabel && <div className="eyebrow text-slate-light mt-1.5">{metricLabel}</div>}
           </div>
         )}
-        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+        <div className="flex-[1_1_320px] min-w-0">
           {layer.headlineFinding && (
-            <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)", lineHeight: 1.45 }}>
-              {layer.headlineFinding}
-            </div>
+            <div className="font-serif text-[16px] text-navy leading-snug">{layer.headlineFinding}</div>
           )}
           {layer.narrative && (
-            <p style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.6, margin: "10px 0 0" }}>
-              {layer.narrative}
-            </p>
+            <p className="text-[13.5px] text-slate-base leading-relaxed mt-2.5 mb-0">{layer.narrative}</p>
           )}
         </div>
       </div>
 
       {layer.topAction && (layer.topAction.title || layer.topAction.impact) && (
-        <div style={{ marginTop: 16, borderLeft: "3px solid var(--teal)", paddingLeft: 14 }}>
-          <div className="eyebrow" style={{ color: "var(--slate-light)", marginBottom: 4 }}>
-            Recommended move
-          </div>
+        <div className="mt-4 border-l-[3px] border-teal pl-3.5">
+          <div className="eyebrow text-slate-light mb-1">Recommended move</div>
           {layer.topAction.title && (
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>{layer.topAction.title}</div>
+            <div className="text-[14px] font-semibold text-navy">{layer.topAction.title}</div>
           )}
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+          <div className="flex gap-2.5 items-center flex-wrap mt-1.5">
             {layer.topAction.impact && (
-              <span style={{ fontSize: 13, color: "var(--slate)" }}>{layer.topAction.impact}</span>
+              <span className="text-caption text-slate-base">{layer.topAction.impact}</span>
             )}
             {layer.topAction.basis && (
               <span className={`pill ${basisPillClass(layer.topAction.basis)}`}>{basisLabel(layer.topAction.basis)}</span>
             )}
             {layer.topAction.confidence != null && (
-              <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
-                {pct(layer.topAction.confidence)} confidence
-              </span>
+              <span className="eyebrow text-slate-light">{pct(layer.topAction.confidence)} confidence</span>
             )}
           </div>
         </div>
       )}
 
       {layer.topGap && layer.topGap.description && (
-        <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-          <span className="eyebrow" style={{ color: "var(--amber-ink)" }}>
-            Still unknown
-          </span>
-          <span style={{ fontSize: 13, color: "var(--slate)" }}>
+        <div className="mt-3.5 flex gap-2 items-baseline flex-wrap">
+          <span className="eyebrow text-amber-ink">Still unknown</span>
+          <span className="text-caption text-slate-base">
             {layer.topGap.description}
             {layer.topGap.closes ? ` Closed by ${layer.topGap.closes}.` : ""}
           </span>
@@ -185,39 +178,33 @@ function PublicLayerCard({ layer }: { layer: PublicDiagnosisLayer }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="font-mono" style={{ fontSize: 20, fontWeight: 500, color: "var(--navy)", lineHeight: 1 }}>
-        {value}
-      </div>
-      <div className="eyebrow" style={{ color: "var(--slate-light)", marginTop: 6 }}>
-        {label}
-      </div>
+      <div className="font-mono text-title font-medium text-navy leading-none">{value}</div>
+      <div className="eyebrow text-slate-light mt-1.5">{label}</div>
     </div>
   );
 }
 
 function CaseStudyCard({ study }: { study: CaseStudy }) {
   return (
-    <section className="card card-accent-teal" style={{ padding: 22 }}>
-      <div className="eyebrow" style={{ color: "var(--slate-light)", marginBottom: 8 }}>
-        Outcomes for companies like this one
-      </div>
-      <div className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>
+    <section className="card card-accent-teal p-6">
+      <div className="eyebrow text-slate-light mb-2">Outcomes for companies like this one</div>
+      <div className="font-serif text-[16px] text-navy">
         {study.sector}, {study.revenueBand}
       </div>
-      <p style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.6, margin: "8px 0 0" }}>
+      <p className="text-[13.5px] text-slate-base leading-relaxed mt-2 mb-0">
         Across {study.contributorCount} comparable companies that acted on their diagnosis, the
-        median realized {formatUsd(study.realizedUsd.p50)} of {formatUsd(study.identifiedUsd.p50)}{" "}
+        median realised {formatUsd(study.realizedUsd.p50)} of {formatUsd(study.identifiedUsd.p50)}{" "}
         identified.
       </p>
-      <div style={{ display: "flex", gap: 28, marginTop: 16, flexWrap: "wrap" }}>
-        <Stat label="Median realized" value={formatUsd(study.realizedUsd.p50)} />
+      <div className="flex gap-7 mt-4 flex-wrap">
+        <Stat label="Median realised" value={formatUsd(study.realizedUsd.p50)} />
         <Stat label="Median identified" value={formatUsd(study.identifiedUsd.p50)} />
         {study.calibration.score != null && (
           <Stat label="Prediction accuracy" value={pct(study.calibration.score * 100)} />
         )}
       </div>
       {study.noised && (
-        <div style={{ marginTop: 14 }}>
+        <div className="mt-3.5">
           <Pill color="gray">Figures blurred to protect a small cohort</Pill>
         </div>
       )}
@@ -227,12 +214,8 @@ function CaseStudyCard({ study }: { study: CaseStudy }) {
 
 function PoweredBy({ mark }: { mark: PoweredByMark }) {
   return (
-    <div style={{ marginTop: 32, textAlign: "center" }}>
-      <a
-        href={withBase(mark.href)}
-        className="font-mono"
-        style={{ fontSize: 12.5, color: "var(--slate-light)", textDecoration: "none" }}
-      >
+    <div className="mt-8 text-center">
+      <a href={withBase(mark.href)} className="font-mono text-[12.5px] text-slate-light no-underline">
         {mark.label}
       </a>
     </div>

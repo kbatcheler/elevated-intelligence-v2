@@ -15,7 +15,7 @@ export function DiligencePackPage() {
   const { currentId, current, status: tenantStatus } = useTenant();
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Export"
         title="Diligence pack"
@@ -26,7 +26,7 @@ export function DiligencePackPage() {
         }
       />
 
-      <div style={{ marginTop: 24 }}>
+      <div className="mt-6">
         {tenantStatus === "loading" && <SkeletonLines lines={5} />}
         {tenantStatus === "error" && (
           <EmptyState
@@ -51,38 +51,38 @@ export function DiligencePackPage() {
 function PackPanel({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   const url = diligencePackUrl(tenantId);
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div className="card" style={{ display: "grid", gap: 14 }}>
-        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <a className="btn-primary" href={url} target="_blank" rel="noreferrer" style={{ textDecoration: "none", fontSize: 13 }}>
+    <div className="grid gap-4">
+      <div className="card grid gap-3.5">
+        <div className="flex gap-3 items-center flex-wrap">
+          <a className="btn-primary no-underline text-caption" href={url} target="_blank" rel="noreferrer">
             Open diligence pack
           </a>
-          <a className="btn-ghost" href={url} download={`diligence-pack-${safeDownloadName(tenantName)}.html`} style={{ textDecoration: "none", fontSize: 13 }}>
+          <a className="btn-ghost no-underline text-caption" href={url} download={`diligence-pack-${safeDownloadName(tenantName)}.html`}>
             Download
           </a>
-          <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+          <span className="text-xs text-slate-light">
             Opens a self-contained, brand-styled HTML document. Print to PDF from your browser for a fixed copy.
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="flex gap-2 flex-wrap">
           <Pill color="navy">Live data</Pill>
           <Pill color="teal">Verified vs modelled labelled</Pill>
           <Pill color="gray">Read only</Pill>
         </div>
       </div>
 
-      <div className="card" style={{ display: "grid", gap: 10 }}>
-        <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+      <div className="card grid gap-2.5">
+        <span className="eyebrow text-slate-light">
           What the pack contains
         </span>
-        <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8, fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5 }}>
+        <ul className="m-0 pl-[18px] grid gap-2 text-[13.5px] text-slate-base leading-normal">
           <li>The current 14-layer diagnosis, each with its confidence and data-efficacy index.</li>
           <li>The data-efficacy and Brier-scored calibration record, with honest sample-size labels.</li>
           <li>The board decision audit timeline: every commit, defer and reject, with the advice at the time.</li>
           <li>The outcome track record: value identified versus value realised across graded outcomes.</li>
           <li>A provenance integrity attestation: the hash-chained ledger re-walked and its verdict stated.</li>
         </ul>
-        <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+        <span className="text-xs text-slate-light">
           Every figure is computed from persisted state for {tenantName}. A figure that cannot be computed is shown as
           unavailable, never fabricated.
         </span>

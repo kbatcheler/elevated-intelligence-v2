@@ -1,8 +1,7 @@
 import React from "react";
 import type { ArchetypeHeroProps } from "./types";
 import { GenericHero } from "./GenericHero";
-import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend } from "./shared";
-import { heroToneVar, heroToneInkVar } from "./types";
+import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend, heroToneInkText, heroToneTopBorder } from "./shared";
 
 // Aging and collection: the headline metric and trend, then the leading metrics
 // as aging buckets, each topped by its tone color. The buckets are the real
@@ -24,26 +23,17 @@ export function AgingCollectionHero({ entry, detail }: ArchetypeHeroProps) {
       <HeroRead>{panel.one_line_read || detail.content.headline_finding}</HeroRead>
 
       {buckets.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 18 }}>
+        <div className="flex flex-wrap gap-2 mt-[18px]">
           {buckets.map((m, i) => (
             <div
               key={i}
-              style={{
-                flex: "1 1 110px",
-                minWidth: 100,
-                borderTop: `3px solid var(--${heroToneVar(m.tone)})`,
-                background: "var(--cream-dark)",
-                borderRadius: "0 0 8px 8px",
-                padding: "10px 12px",
-              }}
+              className={`flex-[1_1_110px] min-w-[100px] border-t-[3px] bg-cream-dark rounded-b-lg py-2.5 px-3 ${heroToneTopBorder[m.tone]}`}
             >
-              <div className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10 }}>
-                {m.label}
-              </div>
-              <div className="font-mono" style={{ fontSize: 18, fontWeight: 500, color: `var(--${heroToneInkVar(m.tone)})` }}>
+              <div className="eyebrow text-slate-light text-[10px]">{m.label}</div>
+              <div className={`font-mono text-[18px] font-medium ${heroToneInkText[m.tone]}`}>
                 {m.value}
               </div>
-              {m.sub && <div style={{ fontSize: 11, color: "var(--slate)", marginTop: 2 }}>{m.sub}</div>}
+              {m.sub && <div className="text-meta text-slate-base mt-0.5">{m.sub}</div>}
             </div>
           ))}
         </div>

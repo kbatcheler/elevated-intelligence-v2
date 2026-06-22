@@ -10,11 +10,11 @@ function Main() {
 
   if (loading) {
     return (
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ width: 300, display: "grid", gap: 16 }}>
-          <div className="skeleton" style={{ height: 48, borderRadius: 24, width: 48, margin: "0 auto" }} />
-          <div className="skeleton" style={{ height: 24, width: 200, margin: "0 auto" }} />
-          <div className="skeleton" style={{ height: 16, width: 150, margin: "0 auto" }} />
+      <div className="h-full flex items-center justify-center">
+        <div className="w-[300px] grid gap-4">
+          <div className="skeleton h-12 w-12 rounded-[24px] mx-auto" />
+          <div className="skeleton h-6 w-[200px] mx-auto" />
+          <div className="skeleton h-4 w-[150px] mx-auto" />
         </div>
       </div>
     );

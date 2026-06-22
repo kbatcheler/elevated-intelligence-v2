@@ -22,7 +22,7 @@ export function PerformanceScorecardHero({ entry, detail }: ArchetypeHeroProps) 
       </HeroTopRow>
       <HeroRead>{panel.one_line_read || detail.content.headline_finding}</HeroRead>
       {tiles.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+        <div className="flex flex-wrap gap-2.5 mt-[18px]">
           {tiles.map((m, i) => (
             <MiniStat key={i} label={m.label} value={m.value} sub={m.sub} tone={m.tone} />
           ))}

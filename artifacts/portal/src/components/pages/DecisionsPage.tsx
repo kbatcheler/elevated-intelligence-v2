@@ -83,7 +83,7 @@ export function DecisionsPage() {
   }, [currentId, tenantStatus, load]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Audit"
         title="Decision ledger"
@@ -93,7 +93,7 @@ export function DecisionsPage() {
             : undefined
         }
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={5} />}
         {state.kind === "error" && (
           <ErrorState message="The decision ledger could not be loaded." onRetry={() => location.reload()} />
@@ -111,9 +111,9 @@ export function DecisionsPage() {
           />
         )}
         {state.kind === "ready" && state.timeline.entries.length > 0 && currentId && (
-          <div style={{ display: "grid", gap: 16 }}>
+          <div className="grid gap-4">
             <SummaryPanel timeline={state.timeline} />
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="grid gap-3">
               {state.timeline.entries.map((e) => (
                 <DecisionCard
                   key={e.id}
@@ -138,13 +138,13 @@ export function DecisionsPage() {
 function SummaryPanel({ timeline }: { timeline: DecisionTimeline }) {
   const { summary } = timeline;
   return (
-    <div className="card" style={{ display: "grid", gap: 14 }}>
-      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+    <div className="card grid gap-3.5">
+      <div className="flex gap-8 flex-wrap">
         <Figure label="Decisions" value={String(summary.totalDecisions)} sub={`${summary.commits} committed, ${summary.defers} deferred, ${summary.rejects} rejected`} />
-        <Figure label="Value identified" value={formatUsd(summary.totalIdentifiedValueUsd)} sub="across committed actions" color="var(--navy)" />
-        <Figure label="Value realised" value={formatUsd(summary.totalRealizedValueUsd)} sub="graded outcomes only" color="var(--teal)" />
+        <Figure label="Value identified" value={formatUsd(summary.totalIdentifiedValueUsd)} sub="across committed actions" color="text-navy" />
+        <Figure label="Value realised" value={formatUsd(summary.totalRealizedValueUsd)} sub="graded outcomes only" color="text-teal" />
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div className="flex gap-2 flex-wrap">
         <Pill color="teal">Overruled and right: {summary.overruledRight}</Pill>
         <Pill color="coral">Overruled and wrong: {summary.overruledWrong}</Pill>
         <Pill color="gray">Contrarian, pending: {summary.overruledPending}</Pill>
@@ -156,13 +156,13 @@ function SummaryPanel({ timeline }: { timeline: DecisionTimeline }) {
 function Figure({ label, value, sub, color }: { label: string; value: string; sub: string; color?: string }) {
   return (
     <div>
-      <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
+      <div className="eyebrow text-slate-light">
         {label}
       </div>
-      <div className="font-serif" style={{ fontSize: 26, color: color ?? "var(--navy)" }}>
+      <div className={`font-serif text-[26px] ${color ?? "text-navy"}`}>
         {value}
       </div>
-      <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{sub}</div>
+      <div className="text-xs text-slate-light">{sub}</div>
     </div>
   );
 }
@@ -198,23 +198,23 @@ function DecisionCard({
   }
 
   return (
-    <div className="card" style={{ display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <span className="font-serif" style={{ fontSize: 17, color: "var(--navy)" }}>
+    <div className="card grid gap-2.5">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <span className="font-serif text-lead text-navy">
           {entry.recommendedTitle}
         </span>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="flex gap-2 items-center flex-wrap">
           <Pill color={d.color}>{d.label}</Pill>
           <OverruledPill entry={entry} />
         </div>
       </div>
 
       {entry.recommendedDetail && (
-        <div style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.5 }}>{entry.recommendedDetail}</div>
+        <div className="text-[14px] text-slate-base leading-normal">{entry.recommendedDetail}</div>
       )}
 
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)" }}>
-        <Link to={`/layers/${entry.layerKey}`} style={{ color: "var(--blue)", textDecoration: "none" }}>
+      <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light">
+        <Link to={`/layers/${entry.layerKey}`} className="text-blue-base no-underline">
           {entry.layerKey}
         </Link>
         <span>
@@ -238,8 +238,8 @@ function DecisionCard({
       </div>
 
       {entry.rationale && (
-        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
-          <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10, marginRight: 8 }}>
+        <div className="text-caption text-slate-base leading-normal">
+          <span className="eyebrow text-slate-light text-[10px] mr-2">
             Rationale
           </span>
           {entry.rationale}
@@ -249,7 +249,7 @@ function DecisionCard({
       <OutcomeRow entry={entry} />
 
       {entry.preMortems.length > 0 && (
-        <div style={{ display: "grid", gap: 10, borderTop: "1px dashed var(--border)", paddingTop: 10 }}>
+        <div className="grid gap-2.5 border-t border-dashed border-border-base pt-2.5">
           {entry.preMortems.map((pm) => (
             <PreMortemBlock
               key={pm.id}
@@ -264,8 +264,8 @@ function DecisionCard({
       )}
 
       {canWrite && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <button type="button" className="btn-ghost" onClick={onRunPreMortem} disabled={running} style={{ fontSize: 12 }}>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button type="button" className="btn-ghost text-xs" onClick={onRunPreMortem} disabled={running}>
             {running
               ? "Running pre-mortem..."
               : entry.preMortems.length > 0
@@ -273,11 +273,11 @@ function DecisionCard({
                 : "Run pre-mortem"}
           </button>
           {running && (
-            <span style={{ fontSize: 11, color: "var(--slate-light)" }}>
+            <span className="text-meta text-slate-light">
               Routing to the Confounder seat. This makes a live model call and can take a moment.
             </span>
           )}
-          {pmError && <span style={{ fontSize: 12.5, color: "var(--coral-ink)" }}>{pmError}</span>}
+          {pmError && <span className="text-[12.5px] text-coral-ink">{pmError}</span>}
         </div>
       )}
     </div>
@@ -301,7 +301,7 @@ function OutcomeRow({ entry }: { entry: DecisionTimelineEntry }) {
   const meas = entry.measurementStatus ? MEAS[entry.measurementStatus] ?? { color: "gray" as const, label: entry.measurementStatus } : null;
   const hasForecast = entry.forecastId !== null;
   return (
-    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)", borderTop: "1px solid var(--cream-dark)", paddingTop: 8 }}>
+    <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light border-t border-cream-dark pt-2">
       {entry.actionStatus && <span>Action: {entry.actionStatus.replace(/_/g, " ")}</span>}
       {entry.realizedValueUsd !== null && <span>Realised: {formatUsd(entry.realizedValueUsd)}</span>}
       {meas && <Pill color={meas.color}>{meas.label}</Pill>}
@@ -339,42 +339,42 @@ function PreMortemBlock({
 }) {
   if (preMortem.status === "failed") {
     return (
-      <div style={{ display: "grid", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="grid gap-1.5">
+        <div className="flex items-center gap-2">
           <Pill color="coral">Pre-mortem failed</Pill>
-          <span style={{ fontSize: 11, color: "var(--slate-light)" }}>{formatDateTime(preMortem.createdAt)}</span>
+          <span className="text-meta text-slate-light">{formatDateTime(preMortem.createdAt)}</span>
         </div>
-        <div style={{ fontSize: 12.5, color: "var(--coral-ink)", lineHeight: 1.5 }}>
+        <div className="text-[12.5px] text-coral-ink leading-normal">
           The pre-mortem did not complete{preMortem.error ? ` (${preMortem.error})` : ""}. No failure modes were recorded.
         </div>
       </div>
     );
   }
   return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div className="grid gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <Pill color="navy">Pre-mortem</Pill>
-        <span style={{ fontSize: 11, color: "var(--slate-light)" }}>{formatDateTime(preMortem.createdAt)}</span>
+        <span className="text-meta text-slate-light">{formatDateTime(preMortem.createdAt)}</span>
         {preMortem.provenanceContentHash && (
-          <span className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>
+          <span className="font-mono text-meta text-slate-light">
             {preMortem.provenanceContentHash.slice(0, 12)}
           </span>
         )}
       </div>
-      <div style={{ display: "grid", gap: 8 }}>
+      <div className="grid gap-2">
         {preMortem.failureModes.map((m) => (
-          <div key={m.rank} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px", background: "var(--cream-dark)", display: "grid", gap: 4 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-              <span className="font-mono" style={{ fontSize: 12, color: "var(--slate-light)" }}>
+          <div key={m.rank} className="border border-border-base rounded-lg py-2 px-2.5 bg-cream-dark grid gap-1">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="font-mono text-xs text-slate-light">
                 {String(m.rank).padStart(2, "0")}
               </span>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--navy)" }}>{m.title}</span>
+              <span className="text-[13.5px] font-semibold text-navy">{m.title}</span>
               {m.likelihood && <Pill color="amber">{m.likelihood}</Pill>}
             </div>
-            {m.mechanism && <div style={{ fontSize: 12.5, color: "var(--slate)", lineHeight: 1.5 }}>{m.mechanism}</div>}
+            {m.mechanism && <div className="text-[12.5px] text-slate-base leading-normal">{m.mechanism}</div>}
             {m.earlyWarning && (
-              <div style={{ fontSize: 12, color: "var(--slate-light)", lineHeight: 1.5 }}>
-                <span className="eyebrow" style={{ fontSize: 10, marginRight: 6 }}>
+              <div className="text-xs text-slate-light leading-normal">
+                <span className="eyebrow text-[10px] mr-1.5">
                   Early warning
                 </span>
                 {m.earlyWarning}
@@ -384,15 +384,15 @@ function PreMortemBlock({
         ))}
       </div>
       {preMortem.residualRiskNote && (
-        <div style={{ fontSize: 12.5, color: "var(--slate)", lineHeight: 1.5 }}>
-          <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10, marginRight: 8 }}>
+        <div className="text-[12.5px] text-slate-base leading-normal">
+          <span className="eyebrow text-slate-light text-[10px] mr-2">
             Residual risk
           </span>
           {preMortem.residualRiskNote}
         </div>
       )}
       {preMortem.indicators.length > 0 && (
-        <div style={{ display: "grid", gap: 6 }}>
+        <div className="grid gap-1.5">
           {preMortem.indicators.map((ind) => (
             <IndicatorRow
               key={ind.id}
@@ -452,32 +452,31 @@ function IndicatorRow({
 
   const options: PreMortemIndicatorStatus[] = ["active", "triggered", "cleared"];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5 }}>
+    <div className="flex items-center gap-2.5 flex-wrap text-[12.5px]">
       <Pill color={s.color}>{s.label}</Pill>
-      <span style={{ color: "var(--navy)" }}>{indicator.label}</span>
+      <span className="text-navy">{indicator.label}</span>
       {indicator.triggeredAt && (
-        <span style={{ fontSize: 11, color: "var(--slate-light)" }}>triggered {formatDateTime(indicator.triggeredAt)}</span>
+        <span className="text-meta text-slate-light">triggered {formatDateTime(indicator.triggeredAt)}</span>
       )}
       {indicator.clearedAt && (
-        <span style={{ fontSize: 11, color: "var(--slate-light)" }}>cleared {formatDateTime(indicator.clearedAt)}</span>
+        <span className="text-meta text-slate-light">cleared {formatDateTime(indicator.clearedAt)}</span>
       )}
       {canWrite && (
-        <span style={{ display: "inline-flex", gap: 6 }}>
+        <span className="inline-flex gap-1.5">
           {options.map((opt) => (
             <button
               key={opt}
               type="button"
-              className={opt === indicator.status ? "btn" : "btn-ghost"}
+              className={`${opt === indicator.status ? "btn" : "btn-ghost"} text-meta py-0.5 px-2`}
               onClick={() => set(opt)}
               disabled={busy || opt === indicator.status}
-              style={{ fontSize: 11, padding: "2px 8px" }}
             >
               {IND_STATUS[opt].label}
             </button>
           ))}
         </span>
       )}
-      {error && <span style={{ fontSize: 12, color: "var(--coral-ink)" }}>{error}</span>}
+      {error && <span className="text-xs text-coral-ink">{error}</span>}
     </div>
   );
 }

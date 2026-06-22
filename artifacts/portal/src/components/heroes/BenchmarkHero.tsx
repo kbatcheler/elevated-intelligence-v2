@@ -37,27 +37,19 @@ export function BenchmarkHero({ entry, detail }: ArchetypeHeroProps) {
       ) : lock ? (
         <CohortLockView lock={lock} />
       ) : hasPeers ? (
-        <div style={{ marginTop: 18 }}>
-          <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
-            {peer!.dimension}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+        <div className="mt-[18px]">
+          <div className="eyebrow text-slate-light">{peer!.dimension}</div>
+          <div className="flex flex-wrap gap-2 mt-2">
             {peer!.peers.map((p, i) => (
               <div
                 key={i}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "baseline",
-                  gap: 8,
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  background: p.is_self ? "var(--navy)" : "var(--cream-dark)",
-                  color: p.is_self ? "var(--cream-light)" : "var(--slate)",
-                }}
+                className={`inline-flex items-baseline gap-2 py-2 px-3 rounded-full ${
+                  p.is_self ? "bg-navy text-cream-light" : "bg-cream-dark text-slate-base"
+                }`}
               >
-                <span style={{ fontSize: 12, fontWeight: p.is_self ? 700 : 500 }}>{p.name}</span>
+                <span className={`text-xs ${p.is_self ? "font-bold" : "font-medium"}`}>{p.name}</span>
                 {p.value && (
-                  <span className="font-mono" style={{ fontSize: 13 }}>
+                  <span className="font-mono text-caption">
                     {p.value}
                     {peer!.unit ? ` ${peer!.unit}` : ""}
                   </span>
@@ -69,7 +61,7 @@ export function BenchmarkHero({ entry, detail }: ArchetypeHeroProps) {
         </div>
       ) : (
         tiles.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+          <div className="flex flex-wrap gap-2.5 mt-[18px]">
             {tiles.map((m, i) => (
               <MiniStat key={i} label={m.label} value={m.value} sub={m.sub} tone={m.tone} />
             ))}
@@ -93,18 +85,11 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: "verified" 
   const isVerified = tone === "verified";
   return (
     <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "3px 9px",
-        borderRadius: 999,
-        fontSize: 11,
-        fontWeight: 600,
-        letterSpacing: 0.2,
-        color: isVerified ? "var(--teal-ink)" : "var(--slate-light)",
-        background: isVerified ? "var(--teal-faint)" : "var(--cream-dark)",
-        border: isVerified ? "1px solid var(--teal)" : "1px solid transparent",
-      }}
+      className={`inline-flex items-center py-[3px] px-[9px] rounded-full text-meta font-semibold tracking-[0.2px] ${
+        isVerified
+          ? "text-teal-ink bg-teal-faint border border-teal"
+          : "text-slate-light bg-cream-dark border border-transparent"
+      }`}
     >
       {children}
     </span>
@@ -116,20 +101,20 @@ function Pill({ children, tone }: { children: React.ReactNode; tone: "verified" 
 function VerifiedCohort({ cohort }: { cohort: CohortBenchmark }) {
   const anyNoised = cohort.metrics.some((m) => m.noised);
   return (
-    <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div className="mt-[18px]">
+      <div className="flex items-center gap-2 flex-wrap">
         <Pill tone="verified">Verified cohort</Pill>
-        <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+        <span className="text-xs text-slate-light">
           {cohort.sector} {"\u00b7"} {cohort.revenueBand}
         </span>
       </div>
-      <div style={{ display: "grid", gap: 14, marginTop: 12 }}>
+      <div className="grid gap-3.5 mt-3">
         {cohort.metrics.map((m, i) => (
           <DistributionBand key={i} metric={m} />
         ))}
       </div>
       {anyNoised && (
-        <div style={{ fontSize: 11, color: "var(--slate-light)", marginTop: 10 }}>
+        <div className="text-meta text-slate-light mt-2.5">
           Privacy protected: bounded noise is applied to the smallest cohorts, so the bands are
           directional rather than exact.
         </div>
@@ -154,71 +139,44 @@ function DistributionBand({ metric }: { metric: CohortMetric }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--navy)", textTransform: "capitalize" }}>
+      <div className="flex justify-between items-baseline">
+        <span className="text-caption font-semibold text-navy capitalize">
           {signalLabel(metric.signalKey)}
           {metric.window ? (
-            <span style={{ fontWeight: 400, color: "var(--slate-light)" }}> {"\u00b7"} {metric.window}</span>
+            <span className="font-normal text-slate-light"> {"\u00b7"} {metric.window}</span>
           ) : null}
         </span>
-        <span style={{ fontSize: 11, color: "var(--slate-light)" }}>{metric.sampleCount} peers</span>
+        <span className="text-meta text-slate-light">{metric.sampleCount} peers</span>
       </div>
 
-      <div style={{ position: "relative", height: 12, marginTop: 8 }}>
-        <div
-          style={{
-            position: "absolute",
-            top: 5,
-            left: 0,
-            right: 0,
-            height: 2,
-            background: "var(--cream-dark)",
-            borderRadius: 2,
-          }}
-        />
+      <div className="relative h-3 mt-2">
+        <div className="absolute top-[5px] left-0 right-0 h-0.5 bg-cream-dark rounded-[2px]" />
         {/* The p25 to p75 interquartile band. */}
         <div
-          style={{
-            position: "absolute",
-            top: 3,
-            left: `${left}%`,
-            width: `${Math.max(0, right - left)}%`,
-            height: 6,
-            background: "var(--teal-faint)",
-            borderRadius: 4,
-          }}
+          className="absolute top-[3px] h-1.5 bg-teal-faint rounded"
+          style={{ left: `${left}%`, width: `${Math.max(0, right - left)}%` }}
         />
         {/* The p50 median marker. */}
         <div
-          style={{ position: "absolute", top: 0, left: `${mid}%`, width: 2, height: 12, background: "var(--teal)" }}
+          className="absolute top-0 w-0.5 h-3 bg-teal"
+          style={{ left: `${mid}%` }}
           title="Cohort median (p50)"
         />
         {/* The tenant's own value, the only identified point and it is theirs. */}
         {selfPct != null && (
           <div
-            style={{
-              position: "absolute",
-              top: -2,
-              left: `calc(${selfPct}% - 5px)`,
-              width: 10,
-              height: 16,
-              borderRadius: 3,
-              background: "var(--navy)",
-              border: "2px solid var(--paper)",
-            }}
+            className="absolute -top-0.5 w-2.5 h-4 rounded-[3px] bg-navy border-2 border-paper"
+            style={{ left: `calc(${selfPct}% - 5px)` }}
             title="Your value"
           />
         )}
       </div>
 
-      <div
-        className="font-mono"
-        style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--slate)", marginTop: 6 }}
-      >
+      <div className="font-mono flex justify-between text-meta text-slate-base mt-1.5">
         <span>p25 {fmtNumber(p25)}</span>
         <span>p50 {fmtNumber(p50)}</span>
         <span>p75 {fmtNumber(p75)}</span>
-        <span style={{ color: self != null ? "var(--navy)" : "var(--slate-light)", fontWeight: 600 }}>
+        <span className={`font-semibold ${self != null ? "text-navy" : "text-slate-light"}`}>
           {self != null ? `you ${fmtNumber(self)}` : "you n/a"}
         </span>
       </div>
@@ -229,35 +187,21 @@ function DistributionBand({ metric }: { metric: CohortMetric }) {
 // Below the k floor: an honest, current count, never a fabricated distribution.
 function CohortLockView({ lock }: { lock: CohortLock }) {
   return (
-    <div style={{ marginTop: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div className="mt-[18px]">
+      <div className="flex items-center gap-2 flex-wrap">
         <Pill tone="muted">Cohort forming</Pill>
-        <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+        <span className="text-xs text-slate-light">
           {lock.sector} {"\u00b7"} {lock.revenueBand}
         </span>
       </div>
-      <div style={{ marginTop: 10 }}>
-        <div
-          className="font-mono"
-          style={{ fontSize: 13, color: "var(--navy)", fontWeight: 600 }}
-        >
+      <div className="mt-2.5">
+        <div className="font-mono text-caption text-navy font-semibold">
           {lock.currentCount} of {lock.unlocksAt}
         </div>
-        <div
-          style={{
-            marginTop: 6,
-            height: 6,
-            background: "var(--cream-dark)",
-            borderRadius: 4,
-            overflow: "hidden",
-          }}
-        >
+        <div className="mt-1.5 h-1.5 bg-cream-dark rounded overflow-hidden">
           <div
-            style={{
-              width: `${Math.min(100, (lock.currentCount / Math.max(1, lock.unlocksAt)) * 100)}%`,
-              height: "100%",
-              background: "var(--amber)",
-            }}
+            className="h-full bg-amber-base"
+            style={{ width: `${Math.min(100, (lock.currentCount / Math.max(1, lock.unlocksAt)) * 100)}%` }}
           />
         </div>
       </div>

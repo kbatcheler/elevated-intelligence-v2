@@ -9,14 +9,14 @@ import { Link } from "../../lib/router";
 import {
   EmptyState,
   ErrorState,
+  GoldUnderlineSweep,
   PageHeader,
   PageWidth,
   SectionHeading,
+  SerifDiagnosis,
   SkeletonLines,
   Tag,
   formatDate,
-  toneColorVar,
-  toneInkVar,
 } from "../primitives";
 
 type State =
@@ -25,6 +25,22 @@ type State =
   | { kind: "empty" }
   | { kind: "no-tenant" }
   | { kind: "error" };
+
+// Data-driven tone routed through the token scale, never an inline colour. The
+// ink variants are AA on the light surfaces; the diagnosis tones colour the
+// leading rule only, so the conclusion always reads in navy authority.
+const TONE_INK: Record<Tone, string> = {
+  good: "text-teal-ink",
+  warn: "text-amber-ink",
+  bad: "text-coral-ink",
+  neutral: "text-navy",
+};
+const TONE_DIAGNOSIS: Record<Tone, "teal" | "amber" | "coral" | "navy"> = {
+  good: "teal",
+  warn: "amber",
+  bad: "coral",
+  neutral: "navy",
+};
 
 // The Morning Brief. The home surface, assembled from the real per-tenant
 // overview. The active perspective lens re-ranks which layers lead; from any
@@ -66,21 +82,21 @@ export function BriefPage() {
     .at(-1);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Morning brief"
         title={current ? current.name : "Morning brief"}
         subtitle={current ? current.tagline || current.sector || current.url : undefined}
         actions={
           lastGenerated ? (
-            <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+            <span className="eyebrow text-slate-light">
               {PERSPECTIVE_LABEL[perspective]} lens &middot; generated {formatDate(lastGenerated)}
             </span>
           ) : undefined
         }
       />
 
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The brief could not be assembled." onRetry={() => location.reload()} />
@@ -88,7 +104,7 @@ export function BriefPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No company in your scope yet"
-            message="Once a company is bound to your organization, its morning brief will appear here."
+            message="Once a company is bound to your organisation, its morning brief will appear here."
           />
         )}
         {state.kind === "empty" && (
@@ -105,34 +121,30 @@ export function BriefPage() {
         )}
         {state.kind === "ready" && generated.length > 0 && (
           <>
-            <SectionHeading eyebrow="Lead with this" title="What to look at first" />
-            <div
-              style={{
-                display: "grid",
-                gap: 16,
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-              }}
-            >
-              {leads.map((l) => (
-                <LeadCard key={l.key} layer={l} />
-              ))}
-            </div>
+            <BriefHero layer={leads[0]} />
 
-            <div style={{ marginTop: 40 }}>
+            {leads.length > 1 && (
+              <div className="mt-10">
+                <SectionHeading eyebrow="Also worth your attention" title="The next leads" />
+                <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
+                  {leads.slice(1).map((l) => (
+                    <LeadCard key={l.key} layer={l} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-10">
               <SectionHeading
                 eyebrow="Every layer"
                 title="The full picture"
                 action={
-                  <Link
-                    to="/board"
-                    className="btn-ghost"
-                    style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                  >
+                  <Link to="/board" className="btn-ghost no-underline inline-flex items-center gap-1.5">
                     <FileText size={14} /> Board pack
                   </Link>
                 }
               />
-              <div style={{ display: "grid", gap: 8 }}>
+              <div className="grid gap-2">
                 {ordered.map((l) => (
                   <LayerRow key={l.key} layer={l} />
                 ))}
@@ -157,36 +169,69 @@ function leadFigure(l: OverviewLayer): { value: string | null; label: string | n
   return { value: null, label: null, tone: "neutral" };
 }
 
+// The brief's hero: the single leading layer read as a confident serif diagnosis,
+// with its leading figure beside it. The gold rule sweeps in beneath the figure,
+// keyed on the layer's generation time so it replays only when the layer is
+// regenerated, never on a stray re-render. A layer with no figure shows no figure.
+function BriefHero({ layer }: { layer: OverviewLayer }) {
+  const fig = leadFigure(layer);
+  const read = layer.hero?.oneLineRead || layer.headlineImpact;
+  return (
+    <div className="surface surface-cream p-6 md:p-8">
+      <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
+        <SerifDiagnosis
+          eyebrow={layer.name}
+          tone={TONE_DIAGNOSIS[fig.tone]}
+          lead
+          support={read || undefined}
+          action={
+            <Link
+              to={`/layers/${layer.key}`}
+              className="btn-primary no-underline inline-flex items-center gap-1.5"
+            >
+              See the diagnosis <ArrowRight size={15} />
+            </Link>
+          }
+        >
+          {layer.headlineFinding || layer.diagnosticQuestion}
+        </SerifDiagnosis>
+        {fig.value && (
+          <div className="md:text-right">
+            <GoldUnderlineSweep sweepKey={layer.generatedAt ?? undefined}>
+              <span className={`font-mono text-display font-medium leading-none break-words ${TONE_INK[fig.tone]}`}>
+                {fig.value}
+              </span>
+            </GoldUnderlineSweep>
+            {fig.label && <div className="eyebrow text-slate-light mt-2">{fig.label}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function LeadCard({ layer }: { layer: OverviewLayer }) {
   const fig = leadFigure(layer);
   const read = layer.hero?.oneLineRead || layer.headlineImpact;
   return (
-    <Link to={`/layers/${layer.key}`} style={{ textDecoration: "none", minWidth: 0 }}>
-      <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <span className="font-serif" style={{ fontSize: 17, color: "var(--navy)" }}>
-            {layer.name}
-          </span>
-          <ArrowRight size={16} color="var(--gold)" style={{ flexShrink: 0 }} />
+    <Link to={`/layers/${layer.key}`} className="no-underline min-w-0">
+      <div className="card h-full flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-serif text-lead text-navy">{layer.name}</span>
+          <ArrowRight size={16} color="var(--gold)" className="shrink-0" />
         </div>
         {fig.value && (
           <div>
-            <div className="font-mono" style={{ fontSize: 30, fontWeight: 500, color: toneColorVar[fig.tone], lineHeight: 1, overflowWrap: "anywhere" }}>
+            <div className={`font-mono text-section font-medium leading-none break-words ${TONE_INK[fig.tone]}`}>
               {fig.value}
             </div>
-            {fig.label && (
-              <div className="eyebrow" style={{ color: "var(--slate-light)", marginTop: 6 }}>
-                {fig.label}
-              </div>
-            )}
+            {fig.label && <div className="eyebrow text-slate-light mt-1.5">{fig.label}</div>}
           </div>
         )}
         {layer.headlineFinding && (
-          <div style={{ fontSize: 14, color: "var(--navy-soft)", lineHeight: 1.5, fontWeight: 600 }}>
-            {layer.headlineFinding}
-          </div>
+          <div className="text-[14px] text-navy-soft leading-normal font-semibold">{layer.headlineFinding}</div>
         )}
-        {read && <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{read}</div>}
+        {read && <div className="text-caption text-slate-base leading-normal">{read}</div>}
       </div>
     </Link>
   );
@@ -195,43 +240,26 @@ function LeadCard({ layer }: { layer: OverviewLayer }) {
 function LayerRow({ layer }: { layer: OverviewLayer }) {
   const fig = leadFigure(layer);
   return (
-    <Link to={`/layers/${layer.key}`} style={{ textDecoration: "none", minWidth: 0 }}>
-      <div
-        className="card"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-          padding: "12px 16px",
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <div className="font-serif" style={{ fontSize: 15, color: "var(--navy)" }}>
-            {layer.name}
-          </div>
+    <Link to={`/layers/${layer.key}`} className="no-underline min-w-0">
+      <div className="card flex items-center gap-3.5 px-4 py-3 flex-wrap">
+        <div className="flex-[1_1_220px] min-w-0">
+          <div className="font-serif text-body text-navy">{layer.name}</div>
           <div
-            style={{
-              fontSize: 12.5,
-              color: layer.generated ? "var(--slate)" : "var(--slate-light)",
-              lineHeight: 1.4,
-              marginTop: 2,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
+            className={`text-[12.5px] leading-snug mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap ${
+              layer.generated ? "text-slate-base" : "text-slate-light"
+            }`}
           >
             {layer.generated ? layer.headlineFinding || layer.diagnosticQuestion : "Not generated yet"}
           </div>
         </div>
         {fig.value ? (
-          <div className="font-mono" style={{ fontSize: 16, fontWeight: 500, color: toneInkVar[fig.tone], minWidth: 0, overflowWrap: "anywhere" }}>
+          <div className={`font-mono text-[16px] font-medium min-w-0 break-words ${TONE_INK[fig.tone]}`}>
             {fig.value}
           </div>
         ) : (
           <Tag kind="data">{layer.archetype}</Tag>
         )}
-        <ArrowRight size={15} color="var(--gold)" style={{ flexShrink: 0 }} />
+        <ArrowRight size={15} color="var(--gold)" className="shrink-0" />
       </div>
     </Link>
   );

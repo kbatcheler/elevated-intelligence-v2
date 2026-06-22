@@ -39,14 +39,14 @@ export function LayersPage() {
   const groups = state.kind === "ready" ? groupLayers(state.layers) : [];
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Intelligence layers"
         title="Fourteen layers"
         subtitle={current ? `Each layer diagnoses one dimension of ${current.name}.` : "Each layer diagnoses one dimension of the business."}
       />
 
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The layer registry could not be loaded." onRetry={() => location.reload()} />
@@ -56,27 +56,21 @@ export function LayersPage() {
         )}
         {state.kind === "ready" &&
           groups.map((g) => (
-            <section key={g.group} style={{ marginBottom: 36 }}>
-              <div className="eyebrow" style={{ color: "var(--slate-light)", marginBottom: 14 }}>
+            <section key={g.group} className="mb-9">
+              <div className="eyebrow text-slate-light mb-3.5">
                 {g.group}
               </div>
-              <div
-                style={{
-                  display: "grid",
-                  gap: 16,
-                  gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                }}
-              >
+              <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
                 {g.layers.map((l) => (
-                  <Link key={l.key} to={`/layers/${l.key}`} style={{ textDecoration: "none" }}>
-                    <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                        <span className="font-serif" style={{ fontSize: 18, color: "var(--navy)" }}>
+                  <Link key={l.key} to={`/layers/${l.key}`} className="no-underline">
+                    <div className="card h-full flex flex-col gap-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-serif text-[18px] text-navy">
                           {l.name}
                         </span>
-                        <ArrowRight size={16} color="var(--gold)" style={{ flexShrink: 0 }} />
+                        <ArrowRight size={16} color="var(--gold)" className="shrink-0" />
                       </div>
-                      <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5, flex: 1 }}>
+                      <div className="text-caption text-slate-base leading-normal flex-1">
                         {l.diagnosticQuestion}
                       </div>
                       <div>

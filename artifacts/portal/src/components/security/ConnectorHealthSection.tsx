@@ -10,30 +10,20 @@ type State =
   | { kind: "ready"; report: ConnectorHealthReport }
   | { kind: "error" };
 
-const HEALTH_STYLE: Record<string, { label: string; color: string; bg: string }> = {
-  healthy: { label: "Healthy", color: "var(--teal-ink)", bg: "var(--teal-faint)" },
-  degraded: { label: "Degraded", color: "var(--amber-ink)", bg: "var(--amber-faint)" },
-  error: { label: "Error", color: "var(--coral-ink)", bg: "var(--coral-faint)" },
+const HEALTH_STYLE: Record<string, { label: string; cls: string; dot: string }> = {
+  healthy: { label: "Healthy", cls: "text-teal-ink bg-teal-faint", dot: "bg-teal-ink" },
+  degraded: { label: "Degraded", cls: "text-amber-ink bg-amber-faint", dot: "bg-amber-ink" },
+  error: { label: "Error", cls: "text-coral-ink bg-coral-faint", dot: "bg-coral-ink" },
 };
 
 function HealthPill({ health }: { health: string }) {
   const s =
-    HEALTH_STYLE[health] ?? { label: health, color: "var(--slate)", bg: "var(--cream-dark)" };
+    HEALTH_STYLE[health] ?? { label: health, cls: "text-slate-base bg-cream-dark", dot: "bg-slate-base" };
   return (
     <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 6,
-        padding: "3px 10px",
-        borderRadius: 999,
-        fontSize: 12,
-        fontWeight: 600,
-        color: s.color,
-        background: s.bg,
-      }}
+      className={`inline-flex items-center gap-1.5 py-[3px] px-2.5 rounded-full text-xs font-semibold ${s.cls}`}
     >
-      <span style={{ width: 7, height: 7, borderRadius: 999, background: s.color }} />
+      <span className={`w-[7px] h-[7px] rounded-full ${s.dot}`} />
       {s.label}
     </span>
   );
@@ -61,20 +51,20 @@ export function ConnectorHealthSection({ tenantId }: { tenantId: string }) {
   }, [load]);
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div className="grid gap-4">
       <SectionHeading eyebrow="Operational health" title="Connector health" />
       {state.kind === "loading" && <SkeletonLines lines={4} />}
       {state.kind === "error" && (
         <ErrorState message="Connector health could not be loaded." onRetry={load} />
       )}
       {state.kind === "ready" && state.report.connections.length === 0 && (
-        <div className="card" style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.5 }}>
+        <div className="card text-[14px] text-slate-base leading-normal">
           No connectors are configured for this tenant yet. Health appears here once a connection
           runs.
         </div>
       )}
       {state.kind === "ready" && state.report.connections.length > 0 && (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="card p-0 overflow-hidden">
           {state.report.connections.map((c, i) => (
             <ConnectorHealthItem key={c.connectorKey} row={c} first={i === 0} />
           ))}
@@ -86,37 +76,19 @@ export function ConnectorHealthSection({ tenantId }: { tenantId: string }) {
 
 function ConnectorHealthItem({ row, first }: { row: ConnectorHealthRow; first: boolean }) {
   return (
-    <div
-      style={{
-        padding: "16px 20px",
-        borderTop: first ? "none" : "1px solid var(--border)",
-        display: "grid",
-        gap: 6,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>
+    <div className={`py-4 px-5 grid gap-1.5 ${first ? "" : "border-t border-border-base"}`}>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <span className="text-[14px] font-semibold text-navy">
           {row.name}
           {row.deployment && (
-            <span
-              className="font-mono"
-              style={{ fontSize: 11, color: "var(--slate)", marginLeft: 8 }}
-            >
+            <span className="font-mono text-meta text-slate-base ml-2">
               {row.deployment}
             </span>
           )}
         </span>
         <HealthPill health={row.health} />
       </div>
-      <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
+      <div className="text-caption text-slate-base leading-normal">
         {row.lastSuccessAt
           ? `Last success ${formatDateTime(row.lastSuccessAt)}.`
           : "No successful run recorded yet."}

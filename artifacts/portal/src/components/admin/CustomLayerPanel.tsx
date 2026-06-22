@@ -41,32 +41,29 @@ export function CustomLayerPanel() {
   }, []);
 
   return (
-    <div style={{ display: "grid", gap: 32 }}>
+    <div className="grid gap-8">
       <CreateSection canonicalKeys={canonicalKeys} logout={logout} onCreated={load} />
 
       <div className="card">
-        <h3
-          className="font-serif"
-          style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}
-        >
+        <h3 className="font-serif text-title font-semibold text-navy mb-4">
           Custom Layers
         </h3>
-        <p style={{ color: "var(--slate-light)", fontSize: 13, marginBottom: 16 }}>
+        <p className="text-slate-light text-caption mb-4">
           Custom layers begin pending and are withheld from the runnable catalog until you
           approve them. Approval is what admits a layer to the per-tenant seed fan-out and
           records which owner authorized its first run.
         </p>
 
         {state === "loading" ? (
-          <div className="skeleton" style={{ height: 80 }} />
+          <div className="skeleton h-20" />
         ) : state === "error" ? (
-          <div style={{ color: "var(--red)" }}>Failed to load custom layers.</div>
+          <div className="text-red-base">Failed to load custom layers.</div>
         ) : state === "empty" ? (
-          <div style={{ padding: 24, textAlign: "center", color: "var(--slate-light)" }}>
+          <div className="p-6 text-center text-slate-light">
             No custom layers yet. Create one above; it stays pending until you approve it.
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="overflow-x-auto">
             <table className="table-base">
               <thead>
                 <tr>
@@ -121,8 +118,8 @@ function LayerRow({
   return (
     <tr>
       <td>
-        <div style={{ fontWeight: 500, color: "var(--navy)" }}>{layer.name}</div>
-        <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>
+        <div className="font-medium text-navy">{layer.name}</div>
+        <div className="font-mono text-meta text-slate-light">
           {layer.key}
         </div>
       </td>
@@ -131,11 +128,11 @@ function LayerRow({
       </td>
       <td>
         {layer.benchmarkCanonicalKey ? (
-          <span className="font-mono" style={{ fontSize: 12, color: "var(--navy)" }}>
+          <span className="font-mono text-xs text-navy">
             {layer.benchmarkCanonicalKey}
           </span>
         ) : (
-          <span style={{ fontSize: 12, color: "var(--slate-light)" }}>Excluded</span>
+          <span className="text-xs text-slate-light">Excluded</span>
         )}
       </td>
       <td>{approvalPill(layer)}</td>
@@ -144,8 +141,7 @@ function LayerRow({
         {!layer.approvedAt && (
           <button
             onClick={handleApprove}
-            className="btn-ghost"
-            style={{ height: 24, padding: "0 8px", fontSize: 11 }}
+            className="btn-ghost h-6 px-2 py-0 text-meta"
             disabled={approving}
           >
             {approving ? <Loader2 size={12} className="animate-spin" /> : "Approve"}
@@ -214,44 +210,31 @@ function CreateSection({
 
   return (
     <div className="card card-accent-gold">
-      <h3
-        className="font-serif"
-        style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}
-      >
+      <h3 className="font-serif text-title font-semibold text-navy mb-4">
         Create Custom Layer
       </h3>
-      <p style={{ color: "var(--slate-light)", fontSize: 13, marginBottom: 16 }}>
+      <p className="text-slate-light text-caption mb-4">
         A guarded template: name the layer, state the one diagnostic question it answers, pick a
         renderable archetype, give exactly four metric tiles, and name at least one feed. The
         layer is created pending and runs nothing until you approve it.
       </p>
 
       {errorMsg && (
-        <div className="alert-error" style={{ marginBottom: 16 }}>
+        <div className="alert-error mb-4">
           <TriangleAlert size={16} />
           <span>{errorMsg}</span>
         </div>
       )}
 
       {savedKey && (
-        <div
-          style={{
-            marginBottom: 16,
-            padding: 16,
-            background: "var(--cream-light)",
-            border: "1px dashed var(--gold)",
-            borderRadius: 4,
-            color: "var(--navy)",
-            fontSize: 13,
-          }}
-        >
+        <div className="mb-4 p-4 bg-cream-light border border-dashed border-gold rounded text-navy text-caption">
           Created "{savedKey}" as a pending custom layer. Approve it below to make it runnable.
         </div>
       )}
 
-      <form onSubmit={handleCreate} style={{ display: "grid", gap: 16 }}>
-        <div style={{ display: "flex", gap: 16 }}>
-          <div style={{ flex: 1 }}>
+      <form onSubmit={handleCreate} className="grid gap-4">
+        <div className="flex gap-4">
+          <div className="flex-1">
             <label className="label-base">Name</label>
             <input
               className="input-base"
@@ -262,7 +245,7 @@ function CreateSection({
               required
             />
           </div>
-          <div style={{ flex: 1 }}>
+          <div className="flex-1">
             <label className="label-base">Archetype</label>
             <select
               className="input-base"
@@ -293,7 +276,7 @@ function CreateSection({
 
         <div>
           <label className="label-base">Metric Tiles (exactly four)</label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+          <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-3">
             {tiles.map((t, i) => (
               <input
                 key={i}
@@ -308,8 +291,8 @@ function CreateSection({
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 16 }}>
-          <div style={{ flex: 1 }}>
+        <div className="flex gap-4">
+          <div className="flex-1">
             <label className="label-base">Feeds (comma separated)</label>
             <input
               className="input-base"
@@ -319,7 +302,7 @@ function CreateSection({
               required
             />
           </div>
-          <div style={{ flex: 1 }}>
+          <div className="flex-1">
             <label className="label-base">Benchmark Mapping (optional)</label>
             <select
               className="input-base"

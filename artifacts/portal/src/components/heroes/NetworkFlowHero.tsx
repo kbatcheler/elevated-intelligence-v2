@@ -25,32 +25,22 @@ export function NetworkFlowHero({ entry, detail }: ArchetypeHeroProps) {
       <HeroRead>{panel.one_line_read || detail.content.headline_finding}</HeroRead>
 
       {feeds.length > 0 ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 18, flexWrap: "wrap" }}>
-          <div style={{ display: "grid", gap: 6 }}>
+        <div className="flex items-center gap-3.5 mt-[18px] flex-wrap">
+          <div className="grid gap-1.5">
             {feeds.map((f, i) => (
-              <span key={i} className="tag tag-data" style={{ justifyContent: "flex-start" }}>
+              <span key={i} className="tag tag-data justify-start">
                 {f}
               </span>
             ))}
           </div>
           <FlowArrow />
-          <span
-            className="font-serif"
-            style={{
-              fontSize: 16,
-              fontWeight: 700,
-              color: "var(--cream-light)",
-              background: "var(--navy)",
-              borderRadius: 10,
-              padding: "10px 16px",
-            }}
-          >
+          <span className="font-serif text-[16px] font-bold text-cream-light bg-navy rounded-[10px] py-2.5 px-4">
             {name}
           </span>
         </div>
       ) : (
         tiles.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 18 }}>
+          <div className="flex flex-wrap gap-2.5 mt-[18px]">
             {tiles.map((m, i) => (
               <MiniStat key={i} label={m.label} value={m.value} sub={m.sub} tone={m.tone} />
             ))}

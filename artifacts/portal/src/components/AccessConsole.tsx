@@ -40,24 +40,17 @@ export function AccessConsole() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 1080, margin: "0 auto", padding: "48px 32px 96px" }}>
-      <div style={{ marginBottom: 32, display: "flex", gap: 16, borderBottom: "1px solid var(--border)" }}>
+    <div className="max-w-[1080px] mx-auto pt-12 px-8 pb-24">
+      <div className="mb-8 flex gap-4 border-b border-border-base">
         {(["pins", "users", "orgs", "ingestion", "layers"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            style={{
-              padding: "12px 16px",
-              background: "transparent",
-              border: "none",
-              borderBottom: tab === t ? "2px solid var(--navy)" : "2px solid transparent",
-              color: tab === t ? "var(--navy)" : "var(--slate-light)",
-              fontWeight: tab === t ? 600 : 500,
-              cursor: "pointer",
-              textTransform: "capitalize",
-              fontSize: 14,
-              fontFamily: "Inter, sans-serif"
-            }}
+            className={`py-3 px-4 bg-transparent border-none border-b-2 cursor-pointer capitalize text-[14px] font-sans ${
+              tab === t
+                ? "border-navy text-navy font-semibold"
+                : "border-transparent text-slate-light font-medium"
+            }`}
           >
             {t}
           </button>

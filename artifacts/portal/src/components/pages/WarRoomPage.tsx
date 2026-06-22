@@ -163,13 +163,13 @@ export function WarRoomPage() {
   const isEmpty = state.kind === "ready" && generated.length === 0 && committed.length === 0;
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="War room"
         title="The decision picture"
         subtitle={current ? `Open questions, leading hypotheses and the moves on the table for ${current.name}.` : undefined}
       />
-      <div style={{ marginTop: 28, display: "grid", gap: 36 }}>
+      <div className="mt-7 grid gap-9">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The war room could not be loaded." onRetry={() => location.reload()} />
@@ -196,15 +196,15 @@ export function WarRoomPage() {
               {openConfounders.length === 0 ? (
                 <EmptyState title="Nothing open" message="Every confounder across the generated layers was ruled out." />
               ) : (
-                <div style={{ display: "grid", gap: 10 }}>
+                <div className="grid gap-2.5">
                   {openConfounders.map(({ layer, c }, i) => (
-                    <div key={`${layer.key}-${i}`} className="card" style={{ display: "grid", gap: 6 }}>
-                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <span className="font-serif" style={{ fontSize: 15, color: "var(--navy)" }}>{c.name ?? "Alternative explanation"}</span>
+                    <div key={`${layer.key}-${i}`} className="card grid gap-1.5">
+                      <div className="flex items-baseline justify-between gap-2.5 flex-wrap">
+                        <span className="font-serif text-body text-navy">{c.name ?? "Alternative explanation"}</span>
                         {c.verdict && <VerdictPill verdict={c.verdict} />}
                       </div>
                       {(c.reason || c.mechanism) && (
-                        <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5 }}>{c.reason || c.mechanism}</div>
+                        <div className="text-[13.5px] text-slate-base leading-normal">{c.reason || c.mechanism}</div>
                       )}
                       <LayerTag layer={layer} />
                     </div>
@@ -216,11 +216,11 @@ export function WarRoomPage() {
             {hypotheses.length > 0 && (
               <section>
                 <SectionHeading eyebrow="Leading hypotheses" title="The best current explanations" />
-                <div style={{ display: "grid", gap: 10 }}>
+                <div className="grid gap-2.5">
                   {hypotheses.map(({ layer, h }, i) => (
-                    <div key={`${layer.key}-${i}`} className="card" style={{ display: "grid", gap: 6 }}>
-                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 14.5, color: "var(--navy)", lineHeight: 1.5, flex: 1, minWidth: 0 }}>{h.statement}</span>
+                    <div key={`${layer.key}-${i}`} className="card grid gap-1.5">
+                      <div className="flex items-baseline justify-between gap-2.5 flex-wrap">
+                        <span className="text-[14.5px] text-navy leading-normal flex-1 min-w-0">{h.statement}</span>
                         {h.basis && h.confidence != null && <ConfidencePill basis={h.basis} confidence={h.confidence} />}
                       </div>
                       <LayerTag layer={layer} />
@@ -235,7 +235,7 @@ export function WarRoomPage() {
               {moves.length === 0 ? (
                 <EmptyState title="No open moves" message="Every recommended action has already been committed." />
               ) : (
-                <div style={{ display: "grid", gap: 10 }}>
+                <div className="grid gap-2.5">
                   {moves.map((m, i) => (
                     <MoveCard
                       key={`${m.layerKey}-${i}`}
@@ -252,7 +252,7 @@ export function WarRoomPage() {
             {committed.length > 0 && (
               <section>
                 <SectionHeading eyebrow="Committed" title="Moves made, and where they stand" />
-                <div style={{ display: "grid", gap: 10 }}>
+                <div className="grid gap-2.5">
                   {committed.map((a) => (
                     <CommittedCard
                       key={a.id}
@@ -278,7 +278,7 @@ function verdictRank(v: SignalLayer["confounders"][number]["verdict"]): number {
 
 function LayerTag({ layer }: { layer: SignalLayer }) {
   return (
-    <Link to={`/layers/${layer.key}`} className="eyebrow" style={{ color: "var(--slate-light)", textDecoration: "none" }}>
+    <Link to={`/layers/${layer.key}`} className="eyebrow text-slate-light no-underline">
       {layer.name}
     </Link>
   );
@@ -298,26 +298,26 @@ function MoveCard({
   const a = move.action;
   const committable = Boolean(a.title) && a.basis != null && a.confidence != null;
   return (
-    <div className="card" style={{ display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>{a.title}</span>
+    <div className="card grid gap-2">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <span className="font-serif text-[16px] text-navy">{a.title}</span>
         {a.basis != null && a.confidence != null && <ConfidencePill basis={a.basis} confidence={a.confidence} />}
       </div>
-      {a.impact && <div style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5 }}>{a.impact}</div>}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--slate-light)" }}>
-          <Link to={`/layers/${move.layerKey}`} style={{ color: "var(--slate-light)", textDecoration: "none" }}>{move.layerName}</Link>
+      {a.impact && <div className="text-[13.5px] text-slate-base leading-normal">{a.impact}</div>}
+      <div className="flex items-center justify-between gap-3 flex-wrap mt-0.5">
+        <div className="flex gap-3.5 flex-wrap text-xs text-slate-light">
+          <Link to={`/layers/${move.layerKey}`} className="text-slate-light no-underline">{move.layerName}</Link>
           {a.timing && <span>Timing: {a.timing}</span>}
           {a.owner && <span>Owner: {a.owner}</span>}
         </div>
         {!canAct ? (
-          <span className="eyebrow" style={{ color: "var(--slate-light)" }}>Read-only access</span>
+          <span className="eyebrow text-slate-light">Read-only access</span>
         ) : committable ? (
           <button className="btn-primary" onClick={onCommit} disabled={busy}>
             {busy ? "Committing" : "Commit move"}
           </button>
         ) : (
-          <span className="eyebrow" style={{ color: "var(--slate-light)" }}>No confidence recorded, cannot commit</span>
+          <span className="eyebrow text-slate-light">No confidence recorded, cannot commit</span>
         )}
       </div>
     </div>
@@ -337,25 +337,25 @@ function CommittedCard({
 }) {
   const meta = STATUS_META[action.status];
   return (
-    <div className="card" style={{ display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>{action.title}</span>
+    <div className="card grid gap-2">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <span className="font-serif text-[16px] text-navy">{action.title}</span>
         <Pill color={meta.color}>{meta.label}</Pill>
       </div>
       {action.predictedImpact && (
-        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>Predicted: {action.predictedImpact}</div>
+        <div className="text-caption text-slate-base leading-normal">Predicted: {action.predictedImpact}</div>
       )}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, color: "var(--slate-light)", alignItems: "center" }}>
-          <Link to={`/layers/${action.layerKey}`} style={{ color: "var(--slate-light)", textDecoration: "none" }}>{action.layerKey}</Link>
+      <div className="flex items-center justify-between gap-3 flex-wrap mt-0.5">
+        <div className="flex gap-3.5 flex-wrap text-xs text-slate-light items-center">
+          <Link to={`/layers/${action.layerKey}`} className="text-slate-light no-underline">{action.layerKey}</Link>
           <span>Committed {formatDate(action.committedAt)}</span>
           <ConfidencePill basis={action.basis} confidence={action.confidence} />
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="flex gap-2 flex-wrap">
           {canAct ? (
             <StatusControls status={action.status} busy={busy} onStatus={onStatus} />
           ) : (
-            <span className="eyebrow" style={{ color: "var(--slate-light)" }}>Read-only access</span>
+            <span className="eyebrow text-slate-light">Read-only access</span>
           )}
         </div>
       </div>

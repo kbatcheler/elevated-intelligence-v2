@@ -94,17 +94,17 @@ export function Onboarding() {
   };
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Onboarding"
         title="Invite your team"
         subtitle="Mint a read-only invite for a colleague in your organization. They self-register with it and land beside you."
       />
 
-      <div style={{ display: "grid", gap: 32, marginTop: 28 }}>
+      <div className="grid gap-8 mt-7">
         <div className="card">
           <SectionHeading eyebrow="How it works" title="Three steps to a new viewer" />
-          <ol style={{ margin: "12px 0 0", paddingLeft: 20, color: "var(--slate)", fontSize: 14, lineHeight: 1.7 }}>
+          <ol className="mt-3 pl-5 text-slate-base text-[14px] leading-[1.7]">
             <li>Mint a viewer invite below. The PIN is shown once, so copy it then.</li>
             <li>Share the PIN with your colleague over a channel you trust.</li>
             <li>
@@ -115,17 +115,17 @@ export function Onboarding() {
         </div>
 
         <div className="card card-accent-gold">
-          <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+          <h3 className="font-serif text-title font-semibold text-navy mb-4">
             Mint viewer invite
           </h3>
           {errorMsg && (
-            <div className="alert-error" style={{ marginBottom: 16 }}>
+            <div className="alert-error mb-4">
               <TriangleAlert size={16} />
               <span>{errorMsg}</span>
             </div>
           )}
-          <form onSubmit={handleMint} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "end" }}>
-            <div style={{ gridColumn: "1 / -1" }}>
+          <form onSubmit={handleMint} className="grid grid-cols-2 gap-4 items-end">
+            <div className="col-span-full">
               <label className="label-base">Label (optional)</label>
               <input
                 className="input-base"
@@ -154,7 +154,7 @@ export function Onboarding() {
                 onChange={(e) => setExpiresInDays(parseInt(e.target.value))}
               />
             </div>
-            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+            <div className="col-span-full flex justify-end">
               <button type="submit" className="btn-primary" disabled={minting}>
                 {minting ? <Loader2 size={16} className="animate-spin" /> : "Mint invite"}
               </button>
@@ -162,26 +162,14 @@ export function Onboarding() {
           </form>
 
           {mintedCode && (
-            <div
-              style={{
-                marginTop: 24,
-                padding: 24,
-                background: "var(--cream-light)",
-                border: "1px dashed var(--gold)",
-                borderRadius: 4,
-                textAlign: "center",
-              }}
-            >
-              <div className="eyebrow" style={{ color: "var(--coral-ink)", marginBottom: 8 }}>
+            <div className="mt-6 p-6 bg-cream-light border border-dashed border-gold rounded text-center">
+              <div className="eyebrow text-coral-ink mb-2">
                 Copy it now, it will not be shown again
               </div>
-              <div
-                className="font-mono"
-                style={{ fontSize: 32, color: "var(--navy)", fontWeight: 500, marginBottom: 16, letterSpacing: "0.1em" }}
-              >
+              <div className="font-mono text-[32px] text-navy font-medium mb-4 tracking-[0.1em]">
                 {mintedCode}
               </div>
-              <button onClick={copyCode} className="btn-ghost" style={{ margin: "0 auto" }}>
+              <button onClick={copyCode} className="btn-ghost mx-auto">
                 {copied ? (
                   <>
                     <Check size={14} /> Copied
@@ -197,22 +185,22 @@ export function Onboarding() {
         </div>
 
         <div>
-          <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+          <h3 className="font-serif text-title font-semibold text-navy mb-4">
             Your viewer invites
           </h3>
-          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <div className="card p-0 overflow-hidden">
             {state === "loading" ? (
-              <div style={{ padding: 24 }}>
-                <div className="skeleton" style={{ height: 100 }} />
+              <div className="p-6">
+                <div className="skeleton h-25" />
               </div>
             ) : state === "error" ? (
-              <div style={{ padding: 24, color: "var(--red)" }}>Failed to load your invites.</div>
+              <div className="p-6 text-red-base">Failed to load your invites.</div>
             ) : state === "empty" ? (
-              <div style={{ padding: 32, textAlign: "center", color: "var(--slate-light)" }}>
+              <div className="p-8 text-center text-slate-light">
                 You have not minted any viewer invites yet.
               </div>
             ) : (
-              <div style={{ overflowX: "auto" }}>
+              <div className="overflow-x-auto">
                 <table className="table-base">
                   <thead>
                     <tr>
@@ -227,8 +215,8 @@ export function Onboarding() {
                     {pins.map((pin) => (
                       <tr key={pin.id}>
                         <td>
-                          <div style={{ fontWeight: 500, color: "var(--navy)" }}>{pin.label || "Untitled"}</div>
-                          <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>
+                          <div className="font-medium text-navy">{pin.label || "Untitled"}</div>
+                          <div className="font-mono text-meta text-slate-light">
                             {pin.id.slice(0, 8)}...
                           </div>
                         </td>
@@ -243,8 +231,7 @@ export function Onboarding() {
                           {pin.state === "active" && (
                             <button
                               onClick={() => handleRevoke(pin.id)}
-                              className="btn-ghost"
-                              style={{ height: 24, padding: "0 8px", fontSize: 11 }}
+                              className="btn-ghost h-6 px-2 text-meta"
                             >
                               Revoke
                             </button>

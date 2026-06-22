@@ -88,28 +88,28 @@ function CalibrationBadge({ calibration }: { calibration: OutcomeCalibration }) 
 function ValueCounter({ outcomes }: { outcomes: TenantOutcomes }) {
   const { summary } = outcomes;
   return (
-    <div className="card" style={{ display: "grid", gap: 14 }}>
-      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+    <div className="card grid gap-3.5">
+      <div className="flex gap-8 flex-wrap">
         <div>
-          <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
+          <div className="eyebrow text-slate-light">
             Value identified
           </div>
-          <div className="font-serif" style={{ fontSize: 26, color: "var(--navy)" }}>
+          <div className="font-serif text-[26px] text-navy">
             {formatUsd(summary.valueIdentifiedUsd)}
           </div>
-          <div style={{ fontSize: 12, color: "var(--slate-light)" }}>
+          <div className="text-xs text-slate-light">
             {summary.actionsWithPrediction} action{summary.actionsWithPrediction === 1 ? "" : "s"} with a
             dollar prediction
           </div>
         </div>
         <div>
-          <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
+          <div className="eyebrow text-slate-light">
             Value realized
           </div>
-          <div className="font-serif" style={{ fontSize: 26, color: "var(--teal)" }}>
+          <div className="font-serif text-[26px] text-teal">
             {formatUsd(summary.valueRealizedUsd)}
           </div>
-          <div style={{ fontSize: 12, color: "var(--slate-light)" }}>
+          <div className="text-xs text-slate-light">
             {summary.actionsMeasured} action{summary.actionsMeasured === 1 ? "" : "s"} measured
           </div>
         </div>
@@ -161,13 +161,13 @@ export function ActionsPage() {
       : new Map<string, OutcomeMeasurement>();
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Track record"
         title="Committed actions"
         subtitle={current ? `Actions committed for ${current.name}, with their predicted impact and realized value.` : undefined}
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={4} />}
         {state.kind === "error" && (
           <ErrorState message="Committed actions could not be loaded." onRetry={() => location.reload()} />
@@ -185,9 +185,9 @@ export function ActionsPage() {
           />
         )}
         {state.kind === "ready" && (
-          <div style={{ display: "grid", gap: 16 }}>
+          <div className="grid gap-4">
             {state.outcomes && <ValueCounter outcomes={state.outcomes} />}
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="grid gap-3">
               {state.actions.map((a) => {
                 const s = STATUS[a.status] ?? { color: "gray" as const, label: a.status };
                 const predicted = num(a.predictedValueUsd);
@@ -195,15 +195,15 @@ export function ActionsPage() {
                 const realized = meas ? num(meas.realizedValueUsd) : null;
                 const variance = meas ? varianceLabel(num(meas.varianceVsPrediction)) : null;
                 return (
-                  <div key={a.id} className="card" style={{ display: "grid", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                      <span className="font-serif" style={{ fontSize: 17, color: "var(--navy)" }}>
+                  <div key={a.id} className="card grid gap-2">
+                    <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                      <span className="font-serif text-lead text-navy">
                         {a.title}
                       </span>
                       <Pill color={s.color}>{s.label}</Pill>
                     </div>
-                    {a.detail && <div style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.5 }}>{a.detail}</div>}
-                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)" }}>
+                    {a.detail && <div className="text-[14px] text-slate-base leading-normal">{a.detail}</div>}
+                    <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light">
                       {a.predictedImpact && <span>Predicted: {a.predictedImpact}</span>}
                       {predicted !== null && <span>Predicted value: {formatUsd(predicted)}</span>}
                       {a.timing && <span>Timing: {a.timing}</span>}
@@ -212,7 +212,7 @@ export function ActionsPage() {
                       <ConfidencePill basis={a.basis} confidence={a.confidence} />
                     </div>
                     {meas && (
-                      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)", borderTop: "1px solid var(--cream-dark)", paddingTop: 8 }}>
+                      <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light border-t border-cream-dark pt-2">
                         {realized !== null && <span>Realized: {formatUsd(realized)}</span>}
                         {variance && <span>Variance: {variance}</span>}
                         <Pill color={MEAS_STATUS[meas.status].color}>{MEAS_STATUS[meas.status].label}</Pill>

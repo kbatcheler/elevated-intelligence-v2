@@ -91,7 +91,7 @@ export function AsOfReplayPage() {
   }, [currentId, tenantStatus]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Replay"
         title="As-of replay"
@@ -102,9 +102,9 @@ export function AsOfReplayPage() {
         }
       />
 
-      <div className="card" style={{ marginTop: 24, display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+      <div className="card mt-6 flex gap-3 items-end flex-wrap">
+        <label className="grid gap-1.5">
+          <span className="eyebrow text-slate-light">
             As of
           </span>
           <input
@@ -112,29 +112,20 @@ export function AsOfReplayPage() {
             value={pick}
             max={toLocalInput(new Date())}
             onChange={(e) => setPick(e.target.value)}
-            style={{
-              background: "var(--cream)",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              padding: "8px 12px",
-              fontSize: 14,
-              color: "var(--navy)",
-              fontFamily: "var(--font-serif)",
-            }}
+            className="bg-cream border border-border-base rounded-md py-2 px-3 text-[14px] text-navy font-serif"
           />
         </label>
         <button
           type="button"
-          className="btn-primary"
+          className="btn-primary text-caption"
           onClick={() => void run(pick)}
           disabled={!currentId || state.kind === "loading"}
-          style={{ fontSize: 13 }}
         >
           {state.kind === "loading" ? "Replaying..." : "Replay this date"}
         </button>
       </div>
 
-      <div style={{ marginTop: 24 }}>
+      <div className="mt-6">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The as-of view could not be reconstructed." onRetry={() => void run(pick)} />
@@ -172,9 +163,9 @@ function ReplayView({ data }: { data: TenantAsOf }) {
   }
   const ledgerGrowth = data.ledger.entriesCurrent - data.ledger.entriesAsOf;
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div className="card" style={{ display: "grid", gap: 14 }}>
-        <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+    <div className="grid gap-4">
+      <div className="card grid gap-3.5">
+        <div className="flex gap-8 flex-wrap">
           <Figure label="As of" value={formatDateTime(data.asOf)} sub={`Compared against now (${formatDateTime(data.now)})`} />
           <Figure
             label="Evidence ledger"
@@ -185,19 +176,19 @@ function ReplayView({ data }: { data: TenantAsOf }) {
           <Figure label="Decisions since" value={String(data.decisionsSince)} sub="board decisions recorded after this date" />
           <Figure label="Outcomes since" value={String(data.outcomesSince)} sub="graded measurements after this date" />
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="flex gap-2 flex-wrap items-center">
           <Pill color={data.dataMode === "connected" ? "teal" : "amber"}>
             {data.dataMode === "connected" ? "Connector-grounded" : "Outside-in"}
           </Pill>
           {data.earliestSnapshotAt && (
-            <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+            <span className="text-xs text-slate-light">
               Snapshots on record: {formatDateTime(data.earliestSnapshotAt)} to {formatDateTime(data.latestSnapshotAt ?? data.earliestSnapshotAt)}
             </span>
           )}
         </div>
       </div>
 
-      <div style={{ display: "grid", gap: 12 }}>
+      <div className="grid gap-3">
         {data.layers.map((l) => (
           <LayerCard key={l.layerKey} layer={l} />
         ))}
@@ -209,13 +200,13 @@ function ReplayView({ data }: { data: TenantAsOf }) {
 function Figure({ label, value, sub, color }: { label: string; value: string; sub: string; color?: string }) {
   return (
     <div>
-      <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
+      <div className="eyebrow text-slate-light">
         {label}
       </div>
-      <div className="font-serif" style={{ fontSize: 22, color: color ?? "var(--navy)" }}>
+      <div className="font-serif text-[22px]" style={{ color: color ?? "var(--navy)" }}>
         {value}
       </div>
-      <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{sub}</div>
+      <div className="text-xs text-slate-light">{sub}</div>
     </div>
   );
 }
@@ -230,14 +221,14 @@ function basisOf(reduced: boolean | null): Basis {
 function LayerCard({ layer }: { layer: AsOfLayerView }) {
   if (!layer.available) {
     return (
-      <div className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <div style={{ display: "grid", gap: 2 }}>
-          <span className="font-serif" style={{ fontSize: 16, color: "var(--navy)" }}>
+      <div className="card flex items-center justify-between gap-3 flex-wrap">
+        <div className="grid gap-0.5">
+          <span className="font-serif text-[16px] text-navy">
             {layer.layerName}
           </span>
-          <span style={{ fontSize: 12, color: "var(--slate-light)" }}>{layer.layerKey}</span>
+          <span className="text-xs text-slate-light">{layer.layerKey}</span>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="flex gap-2 items-center flex-wrap">
           <Pill color="gray">No build by this date</Pill>
           {layer.changedSince.hasCurrent && <Pill color="navy">Built since</Pill>}
         </div>
@@ -249,12 +240,12 @@ function LayerCard({ layer }: { layer: AsOfLayerView }) {
   const conf = layer.confidence;
   const d = layer.changedSince;
   return (
-    <div className="card" style={{ display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <Link to={`/layers/${layer.layerKey}`} className="font-serif" style={{ fontSize: 16, color: "var(--navy)", textDecoration: "none" }}>
+    <div className="card grid gap-2.5">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <Link to={`/layers/${layer.layerKey}`} className="font-serif text-[16px] text-navy no-underline">
           {layer.layerName}
         </Link>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <div className="flex gap-2 items-center flex-wrap">
           {layer.reducedMode && <Pill color="amber">Express build</Pill>}
           {eff && <Pill color="navy">Efficacy {eff.score}</Pill>}
           {conf && (
@@ -265,7 +256,7 @@ function LayerCard({ layer }: { layer: AsOfLayerView }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)" }}>
+      <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light">
         {layer.snapshotAt && <span>Built {formatDateTime(layer.snapshotAt)}</span>}
         {layer.generatorModel && <span className="font-mono">{layer.generatorModel}</span>}
         <span>Verified claims: {countItems(layer.verifiedClaims)}</span>
@@ -289,14 +280,14 @@ function countItems(claims: Record<string, unknown> | null): number {
 function ChangedSinceRow({ diff }: { diff: AsOfLayerView["changedSince"] }) {
   if (!diff.hasCurrent) {
     return (
-      <div style={{ borderTop: "1px solid var(--cream-dark)", paddingTop: 8, fontSize: 12, color: "var(--slate-light)" }}>
+      <div className="border-t border-cream-dark pt-2 text-xs text-slate-light">
         No current build to compare against; this layer has not been rebuilt since.
       </div>
     );
   }
   return (
-    <div style={{ borderTop: "1px solid var(--cream-dark)", paddingTop: 8, display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
-      <span className="eyebrow" style={{ color: "var(--slate-light)" }}>
+    <div className="border-t border-cream-dark pt-2 flex gap-3.5 flex-wrap items-center text-xs">
+      <span className="eyebrow text-slate-light">
         Changed since
       </span>
       <Pill color={diff.contentChanged ? "amber" : "teal"}>
@@ -314,16 +305,16 @@ function ChangedSinceRow({ diff }: { diff: AsOfLayerView["changedSince"] }) {
 function Delta({ label, value, places }: { label: string; value: number | null; places: number }) {
   if (value === null) {
     return (
-      <span style={{ color: "var(--slate-light)" }}>
+      <span className="text-slate-light">
         {label}: <span title="The figure was not available on both sides">unavailable</span>
       </span>
     );
   }
   const sign = value > 0 ? "+" : "";
-  const color = value > 0 ? "var(--teal-ink)" : value < 0 ? "var(--coral-ink)" : "var(--slate-light)";
+  const deltaTone = value > 0 ? "text-teal-ink" : value < 0 ? "text-coral-ink" : "text-slate-light";
   return (
-    <span style={{ color: "var(--slate)" }}>
-      {label}: <span style={{ color, fontWeight: 600 }}>{sign}{value.toFixed(places)}</span>
+    <span className="text-slate-base">
+      {label}: <span className={`${deltaTone} font-semibold`}>{sign}{value.toFixed(places)}</span>
     </span>
   );
 }

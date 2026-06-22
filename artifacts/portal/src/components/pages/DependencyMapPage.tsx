@@ -67,13 +67,13 @@ export function DependencyMapPage() {
   );
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Dependency map"
         title="How the layers depend on each other"
         subtitle={current ? `Structural links across ${current.name}'s layers, weighted by where intelligence gaps are largest.` : undefined}
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="The dependency map could not be loaded." onRetry={() => location.reload()} />
@@ -109,15 +109,15 @@ function MapView({ graph }: { graph: DependencyGraph }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
+    <div className="grid gap-6">
       {!anyGenerated && (
-        <div style={{ fontSize: 13, color: "var(--slate-light)" }}>
+        <div className="text-caption text-slate-light">
           No layer has been generated yet, so every node sits at zero weight. The structure below is the registry shape.
         </div>
       )}
 
-      <div className="card" style={{ padding: 16 }}>
-        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width="100%" role="img" aria-label="Layer dependency map" style={{ display: "block", maxHeight: 560 }}>
+      <div className="card p-4">
+        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width="100%" role="img" aria-label="Layer dependency map" className="block max-h-[560px]">
           {graph.edges.map((e, i) => {
             const a = posByKey.get(e.source);
             const b = posByKey.get(e.target);
@@ -175,14 +175,14 @@ function NodeMark({ node, r, color }: { node: PositionedNode; r: number; color: 
         strokeWidth={1.6}
         strokeDasharray={node.generated ? undefined : "3 3"}
       />
-      <text x={node.x} y={node.y + 4} textAnchor="middle" className="font-mono" style={{ fontSize: 11, fill: "var(--navy)" }}>
+      <text x={node.x} y={node.y + 4} textAnchor="middle" className="font-mono text-meta fill-navy">
         {node.weight > 0 ? node.weight : ""}
       </text>
       <text
         x={lx}
         y={ly + 3}
         textAnchor={anchor}
-        style={{ fontSize: 11, fill: node.generated ? "var(--slate)" : "var(--slate-light)", fontFamily: "var(--font-serif)" }}
+        className={`text-meta font-serif ${node.generated ? "fill-slate-base" : "fill-slate-light"}`}
       >
         {node.name}
       </text>
@@ -196,41 +196,38 @@ function NodeMark({ node, r, color }: { node: PositionedNode; r: number; color: 
 function Legend({ graph, colors }: { graph: DependencyGraph; colors: Map<string, string> }) {
   const groups = Array.from(colors.entries());
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px", alignItems: "center", fontSize: 12.5, color: "var(--slate)" }}>
+    <div className="grid gap-4">
+      <div className="flex flex-wrap gap-y-2 gap-x-5 items-center text-[12.5px] text-slate-base">
         {groups.map(([name, color]) => (
-          <span key={name} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 5, background: color }} />
+          <span key={name} className="inline-flex items-center gap-1.5">
+            <span className="w-[10px] h-[10px] rounded-[5px]" style={{ background: color }} />
             {name}
           </span>
         ))}
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span className="inline-flex items-center gap-1.5">
           <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="var(--navy-soft)" strokeWidth="1.4" strokeOpacity="0.5" /></svg>
           Same module group
         </span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span className="inline-flex items-center gap-1.5">
           <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="var(--gold)" strokeWidth="1.4" strokeDasharray="4 4" /></svg>
           Shared feed
         </span>
       </div>
 
-      <div style={{ fontSize: 12.5, color: "var(--slate-light)", lineHeight: 1.5 }}>
+      <div className="text-[12.5px] text-slate-light leading-normal">
         Node size is the sum of each layer's gap confidence lift (a real persisted figure). Positions are layout only.
       </div>
 
-      <div style={{ display: "grid", gap: 6 }}>
+      <div className="grid gap-1.5">
         {[...graph.nodes].sort((a, b) => b.weight - a.weight || a.sortOrder - b.sortOrder).map((n) => (
-          <Link key={n.key} to={`/layers/${n.key}`} style={{ textDecoration: "none" }}>
-            <div
-              className="card"
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", flexWrap: "wrap" }}
-            >
-              <span style={{ width: 10, height: 10, borderRadius: 5, background: colors.get(n.moduleGroup) ?? "var(--navy)", flexShrink: 0 }} />
-              <span className="font-serif" style={{ fontSize: 14, color: "var(--navy)", flex: "1 1 160px", minWidth: 0 }}>
+          <Link key={n.key} to={`/layers/${n.key}`} className="no-underline">
+            <div className="card flex items-center gap-3 py-2.5 px-3.5 flex-wrap">
+              <span className="w-[10px] h-[10px] rounded-[5px] shrink-0" style={{ background: colors.get(n.moduleGroup) ?? "var(--navy)" }} />
+              <span className="font-serif text-[14px] text-navy flex-[1_1_160px] min-w-0">
                 {n.name}
               </span>
-              <span className="eyebrow" style={{ color: "var(--slate-light)" }}>{n.moduleGroup}</span>
-              <span className="font-mono" style={{ fontSize: 12, color: n.generated ? "var(--navy)" : "var(--slate-light)" }}>
+              <span className="eyebrow text-slate-light">{n.moduleGroup}</span>
+              <span className={`font-mono text-xs ${n.generated ? "text-navy" : "text-slate-light"}`}>
                 {n.generated ? `${formatInt(n.weight)} pp` : "not generated"}
               </span>
             </div>

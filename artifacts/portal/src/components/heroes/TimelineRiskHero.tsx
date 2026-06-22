@@ -23,12 +23,12 @@ export function TimelineRiskHero({ entry, detail }: ArchetypeHeroProps) {
       </HeroTopRow>
 
       {trend.length > 1 && (
-        <div style={{ marginTop: 16 }}>
+        <div className="mt-4">
           <Sparkline points={trend} tone={panel.tone} width={260} height={56} />
           {axis.length > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", width: 260, marginTop: 4 }}>
+            <div className="flex justify-between w-[260px] mt-1">
               {axis.map((label, i) => (
-                <span key={i} className="font-mono" style={{ fontSize: 10, color: "var(--slate-light)" }}>
+                <span key={i} className="font-mono text-[10px] text-slate-light">
                   {label}
                 </span>
               ))}

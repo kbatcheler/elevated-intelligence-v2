@@ -18,6 +18,11 @@ type State =
   | { kind: "ready"; data: SpendSummary }
   | { kind: "error" };
 
+const ALIGN: Record<"left" | "right", string> = {
+  left: "text-left",
+  right: "text-right",
+};
+
 // USD formatter. Per-call costs can be a fraction of a cent, so a value under a
 // dollar shows four decimals; larger figures show the usual two. It never
 // rounds a real cost away to zero unless it truly is zero.
@@ -54,14 +59,14 @@ export function SpendPage() {
   }, [load]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 96 }}>
+    <PageWidth space="tall">
       <PageHeader
         eyebrow="Operations"
         title="Cost and token observability"
         subtitle="Real model spend, summed from the usage ledger. Each row is one real model call priced from its real token counts at the configured list-price rates. Nothing here is estimated; verify the rates against current provider pricing."
       />
 
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={8} />}
         {state.kind === "error" && (
           <ErrorState message="The spend summary could not be loaded." onRetry={load} />
@@ -83,11 +88,11 @@ function SpendBody({ data }: { data: SpendSummary }) {
   }
 
   return (
-    <div style={{ display: "grid", gap: 32 }}>
+    <div className="grid gap-8">
       <CapsPanel data={data} />
       <TotalsPanel data={data} />
       <DailyPanel data={data} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }} className="spend-cols">
+      <div className="spend-cols grid grid-cols-[1fr_1fr] gap-7">
         <BreakdownTable
           eyebrow="By seat"
           title="Spend by model seat"
@@ -123,7 +128,8 @@ function CapsPanel({ data }: { data: SpendSummary }) {
   const cap = caps.globalMonthlyCapUsd;
   const spent = caps.globalMonthSpendUsd;
   const fraction = cap > 0 ? Math.min(spent / cap, 1) : 0;
-  const tone = caps.globalOverCap ? "var(--coral)" : caps.globalOverThreshold ? "var(--amber)" : "var(--teal)";
+  const toneText = caps.globalOverCap ? "text-coral" : caps.globalOverThreshold ? "text-amber-base" : "text-teal";
+  const toneBg = caps.globalOverCap ? "bg-coral" : caps.globalOverThreshold ? "bg-amber-base" : "bg-teal";
   const thresholdPct = Math.round(caps.alertThreshold * 100);
 
   return (
@@ -132,35 +138,29 @@ function CapsPanel({ data }: { data: SpendSummary }) {
         eyebrow="Budget"
         title="This month against the global cap"
         action={
-          <span style={{ fontSize: 13, color: "var(--slate)" }}>
+          <span className="text-caption text-slate-base">
             Since {formatDate(caps.monthStart)}
           </span>
         }
       />
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <span className="font-mono" style={{ fontSize: 28, fontWeight: 500, color: tone, lineHeight: 1 }}>
+      <div className="flex items-baseline gap-2.5 flex-wrap">
+        <span className={`font-mono text-display font-medium leading-none ${toneText}`}>
           {formatUsd(spent)}
         </span>
-        <span style={{ fontSize: 15, color: "var(--slate)" }}>
+        <span className="text-body text-slate-base">
           of {cap > 0 ? formatUsd(cap) : "no cap set"}
         </span>
       </div>
       {cap > 0 && (
         <div
-          style={{
-            marginTop: 14,
-            height: 8,
-            borderRadius: 4,
-            background: "var(--cream-dark)",
-            overflow: "hidden",
-          }}
+          className="mt-3.5 h-2 rounded bg-cream-dark overflow-hidden"
           role="img"
           aria-label={`${Math.round(fraction * 100)} percent of the global monthly cap used`}
         >
-          <div style={{ width: `${fraction * 100}%`, height: "100%", background: tone }} />
+          <div className={`h-full ${toneBg}`} style={{ width: `${fraction * 100}%` }} />
         </div>
       )}
-      <div style={{ marginTop: 14, fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
+      <div className="mt-3.5 text-caption text-slate-base leading-normal">
         {caps.globalOverCap
           ? "The global monthly cap has been reached. New seeds are paused until next month; the owner can override a single seed, or run an express seed to spend less."
           : caps.globalOverThreshold
@@ -177,9 +177,7 @@ function TotalsPanel({ data }: { data: SpendSummary }) {
   return (
     <div>
       <SectionHeading eyebrow="All time" title="Totals across every recorded call" />
-      <div
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}
-      >
+      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))] gap-4">
         <MetricTile label="Total cost" value={formatUsd(t.costUsd)} />
         <MetricTile label="Model calls" value={formatInt(t.calls)} />
         <MetricTile label="Input tokens" value={formatInt(t.inputTokens)} />
@@ -209,27 +207,21 @@ function DailyPanel({ data }: { data: SpendSummary }) {
   return (
     <div>
       <SectionHeading eyebrow="Last 30 days" title="Daily spend" />
-      <div className="card" style={{ padding: 20 }}>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 120 }}>
+      <div className="card p-5">
+        <div className="flex items-end gap-1 h-[120px]">
           {days.map((d) => {
             const h = Math.max((d.costUsd / max) * 100, d.costUsd > 0 ? 3 : 0);
             return (
               <div
                 key={d.day}
                 title={`${formatDate(d.day)}: ${formatUsd(d.costUsd)}`}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  height: `${h}%`,
-                  background: "var(--navy)",
-                  borderRadius: "2px 2px 0 0",
-                  opacity: 0.85,
-                }}
+                className="flex-1 min-w-0 bg-navy rounded-t-[2px] opacity-85"
+                style={{ height: `${h}%` }}
               />
             );
           })}
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 12, color: "var(--slate-light)" }}>
+        <div className="flex justify-between mt-2.5 text-xs text-slate-light">
           <span>{formatDate(days[0].day)}</span>
           <span>{formatDate(days[days.length - 1].day)}</span>
         </div>
@@ -260,11 +252,11 @@ function BreakdownTable({
       {rows.length === 0 ? (
         <EmptyState title="Nothing recorded yet" />
       ) : (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="card p-0 overflow-hidden">
           <div className="table-scroll">
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <table className="w-full border-collapse text-[14px]">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr className="border-b border-border-base">
                 <Th align="left">Name</Th>
                 <Th align="right">Calls</Th>
                 <Th align="right">Cost</Th>
@@ -272,15 +264,15 @@ function BreakdownTable({
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.key} style={{ borderTop: "1px solid var(--cream-dark)" }}>
+                <tr key={r.key} className="border-t border-cream-dark">
                   <Td>
-                    <span style={{ color: "var(--navy)", fontWeight: 500 }}>{r.label}</span>
+                    <span className="text-navy font-medium">{r.label}</span>
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--slate)" }}>{formatInt(r.calls)}</span>
+                    <span className="font-mono text-slate-base">{formatInt(r.calls)}</span>
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--navy)" }}>{formatUsd(r.costUsd)}</span>
+                    <span className="font-mono text-navy">{formatUsd(r.costUsd)}</span>
                   </Td>
                 </tr>
               ))}
@@ -301,11 +293,11 @@ function RunsPanel({ data }: { data: SpendSummary }) {
       {rows.length === 0 ? (
         <EmptyState title="No layer runs recorded yet" />
       ) : (
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="card p-0 overflow-hidden">
           <div className="table-scroll">
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <table className="w-full border-collapse text-[14px]">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--border)" }}>
+              <tr className="border-b border-border-base">
                 <Th align="left">Tenant</Th>
                 <Th align="left">Layer</Th>
                 <Th align="left">When</Th>
@@ -315,23 +307,23 @@ function RunsPanel({ data }: { data: SpendSummary }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.runId ?? r.at} style={{ borderTop: "1px solid var(--cream-dark)" }}>
+                <tr key={r.runId ?? r.at} className="border-t border-cream-dark">
                   <Td>
-                    <span style={{ color: "var(--navy)", fontWeight: 500 }}>
+                    <span className="text-navy font-medium">
                       {r.tenantName ?? (r.tenantId ? "Unknown tenant" : "Deleted tenant")}
                     </span>
                   </Td>
                   <Td>
-                    <span className="font-mono" style={{ color: "var(--slate)" }}>{r.layerKey ?? "-"}</span>
+                    <span className="font-mono text-slate-base">{r.layerKey ?? "-"}</span>
                   </Td>
                   <Td>
-                    <span style={{ color: "var(--slate)" }}>{formatDateTime(r.at)}</span>
+                    <span className="text-slate-base">{formatDateTime(r.at)}</span>
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--slate)" }}>{formatInt(r.calls)}</span>
+                    <span className="font-mono text-slate-base">{formatInt(r.calls)}</span>
                   </Td>
                   <Td align="right">
-                    <span className="font-mono" style={{ color: "var(--navy)" }}>{formatUsd(r.costUsd)}</span>
+                    <span className="font-mono text-navy">{formatUsd(r.costUsd)}</span>
                   </Td>
                 </tr>
               ))}
@@ -346,15 +338,12 @@ function RunsPanel({ data }: { data: SpendSummary }) {
 
 function Th({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
   return (
-    <th
-      className="eyebrow"
-      style={{ textAlign: align, padding: "12px 16px", color: "var(--slate-light)", fontWeight: 600 }}
-    >
+    <th className={`eyebrow ${ALIGN[align]} py-3 px-4 text-slate-light font-semibold`}>
       {children}
     </th>
   );
 }
 
 function Td({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return <td style={{ textAlign: align, padding: "12px 16px" }}>{children}</td>;
+  return <td className={`${ALIGN[align]} py-3 px-4`}>{children}</td>;
 }

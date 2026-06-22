@@ -38,13 +38,13 @@ export function ConnectionsPage() {
   }, [logout]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Connections"
         title="Signal feeds"
         subtitle="The external and internal feeds each intelligence layer draws on."
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={6} />}
         {state.kind === "error" && (
           <ErrorState message="Feeds could not be loaded." onRetry={() => location.reload()} />
@@ -53,13 +53,13 @@ export function ConnectionsPage() {
           <EmptyState title="No feeds declared" message="No layer declares a feed in the registry." />
         )}
         {state.kind === "ready" && (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className="grid gap-3">
             {state.feeds.map((f) => (
-              <div key={f.feed} className="card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div key={f.feed} className="card flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2.5">
                   <Tag kind="signal">{f.feed}</Tag>
                 </div>
-                <div style={{ fontSize: 12, color: "var(--slate-light)" }}>
+                <div className="text-xs text-slate-light">
                   {f.layers.length} {f.layers.length === 1 ? "layer" : "layers"}
                 </div>
               </div>

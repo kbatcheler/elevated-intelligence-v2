@@ -72,18 +72,18 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
   };
 
   return (
-    <div style={{ display: "grid", gap: 32 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 24 }}>
+    <div className="grid gap-8">
+      <div className="grid [grid-template-columns:repeat(auto-fit,minmax(300px,1fr))] gap-6">
         <div className="card card-accent-teal">
-          <h3 className="font-serif" style={{ fontSize: 18, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+          <h3 className="font-serif text-[18px] font-semibold text-navy mb-4">
             Create Organization
           </h3>
           {createError && (
-            <div className="alert-error" style={{ marginBottom: 16, padding: 8 }}>
-              <TriangleAlert size={14} /> <span style={{ fontSize: 12 }}>{createError}</span>
+            <div className="alert-error mb-4 p-2">
+              <TriangleAlert size={14} /> <span className="text-xs">{createError}</span>
             </div>
           )}
-          <form onSubmit={handleCreate} style={{ display: "grid", gap: 12 }}>
+          <form onSubmit={handleCreate} className="grid gap-3">
             <div>
               <label className="label-base">Name</label>
               <input className="input-base" value={name} onChange={e => setName(e.target.value)} required />
@@ -95,22 +95,22 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
                 <option value="portfolio">Portfolio</option>
               </select>
             </div>
-            <button type="submit" className="btn-primary" disabled={creating} style={{ marginTop: 8 }}>
+            <button type="submit" className="btn-primary mt-2" disabled={creating}>
               {creating ? <Loader2 size={16} className="animate-spin" /> : "Create Org"}
             </button>
           </form>
         </div>
 
         <div className="card card-accent-navy">
-          <h3 className="font-serif" style={{ fontSize: 18, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+          <h3 className="font-serif text-[18px] font-semibold text-navy mb-4">
             Bind Tenant to Org
           </h3>
           {bindError && (
-            <div className="alert-error" style={{ marginBottom: 16, padding: 8 }}>
-              <TriangleAlert size={14} /> <span style={{ fontSize: 12 }}>{bindError}</span>
+            <div className="alert-error mb-4 p-2">
+              <TriangleAlert size={14} /> <span className="text-xs">{bindError}</span>
             </div>
           )}
-          <form onSubmit={handleBind} style={{ display: "grid", gap: 12 }}>
+          <form onSubmit={handleBind} className="grid gap-3">
             <div>
               <label className="label-base">Organization</label>
               <select className="input-base" value={bindingOrgId} onChange={e => setBindingOrgId(e.target.value)} required>
@@ -129,7 +129,7 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
                 ))}
               </select>
             </div>
-            <button type="submit" className="btn-primary" disabled={binding || !bindingOrgId || !bindingTenantId} style={{ marginTop: 8 }}>
+            <button type="submit" className="btn-primary mt-2" disabled={binding || !bindingOrgId || !bindingTenantId}>
               {binding ? <Loader2 size={16} className="animate-spin" /> : "Bind"}
             </button>
           </form>
@@ -137,14 +137,14 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
       </div>
 
       <div>
-        <h3 className="font-serif" style={{ fontSize: 20, fontWeight: 600, color: "var(--navy)", marginBottom: 16 }}>
+        <h3 className="font-serif text-title font-semibold text-navy mb-4">
           Organizations
         </h3>
-        <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+        <div className="card p-0 overflow-hidden">
           {orgs.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center", color: "var(--slate-light)" }}>No orgs found.</div>
+            <div className="p-8 text-center text-slate-light">No orgs found.</div>
           ) : (
-            <div style={{ overflowX: "auto" }}>
+            <div className="overflow-x-auto">
               <table className="table-base">
                 <thead>
                   <tr>
@@ -158,8 +158,8 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
                   {orgs.map(org => (
                     <tr key={org.id}>
                       <td>
-                        <div style={{ fontWeight: 500, color: "var(--navy)" }}>{org.name}</div>
-                        <div className="font-mono" style={{ fontSize: 11, color: "var(--slate-light)" }}>{org.id.slice(0, 8)}...</div>
+                        <div className="font-medium text-navy">{org.name}</div>
+                        <div className="font-mono text-meta text-slate-light">{org.id.slice(0, 8)}...</div>
                       </td>
                       <td>
                         <span className={`pill ${org.type === 'provider' ? 'pill-navy' : org.type === 'portfolio' ? 'pill-teal' : 'pill-amber'}`}>
@@ -168,9 +168,9 @@ export function OrgsPanel({ orgs, refreshOrgs }: { orgs: Org[], refreshOrgs: () 
                       </td>
                       <td>
                         {org.tenants.length === 0 ? (
-                          <span style={{ color: "var(--slate-light)", fontSize: 12 }}>None</span>
+                          <span className="text-slate-light text-xs">None</span>
                         ) : (
-                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          <div className="flex gap-1.5 flex-wrap">
                             {org.tenants.map(t => (
                               <span key={t.id} className="tag tag-workflow">{t.name}</span>
                             ))}

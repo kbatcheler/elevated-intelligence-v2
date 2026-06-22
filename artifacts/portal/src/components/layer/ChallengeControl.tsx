@@ -67,9 +67,9 @@ export function ChallengeControl({
   }
 
   return (
-    <div style={{ marginTop: 14, borderTop: "1px dashed var(--border)", paddingTop: 12, display: "grid", gap: 10 }}>
+    <div className="mt-3.5 border-t border-dashed border-border-base pt-3 grid gap-2.5">
       {prior.length > 0 && (
-        <div style={{ display: "grid", gap: 8 }}>
+        <div className="grid gap-2">
           {prior.map((c) => (
             <ChallengeRecord key={c.id} c={c} />
           ))}
@@ -79,17 +79,16 @@ export function ChallengeControl({
       {canChallenge && !open && (
         <button
           type="button"
-          className="btn-ghost"
+          className="btn-ghost justify-self-start text-[12.5px]"
           onClick={() => setOpen(true)}
-          style={{ justifySelf: "start", fontSize: 12.5 }}
         >
           Challenge this finding
         </button>
       )}
 
       {canChallenge && open && (
-        <div style={{ display: "grid", gap: 8 }}>
-          <label className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10 }}>
+        <div className="grid gap-2">
+          <label className="eyebrow text-slate-light text-[10px]">
             Your objection or added context
           </label>
           <textarea
@@ -99,45 +98,33 @@ export function ChallengeControl({
             rows={3}
             disabled={submitting}
             placeholder="What does this finding miss, or what context should the engine weigh? The engine re-reasons it; your input is context, not an override."
-            style={{
-              width: "100%",
-              resize: "vertical",
-              fontSize: 13.5,
-              lineHeight: 1.5,
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              color: "var(--navy)",
-              background: "var(--cream)",
-              fontFamily: "inherit",
-            }}
+            className="w-full resize-y text-[13.5px] leading-normal py-2 px-2.5 rounded-lg border border-border-base text-navy bg-cream [font-family:inherit]"
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <button type="button" className="btn" onClick={onSubmit} disabled={!canSubmit} style={{ fontSize: 12.5 }}>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button type="button" className="btn text-[12.5px]" onClick={onSubmit} disabled={!canSubmit}>
               {submitting ? "Re-reasoning..." : "Submit challenge"}
             </button>
             <button
               type="button"
-              className="btn-ghost"
+              className="btn-ghost text-[12.5px]"
               onClick={() => {
                 setOpen(false);
                 setError(null);
               }}
               disabled={submitting}
-              style={{ fontSize: 12.5 }}
             >
               Cancel
             </button>
-            <span style={{ fontSize: 11, color: "var(--slate-light)" }}>
+            <span className="text-meta text-slate-light">
               {trimmed.length}/2000
             </span>
           </div>
           {submitting && (
-            <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+            <span className="text-xs text-slate-light">
               Routing to the Confounder and Synthesist seats. This makes two live model calls and can take a moment.
             </span>
           )}
-          {error && <span style={{ fontSize: 12.5, color: "var(--coral-ink)" }}>{error}</span>}
+          {error && <span className="text-[12.5px] text-coral-ink">{error}</span>}
         </div>
       )}
     </div>
@@ -151,17 +138,8 @@ function ChallengeRecord({ c }: { c: FindingChallenge }) {
   const failed = c.status === "failed";
   const revised = c.outcome === "revised";
   return (
-    <div
-      style={{
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        padding: "10px 12px",
-        background: "var(--cream-dark)",
-        display: "grid",
-        gap: 6,
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <div className="border border-border-base rounded-lg py-2.5 px-3 bg-cream-dark grid gap-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
         {failed ? (
           <Pill color="coral">Challenge failed</Pill>
         ) : revised ? (
@@ -170,15 +148,15 @@ function ChallengeRecord({ c }: { c: FindingChallenge }) {
           <Pill color="teal">Upheld</Pill>
         )}
         {!failed && c.isCurrentVersion === false && (
-          <span style={{ fontSize: 11, color: "var(--slate-light)" }}>Addresses a prior version of this finding</span>
+          <span className="text-meta text-slate-light">Addresses a prior version of this finding</span>
         )}
         {!failed && c.isCurrentVersion === true && (
-          <span style={{ fontSize: 11, color: "var(--slate-light)" }}>Addresses the current finding</span>
+          <span className="text-meta text-slate-light">Addresses the current finding</span>
         )}
       </div>
 
-      <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
-        <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10, marginRight: 8 }}>
+      <div className="text-caption text-slate-base leading-normal">
+        <span className="eyebrow text-slate-light text-[10px] mr-2">
           Challenge
         </span>
         {c.challengeText}
@@ -186,27 +164,27 @@ function ChallengeRecord({ c }: { c: FindingChallenge }) {
 
       {failed ? (
         c.error && (
-          <div style={{ fontSize: 12.5, color: "var(--coral-ink)", lineHeight: 1.5 }}>
+          <div className="text-[12.5px] text-coral-ink leading-normal">
             The re-reasoning did not complete ({c.error}). Nothing about the finding changed.
           </div>
         )
       ) : (
         <>
           {c.reasoning && (
-            <div style={{ fontSize: 13, color: "var(--navy)", lineHeight: 1.55 }}>{c.reasoning}</div>
+            <div className="text-caption text-navy">{c.reasoning}</div>
           )}
           {c.confounderNote && (
-            <div style={{ fontSize: 12.5, color: "var(--slate)", lineHeight: 1.5 }}>
-              <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10, marginRight: 8 }}>
+            <div className="text-[12.5px] text-slate-base leading-normal">
+              <span className="eyebrow text-slate-light text-[10px] mr-2">
                 Confounder re-examination
               </span>
               {c.confounderNote}
             </div>
           )}
           {revised && c.revisedConfidence != null && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <div className="flex items-center gap-2 flex-wrap">
               {c.originalConfidence != null && (
-                <span className="font-mono" style={{ fontSize: 12.5, color: "var(--slate-light)" }}>
+                <span className="font-mono text-[12.5px] text-slate-light">
                   {c.originalConfidence}
                   {" -> "}
                   {c.revisedConfidence}
@@ -218,12 +196,12 @@ function ChallengeRecord({ c }: { c: FindingChallenge }) {
         </>
       )}
 
-      <div style={{ fontSize: 11, color: "var(--slate-light)" }}>
+      <div className="text-meta text-slate-light">
         {c.challengerEmail ?? "A removed user"}
         {" . "}
         {formatDateTime(c.createdAt)}
         {c.provenanceContentHash && (
-          <span className="font-mono" style={{ marginLeft: 8 }}>
+          <span className="font-mono ml-2">
             {c.provenanceContentHash.slice(0, 12)}
           </span>
         )}

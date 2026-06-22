@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ShieldCheck, LogOut, ChevronDown, Bell } from "lucide-react";
 import { useAuth } from "../lib/AuthContext";
 import { useTenant } from "../lib/TenantContext";
@@ -11,25 +11,23 @@ interface NavItem {
   label: string;
 }
 
-// Diagnosis, reasoning and provenance surfaces every authenticated seat may
-// reach (each is tenant-fenced server-side). Connections and Break-glass are the
-// provider-side operator tools, appended below only for provider roles, so a
-// client seat never sees connector internals or the raw signal read.
+interface NavGroup {
+  heading: string;
+  items: NavItem[];
+}
+
+// The five surfaces a seat reaches every day stay on the bar; everything else is
+// grouped under More so the navigation reads as a short, confident spine rather
+// than a wall of links. Each surface is still tenant-fenced server-side, and the
+// role-gated entries below are navigation affordances layered on top of that
+// fence, never the access control itself: a client seat never sees the operator
+// tools, and typing the URL still resolves to the same server decision.
 const PRIMARY: NavItem[] = [
   { to: "/", label: "Brief" },
   { to: "/board", label: "Board pack" },
   { to: "/layers", label: "Layers" },
-  { to: "/anomalies", label: "Anomalies" },
-  { to: "/war-room", label: "War room" },
-  { to: "/ask", label: "Ask" },
-  { to: "/map", label: "Map" },
-  { to: "/heartbeat", label: "Heartbeat" },
-  { to: "/reasoning", label: "Architecture" },
-  { to: "/actions", label: "Actions" },
   { to: "/decisions", label: "Decisions" },
   { to: "/outcome-loop", label: "Outcome loop" },
-  { to: "/as-of", label: "Replay" },
-  { to: "/diligence", label: "Diligence" },
 ];
 
 const PERSPECTIVES: { value: Perspective; label: string }[] = [
@@ -48,92 +46,156 @@ export function TopNav() {
   const { tenants, currentId, setCurrentId, perspective, setPerspective } = useTenant();
   const { path } = useRouter();
 
-  const items = [...PRIMARY];
   const isProvider = user?.role.startsWith("provider") ?? false;
-  // A portfolio seat (and any provider seat) gets the Portfolio board; a client
-  // seat never sees the link. The server still fences the data, so this is a
-  // navigation affordance, not the access control itself.
+
+  // The deeper analysis surfaces, grouped under More. Portfolio is appended only
+  // for a portfolio or provider seat; the server still fences the data.
+  const analysis: NavItem[] = [
+    { to: "/anomalies", label: "Anomalies" },
+    { to: "/war-room", label: "War room" },
+    { to: "/ask", label: "Ask" },
+    { to: "/map", label: "Map" },
+    { to: "/heartbeat", label: "Heartbeat" },
+    { to: "/reasoning", label: "Architecture" },
+    { to: "/actions", label: "Actions" },
+    { to: "/as-of", label: "Replay" },
+    { to: "/diligence", label: "Diligence" },
+  ];
   if (isProvider || user?.orgType === "portfolio") {
-    items.push({ to: "/portfolio", label: "Portfolio" });
-  }
-  if (isProvider) {
-    items.push({ to: "/connections", label: "Connections" });
-    items.push({ to: "/break-glass", label: "Break-glass" });
-  }
-  if (user?.role === "client-admin") {
-    items.push({ to: "/onboarding", label: "Onboarding" });
-  }
-  if (user?.role === "provider-owner") {
-    items.push({ to: "/security", label: "Security" });
-    items.push({ to: "/spend", label: "Spend" });
-    items.push({ to: "/calibration", label: "Calibration" });
-    items.push({ to: "/admin", label: "Admin" });
+    analysis.push({ to: "/portfolio", label: "Portfolio" });
   }
 
+  // The operator and owner tools, gated by role exactly as before, grouped apart
+  // from the analysis surfaces so the menu reads as two intents.
+  const operations: NavItem[] = [];
+  if (isProvider) {
+    operations.push({ to: "/connections", label: "Connections" });
+    operations.push({ to: "/break-glass", label: "Break-glass" });
+  }
+  if (user?.role === "client-admin") {
+    operations.push({ to: "/onboarding", label: "Onboarding" });
+  }
+  if (user?.role === "provider-owner") {
+    operations.push({ to: "/security", label: "Security" });
+    operations.push({ to: "/spend", label: "Spend" });
+    operations.push({ to: "/calibration", label: "Calibration" });
+    operations.push({ to: "/admin", label: "Admin" });
+  }
+
+  const groups: NavGroup[] = [
+    { heading: "Analysis", items: analysis },
+    { heading: "Operations", items: operations },
+  ];
+
   return (
-    <header style={{ background: "var(--paper)", borderBottom: "1px solid var(--border)" }}>
+    <header className="bg-paper border-b border-border-base">
       {/* Top row: identity, tenant switcher, perspective, user */}
       <div className="top-nav-row">
-        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-          <Link to="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <div
-              style={{
-                width: 30,
-                height: 30,
-                borderRadius: 15,
-                background: "var(--navy-deep)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-            >
+        <div className="flex items-center gap-4 min-w-0">
+          <Link to="/" className="flex items-center gap-2.5 no-underline">
+            <div className="w-[30px] h-[30px] rounded-full bg-navy-deep flex items-center justify-center shrink-0">
               <ShieldCheck size={15} color="var(--gold-light)" />
             </div>
-            <span className="font-serif" style={{ fontSize: 17, fontWeight: 700, color: "var(--navy)", lineHeight: 1 }}>
-              Different Day
-            </span>
+            <span className="font-serif text-lead font-bold text-navy leading-none">Different Day</span>
           </Link>
           <TenantSwitcher tenants={tenants} currentId={currentId} onChange={setCurrentId} />
         </div>
 
-        <div className="nav-actions" style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div className="nav-actions flex items-center gap-3.5">
           <PerspectiveLens value={perspective} onChange={setPerspective} />
-          <div style={{ textAlign: "right", display: "none" }} className="nav-user" />
           <NavBell active={isActive(path, "/notifications")} />
           {user && (
             <div className={`pill ${user.role.startsWith("provider") ? "pill-navy" : "pill-amber"}`}>{user.role}</div>
           )}
-          <button onClick={logout} className="btn-ghost" style={{ padding: "0 8px" }} title="Log out">
+          <button onClick={logout} className="btn-ghost px-2 py-0" title="Log out">
             <LogOut size={16} />
           </button>
         </div>
       </div>
 
-      {/* Bottom row: primary navigation */}
+      {/* Bottom row: primary navigation, with the rest grouped under More */}
       <nav className="top-nav-bar">
-        {items.map((it) => {
-          const active = isActive(path, it.to);
-          return (
-            <Link
-              key={it.to}
-              to={it.to}
-              className="eyebrow"
-              style={{
-                padding: "10px 12px",
-                textDecoration: "none",
-                whiteSpace: "nowrap",
-                color: active ? "var(--navy)" : "var(--slate-light)",
-                borderBottom: active ? "2px solid var(--gold)" : "2px solid transparent",
-                fontWeight: active ? 700 : 600,
-              }}
-            >
-              {it.label}
-            </Link>
-          );
-        })}
+        {PRIMARY.map((it) => (
+          <NavTab key={it.to} item={it} active={isActive(path, it.to)} />
+        ))}
+        <SecondaryNav groups={groups} path={path} />
       </nav>
     </header>
+  );
+}
+
+function NavTab({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      to={item.to}
+      className={`eyebrow px-3 py-2.5 whitespace-nowrap no-underline border-b-2 ${
+        active ? "text-navy border-gold font-bold" : "text-slate-light border-transparent font-semibold"
+      }`}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
+// The secondary grouping. One menu holds every surface that is not part of the
+// daily spine, split into its labelled groups. It closes on a click outside and
+// on any route change so it never lingers over the page beneath it.
+function SecondaryNav({ groups, path }: { groups: NavGroup[]; path: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const visible = groups.filter((g) => g.items.length > 0);
+  const anyActive = visible.some((g) => g.items.some((it) => isActive(path, it.to)));
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [path]);
+
+  if (visible.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className={`eyebrow px-3 py-2.5 whitespace-nowrap inline-flex items-center gap-1 border-b-2 bg-transparent cursor-pointer ${
+          anyActive ? "text-navy border-gold font-bold" : "text-slate-light border-transparent font-semibold"
+        }`}
+      >
+        More <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-20 min-w-[208px] bg-paper border border-border-base rounded-lg shadow-lg py-1.5">
+          {visible.map((g, gi) => (
+            <div key={g.heading} className={gi > 0 ? "mt-1 pt-1.5 border-t border-border-base" : ""}>
+              <div className="eyebrow text-slate-light px-3.5 pb-1">{g.heading}</div>
+              {g.items.map((it) => {
+                const active = isActive(path, it.to);
+                return (
+                  <Link
+                    key={it.to}
+                    to={it.to}
+                    className={`block px-3.5 py-2 text-caption no-underline hover:bg-cream ${
+                      active ? "text-navy font-semibold bg-cream" : "text-slate-base"
+                    }`}
+                  >
+                    {it.label}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -148,32 +210,15 @@ function TenantSwitcher({
 }) {
   if (tenants.length === 0) return null;
   if (tenants.length === 1) {
-    return (
-      <span className="font-serif" style={{ fontSize: 15, color: "var(--navy)" }}>
-        {tenants[0].name}
-      </span>
-    );
+    return <span className="font-serif text-body text-navy">{tenants[0].name}</span>;
   }
   return (
-    <div className="nav-switcher" style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+    <div className="nav-switcher relative inline-flex items-center">
       <select
-        className="nav-select"
+        className="nav-select appearance-none bg-cream border border-border-base rounded-md pl-3 pr-[30px] py-1.5 text-[14px] font-semibold text-navy cursor-pointer font-serif"
         aria-label="Switch tenant"
         value={currentId ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          appearance: "none",
-          WebkitAppearance: "none",
-          background: "var(--cream)",
-          border: "1px solid var(--border)",
-          borderRadius: 6,
-          padding: "6px 30px 6px 12px",
-          fontSize: 14,
-          fontWeight: 600,
-          color: "var(--navy)",
-          cursor: "pointer",
-          fontFamily: "var(--font-serif)",
-        }}
       >
         {tenants.map((t) => (
           <option key={t.id} value={t.id}>
@@ -181,7 +226,7 @@ function TenantSwitcher({
           </option>
         ))}
       </select>
-      <ChevronDown size={14} color="var(--slate-light)" style={{ position: "absolute", right: 10, pointerEvents: "none" }} />
+      <ChevronDown size={14} color="var(--slate-light)" className="absolute right-2.5 pointer-events-none" />
     </div>
   );
 }
@@ -217,33 +262,10 @@ function NavBell({ active }: { active: boolean }) {
 
   const badge = unread != null && unread > 0;
   return (
-    <Link
-      to="/notifications"
-      title="Notifications"
-      style={{ position: "relative", display: "inline-flex", alignItems: "center", padding: "0 4px" }}
-    >
+    <Link to="/notifications" title="Notifications" className="relative inline-flex items-center px-1">
       <Bell size={18} color={active ? "var(--navy)" : "var(--slate)"} />
       {badge && (
-        <span
-          className="font-mono"
-          style={{
-            position: "absolute",
-            top: -6,
-            right: -6,
-            minWidth: 16,
-            height: 16,
-            padding: "0 4px",
-            borderRadius: 8,
-            background: "var(--coral)",
-            color: "var(--paper)",
-            fontSize: 10,
-            fontWeight: 700,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            lineHeight: 1,
-          }}
-        >
+        <span className="font-mono absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-lg bg-coral text-paper text-[10px] font-bold flex items-center justify-center leading-none">
           {unread != null && unread > 99 ? "99+" : unread}
         </span>
       )}
@@ -253,7 +275,7 @@ function NavBell({ active }: { active: boolean }) {
 
 function PerspectiveLens({ value, onChange }: { value: Perspective; onChange: (p: Perspective) => void }) {
   return (
-    <div style={{ display: "flex", gap: 2, background: "var(--cream)", padding: 3, borderRadius: 6 }} role="group" aria-label="Perspective lens">
+    <div className="flex gap-0.5 bg-cream p-[3px] rounded-md" role="group" aria-label="Perspective lens">
       {PERSPECTIVES.map((p) => {
         const active = p.value === value;
         return (
@@ -261,16 +283,9 @@ function PerspectiveLens({ value, onChange }: { value: Perspective; onChange: (p
             key={p.value}
             onClick={() => onChange(p.value)}
             aria-pressed={active}
-            style={{
-              padding: "5px 10px",
-              borderRadius: 4,
-              fontSize: 12,
-              fontWeight: 600,
-              border: "1px solid " + (active ? "var(--border)" : "transparent"),
-              background: active ? "var(--paper)" : "transparent",
-              color: active ? "var(--navy)" : "var(--slate)",
-              cursor: "pointer",
-            }}
+            className={`py-[5px] px-2.5 rounded text-xs font-semibold cursor-pointer border ${
+              active ? "border-border-base bg-paper text-navy" : "border-transparent bg-transparent text-slate-base"
+            }`}
           >
             {p.label}
           </button>

@@ -9,6 +9,7 @@ import {
   ConfidencePill,
   EmptyState,
   ErrorState,
+  MetricTile,
   PageHeader,
   PageWidth,
   Pill,
@@ -71,7 +72,7 @@ export function OutcomeLoopPage() {
   }, [currentId, tenantStatus, load]);
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Outcome loop"
         title="Closed-loop track record"
@@ -81,7 +82,7 @@ export function OutcomeLoopPage() {
             : undefined
         }
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={5} />}
         {state.kind === "error" && (
           <ErrorState message="The outcome loop could not be loaded." onRetry={() => location.reload()} />
@@ -89,7 +90,7 @@ export function OutcomeLoopPage() {
         {state.kind === "no-tenant" && (
           <EmptyState
             title="No tenant selected"
-            message="No company is in your scope yet. Once one is bound to your organization, its outcome loop will appear here."
+            message="No company is in your scope yet. Once one is bound to your organisation, its outcome loop will appear here."
           />
         )}
         {state.kind === "ready" && state.loop.loops.length === 0 && (
@@ -99,9 +100,9 @@ export function OutcomeLoopPage() {
           />
         )}
         {state.kind === "ready" && state.loop.loops.length > 0 && (
-          <div style={{ display: "grid", gap: 16 }}>
+          <div className="grid gap-4">
             <SummaryPanel loop={state.loop} />
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="grid gap-3">
               {state.loop.loops.map((e) => (
                 <LoopCard key={e.decisionId} entry={e} />
               ))}
@@ -119,27 +120,11 @@ export function OutcomeLoopPage() {
 function SummaryPanel({ loop }: { loop: OutcomeLoop }) {
   const { summary } = loop;
   return (
-    <div className="card" style={{ display: "grid", gap: 14 }}>
-      <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
-        <Figure label="Loops" value={String(summary.total)} sub="committed decisions" />
-        <Figure label="Closed" value={String(summary.closed)} sub="forecast resolved" color="var(--teal)" />
-        <Figure label="Open" value={String(summary.open)} sub="awaiting resolution" color="var(--navy)" />
-        <Figure label="Mean Brier" value={formatBrier(summary.brierMean)} sub="across closed loops" />
-      </div>
-    </div>
-  );
-}
-
-function Figure({ label, value, sub, color }: { label: string; value: string; sub: string; color?: string }) {
-  return (
-    <div>
-      <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
-        {label}
-      </div>
-      <div className="font-serif" style={{ fontSize: 26, color: color ?? "var(--navy)" }}>
-        {value}
-      </div>
-      <div style={{ fontSize: 12, color: "var(--slate-light)" }}>{sub}</div>
+    <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+      <MetricTile label="Loops" value={String(summary.total)} sub="committed decisions" />
+      <MetricTile label="Closed" value={String(summary.closed)} sub="forecast resolved" tone="good" />
+      <MetricTile label="Open" value={String(summary.open)} sub="awaiting resolution" />
+      <MetricTile label="Mean Brier" value={formatBrier(summary.brierMean)} sub="across closed loops" />
     </div>
   );
 }
@@ -150,20 +135,18 @@ function Figure({ label, value, sub, color }: { label: string; value: string; su
 function LoopCard({ entry }: { entry: OutcomeLoopEntry }) {
   const { recommendation: rec } = entry;
   return (
-    <div className="card" style={{ display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-        <span className="font-serif" style={{ fontSize: 17, color: "var(--navy)" }}>
-          {rec.title}
-        </span>
+    <div className="card grid gap-2.5">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <span className="font-serif text-lead text-navy">{rec.title}</span>
         <Pill color={entry.state === "resolved" ? "teal" : "gray"}>
           {entry.state === "resolved" ? "Loop closed" : "Loop open"}
         </Pill>
       </div>
 
-      {rec.detail && <div style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.5 }}>{rec.detail}</div>}
+      {rec.detail && <div className="text-[14px] text-slate-base leading-normal">{rec.detail}</div>}
 
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)" }}>
-        <Link to={`/layers/${entry.layerKey}`} style={{ color: "var(--blue)", textDecoration: "none" }}>
+      <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light">
+        <Link to={`/layers/${entry.layerKey}`} className="text-blue-base no-underline">
           {entry.layerKey}
         </Link>
         <span>
@@ -183,10 +166,8 @@ function LoopCard({ entry }: { entry: OutcomeLoopEntry }) {
       </div>
 
       {entry.rationale && (
-        <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>
-          <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10, marginRight: 8 }}>
-            Rationale
-          </span>
+        <div className="text-caption text-slate-base leading-normal">
+          <span className="eyebrow text-slate-light text-[10px] mr-2">Rationale</span>
           {entry.rationale}
         </div>
       )}
@@ -203,7 +184,7 @@ function LoopCard({ entry }: { entry: OutcomeLoopEntry }) {
 function ForecastRow({ entry }: { entry: OutcomeLoopEntry }) {
   const f = entry.forecast;
   return (
-    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)", borderTop: "1px solid var(--cream-dark)", paddingTop: 8 }}>
+    <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light border-t border-cream-dark pt-2">
       {entry.action && <span>Action: {entry.action.status.replace(/_/g, " ")}</span>}
       {f ? (
         <span>
@@ -229,15 +210,13 @@ function ResolutionRow({ entry }: { entry: OutcomeLoopEntry }) {
   const m = entry.measurement;
   const meas = m ? (MEAS[m.status] ?? { color: "gray" as const, label: m.status }) : null;
   return (
-    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12, color: "var(--slate-light)", borderTop: "1px solid var(--cream-dark)", paddingTop: 8 }}>
+    <div className="flex gap-3.5 flex-wrap items-center text-xs text-slate-light border-t border-cream-dark pt-2">
       {m && meas ? (
         <>
           <Pill color={meas.color}>{meas.label}</Pill>
           <ProvenancePill basis={m.basis === "measured" ? "verified" : "modelled"} />
           <span>Realised: {m.realizedValueUsd !== null ? formatUsd(m.realizedValueUsd) : "-"}</span>
-          <span>
-            Variance: {m.varianceVsPrediction !== null ? formatUsd(m.varianceVsPrediction) : "-"}
-          </span>
+          <span>Variance: {m.varianceVsPrediction !== null ? formatUsd(m.varianceVsPrediction) : "-"}</span>
           <span>{formatDateTime(m.measuredAt)}</span>
         </>
       ) : (

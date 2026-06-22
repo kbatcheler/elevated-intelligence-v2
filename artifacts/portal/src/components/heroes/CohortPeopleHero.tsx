@@ -1,8 +1,7 @@
 import React from "react";
 import type { ArchetypeHeroProps } from "./types";
 import { GenericHero } from "./GenericHero";
-import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend } from "./shared";
-import { heroToneInkVar } from "./types";
+import { HeroBigMetric, HeroCard, HeroHead, HeroRead, HeroTopRow, HeroTrend, heroToneInkText } from "./shared";
 
 // Cohort and people: the headline metric and trend, then the leading metrics as
 // value-first cohort tiles with their descriptor underneath. Every value and
@@ -24,21 +23,14 @@ export function CohortPeopleHero({ entry, detail }: ArchetypeHeroProps) {
       <HeroRead>{panel.one_line_read || detail.content.headline_finding}</HeroRead>
 
       {cohorts.length > 0 && (
-        <div
-          style={{
-            display: "grid",
-            gap: 10,
-            marginTop: 18,
-            gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
-          }}
-        >
+        <div className="grid gap-2.5 mt-[18px] [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))]">
           {cohorts.map((m, i) => (
-            <div key={i} style={{ border: "1px solid var(--cream-dark)", borderRadius: 10, padding: "12px 14px" }}>
-              <div className="font-mono" style={{ fontSize: 22, fontWeight: 500, color: `var(--${heroToneInkVar(m.tone)})`, lineHeight: 1.1 }}>
+            <div key={i} className="border border-cream-dark rounded-[10px] py-3 px-3.5">
+              <div className={`font-mono text-[22px] font-medium leading-[1.1] ${heroToneInkText[m.tone]}`}>
                 {m.value}
               </div>
-              <div style={{ fontSize: 13, color: "var(--navy)", marginTop: 4 }}>{m.label}</div>
-              {m.sub && <div style={{ fontSize: 11, color: "var(--slate-light)", marginTop: 2 }}>{m.sub}</div>}
+              <div className="text-caption text-navy mt-1">{m.label}</div>
+              {m.sub && <div className="text-meta text-slate-light mt-0.5">{m.sub}</div>}
             </div>
           ))}
         </div>

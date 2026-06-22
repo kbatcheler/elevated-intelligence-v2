@@ -53,60 +53,49 @@ export function BenchmarkConsent({ tenantId }: { tenantId: string }) {
   const optIn = state.kind === "ready" ? state.optIn : false;
 
   return (
-    <div
-      className="card"
-      style={{ padding: 18, display: "grid", gap: 12, gridTemplateColumns: "1fr auto", alignItems: "center" }}
-    >
-      <div style={{ minWidth: 0 }}>
-        <div className="eyebrow" style={{ color: "var(--slate-light)" }}>
+    <div className="card p-[18px] grid gap-3 grid-cols-[1fr_auto] items-center">
+      <div className="min-w-0">
+        <div className="eyebrow text-slate-light">
           Peer benchmarking
         </div>
-        <div style={{ fontSize: 14, color: "var(--slate)", marginTop: 6, lineHeight: 1.5, maxWidth: 620 }}>
+        <div className="text-[14px] text-slate-base mt-1.5 leading-normal max-w-[620px]">
           Opt in to contribute this company's de-identified signals to its sector and revenue cohort,
           and to see where it sits against verified peers. No raw data and no company identity ever
           leaves the boundary; only k-anonymous percentile bands are shared. Participation is off by
           default and can be withdrawn at any time.
         </div>
         {state.kind === "ready" && (
-          <div style={{ fontSize: 13, marginTop: 8, fontWeight: 600, color: optIn ? "var(--teal-ink)" : "var(--slate-light)" }}>
+          <div className={`text-caption mt-2 font-semibold ${optIn ? "text-teal-ink" : "text-slate-light"}`}>
             {optIn ? "Participating in the verified cohort" : "Not participating"}
           </div>
         )}
         {state.kind === "error" && (
-          <div style={{ fontSize: 13, marginTop: 8, color: "var(--coral-ink)" }}>
+          <div className="text-caption mt-2 text-coral-ink">
             Participation status is unavailable right now.
           </div>
         )}
         {error && (
-          <div style={{ fontSize: 13, marginTop: 8, color: "var(--coral-ink)" }}>{error}</div>
+          <div className="text-caption mt-2 text-coral-ink">{error}</div>
         )}
         {readOnly && state.kind === "ready" && (
-          <div style={{ fontSize: 12, marginTop: 8, color: "var(--slate-light)" }}>
+          <div className="text-xs mt-2 text-slate-light">
             Your seat is read-only, so participation can only be changed by an administrator.
           </div>
         )}
       </div>
 
-      <div style={{ justifySelf: "end" }}>
+      <div className="justify-self-end">
         {state.kind === "loading" && (
-          <span style={{ fontSize: 13, color: "var(--slate-light)" }}>Loading...</span>
+          <span className="text-caption text-slate-light">Loading...</span>
         )}
         {state.kind === "ready" && !readOnly && (
           <button
             type="button"
             onClick={toggle}
             disabled={saving}
-            style={{
-              padding: "9px 16px",
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: saving ? "default" : "pointer",
-              opacity: saving ? 0.6 : 1,
-              color: optIn ? "var(--slate)" : "var(--cream-light)",
-              background: optIn ? "var(--cream-dark)" : "var(--navy)",
-              border: optIn ? "1px solid var(--cream-dark)" : "1px solid var(--navy)",
-            }}
+            className={`py-[9px] px-4 rounded-lg text-caption font-semibold border ${
+              saving ? "cursor-default opacity-60" : "cursor-pointer opacity-100"
+            } ${optIn ? "text-slate-base bg-cream-dark border-cream-dark" : "text-cream-light bg-navy border-navy"}`}
           >
             {saving ? "Saving..." : optIn ? "Withdraw" : "Opt in"}
           </button>

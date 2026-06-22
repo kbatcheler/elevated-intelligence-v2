@@ -7,15 +7,15 @@ export function Gate() {
   const [view, setView] = useState<"login" | "register">("login");
 
   return (
-    <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ marginBottom: 40, textAlign: "center" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 24, background: "var(--navy-deep)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className="min-h-full flex flex-col items-center justify-center p-6">
+      <div className="mb-10 text-center">
+        <div className="flex justify-center mb-4">
+          <div className="w-12 h-12 rounded-[24px] bg-navy-deep flex items-center justify-center">
             <ShieldCheck size={24} color="var(--gold-light)" />
           </div>
         </div>
-        <div className="font-serif" style={{ fontSize: 28, fontWeight: 700, color: "var(--navy)" }}>Different Day</div>
-        <div className="eyebrow" style={{ color: "var(--gold-ink)", marginTop: 8 }}>Elevated Intelligence</div>
+        <div className="font-serif text-display font-bold text-navy">Different Day</div>
+        <div className="eyebrow text-gold-ink mt-2">Elevated Intelligence</div>
       </div>
       
       {view === "login" ? (

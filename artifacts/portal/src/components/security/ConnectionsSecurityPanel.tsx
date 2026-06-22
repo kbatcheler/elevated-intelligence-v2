@@ -52,8 +52,8 @@ export function ConnectionsSecurityPanel({ tenantId }: { tenantId: string }) {
     {
       label: "Wrapping KMS",
       value: (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <span className="font-mono" style={{ fontSize: 13, color: "var(--navy)" }}>
+        <span className="inline-flex items-center gap-2">
+          <span className="font-mono text-caption text-navy">
             {key.kms.provider}
           </span>
           <ConnectedPill connected={key.kms.connected} />
@@ -64,8 +64,8 @@ export function ConnectionsSecurityPanel({ tenantId }: { tenantId: string }) {
     {
       label: "Customer-managed KMS",
       value: (
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-          <span className="font-mono" style={{ fontSize: 13, color: "var(--navy)" }}>
+        <span className="inline-flex items-center gap-2">
+          <span className="font-mono text-caption text-navy">
             {key.customerKms.provider}
           </span>
           <ConnectedPill connected={key.customerKms.connected} />
@@ -76,24 +76,19 @@ export function ConnectionsSecurityPanel({ tenantId }: { tenantId: string }) {
   ];
 
   return (
-    <div style={{ display: "grid", gap: 20 }}>
+    <div className="grid gap-5">
       <SectionHeading eyebrow="Connection security" title="Data protection for this tenant" />
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <div className="card p-0 overflow-hidden">
         {rows.map((r, i) => (
           <div
             key={r.label}
-            style={{
-              padding: "16px 20px",
-              borderTop: i === 0 ? "none" : "1px solid var(--border)",
-              display: "grid",
-              gap: 6,
-            }}
+            className={`py-4 px-5 grid gap-1.5 ${i === 0 ? "" : "border-t border-border-base"}`}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--navy)" }}>{r.label}</span>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-[14px] font-semibold text-navy">{r.label}</span>
               {r.value}
             </div>
-            <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{r.note}</div>
+            <div className="text-caption text-slate-base leading-normal">{r.note}</div>
           </div>
         ))}
       </div>

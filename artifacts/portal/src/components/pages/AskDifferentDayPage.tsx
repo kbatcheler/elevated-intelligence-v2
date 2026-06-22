@@ -122,13 +122,13 @@ export function AskDifferentDayPage() {
   const canChallenge = user?.role !== "client-viewer";
 
   return (
-    <PageWidth style={{ paddingTop: 28, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <PageHeader
         eyebrow="Ask Different Day"
         title="Answers from what has been reasoned"
         subtitle={current ? `Each answer is assembled from intelligence already generated for ${current.name}, not produced live.` : undefined}
       />
-      <div style={{ marginTop: 28 }}>
+      <div className="mt-7">
         {state.kind === "loading" && <SkeletonLines lines={5} />}
         {state.kind === "error" && (
           <ErrorState message="Ask Different Day could not be loaded." onRetry={() => location.reload()} />
@@ -146,7 +146,7 @@ export function AskDifferentDayPage() {
           <EmptyState title="Nothing to ask yet" message="No layer has been generated, so there are no answers to assemble." />
         )}
         {state.kind === "ready" && questions.length > 0 && currentId && (
-          <div style={{ display: "grid", gap: 10 }}>
+          <div className="grid gap-2.5">
             {questions.map((qa) => {
               const challenge: ChallengeContext = {
                 tenantId: currentId,
@@ -185,28 +185,17 @@ function QuestionCard({
   onToggle: () => void;
 }) {
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <div className="card p-0 overflow-hidden">
       <button
         onClick={onToggle}
         aria-expanded={open}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 12,
-          padding: "16px 20px",
-          background: "transparent",
-          border: "none",
-          cursor: "pointer",
-          textAlign: "left",
-        }}
+        className="w-full flex items-center justify-between gap-3 py-4 px-5 bg-transparent border-none cursor-pointer text-left"
       >
-        <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <Sparkles size={15} color="var(--gold)" style={{ flexShrink: 0 }} />
-          <span style={{ minWidth: 0 }}>
-            <span className="eyebrow" style={{ color: "var(--slate-light)" }}>{qa.name}</span>
-            <span className="font-serif" style={{ display: "block", fontSize: 16, color: "var(--navy)", marginTop: 2 }}>
+        <span className="flex items-center gap-2.5 min-w-0">
+          <Sparkles size={15} color="var(--gold)" className="shrink-0" />
+          <span className="min-w-0">
+            <span className="eyebrow text-slate-light">{qa.name}</span>
+            <span className="font-serif block text-[16px] text-navy mt-0.5">
               {qa.question}
             </span>
           </span>
@@ -230,18 +219,18 @@ function Answer({ qa, challenge }: { qa: QA; challenge: ChallengeContext }) {
   const lead = qa.narrative || qa.headline;
 
   return (
-    <div style={{ borderTop: "1px solid var(--border)", padding: "18px 20px 20px", display: "grid", gap: 18 }}>
-      {lead && <div style={{ fontSize: 14.5, color: "var(--slate)", lineHeight: 1.6 }}>{lead}</div>}
+    <div className="border-t border-border-base pt-[18px] px-5 pb-5 grid gap-[18px]">
+      {lead && <div className="text-[14.5px] text-slate-base leading-relaxed">{lead}</div>}
 
       {causes.length > 0 && (
         <Block title="What is driving it">
           {causes.map((c, i) => (
-            <div key={i} style={{ display: "grid", gap: 4 }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, color: "var(--navy)", fontWeight: 600 }}>{c.title ?? "Cause"}</span>
+            <div key={i} className="grid gap-1">
+              <div className="flex items-baseline justify-between gap-2.5 flex-wrap">
+                <span className="text-[14px] text-navy font-semibold">{c.title ?? "Cause"}</span>
                 {c.basis && c.confidence != null && <ConfidencePill basis={c.basis} confidence={c.confidence} />}
               </div>
-              {c.impact && <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{c.impact}</div>}
+              {c.impact && <div className="text-caption text-slate-base leading-normal">{c.impact}</div>}
               <FindingChallengeSlot ctx={challenge} findingRef={`causes[${i}]`} />
             </div>
           ))}
@@ -251,12 +240,12 @@ function Answer({ qa, challenge }: { qa: QA; challenge: ChallengeContext }) {
       {actions.length > 0 && (
         <Block title="What to do about it">
           {actions.map((a, i) => (
-            <div key={i} style={{ display: "grid", gap: 4 }}>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 14, color: "var(--navy)", fontWeight: 600 }}>{a.title ?? "Action"}</span>
+            <div key={i} className="grid gap-1">
+              <div className="flex items-baseline justify-between gap-2.5 flex-wrap">
+                <span className="text-[14px] text-navy font-semibold">{a.title ?? "Action"}</span>
                 {a.basis && a.confidence != null && <ConfidencePill basis={a.basis} confidence={a.confidence} />}
               </div>
-              {a.impact && <div style={{ fontSize: 13, color: "var(--slate)", lineHeight: 1.5 }}>{a.impact}</div>}
+              {a.impact && <div className="text-caption text-slate-base leading-normal">{a.impact}</div>}
               <FindingChallengeSlot ctx={challenge} findingRef={`actions[${i}]`} />
             </div>
           ))}
@@ -266,8 +255,8 @@ function Answer({ qa, challenge }: { qa: QA; challenge: ChallengeContext }) {
       {openConfounders.length > 0 && (
         <Block title="What the analysis could not rule out">
           {openConfounders.map((c, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13.5, color: "var(--slate)", lineHeight: 1.5, flex: 1, minWidth: 0 }}>
+            <div key={i} className="flex items-baseline justify-between gap-2.5 flex-wrap">
+              <span className="text-[13.5px] text-slate-base leading-normal flex-1 min-w-0">
                 {c.name ?? "Alternative explanation"}
                 {c.reason ? `. ${c.reason}` : ""}
               </span>
@@ -277,16 +266,15 @@ function Answer({ qa, challenge }: { qa: QA; challenge: ChallengeContext }) {
         </Block>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", paddingTop: 4 }}>
-        <span style={{ fontSize: 12, color: "var(--slate-light)" }}>
+      <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+        <span className="text-xs text-slate-light">
           Assembled from saved intelligence
           {qa.generatedAt ? `, generated ${formatDateTime(qa.generatedAt)}` : ""}
           {qa.generatorModel ? ` by ${qa.generatorModel}` : ""}. Not a live query.
         </span>
         <Link
           to={`/layers/${qa.key}`}
-          className="btn-ghost"
-          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+          className="btn-ghost no-underline inline-flex items-center gap-1.5"
         >
           Open the layer <ArrowRight size={14} />
         </Link>
@@ -297,8 +285,8 @@ function Answer({ qa, challenge }: { qa: QA; challenge: ChallengeContext }) {
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      <div className="eyebrow" style={{ color: "var(--slate-light)" }}>{title}</div>
+    <div className="grid gap-2.5">
+      <div className="eyebrow text-slate-light">{title}</div>
       {children}
     </div>
   );

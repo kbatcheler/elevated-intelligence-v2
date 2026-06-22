@@ -10,21 +10,19 @@ export interface Crumb {
 // link. Separated by a slash, never an em-dash.
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
   return (
-    <nav aria-label="Breadcrumb" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+    <nav aria-label="Breadcrumb" className="flex items-center gap-2 flex-wrap">
       {items.map((c, i) => {
         const last = i === items.length - 1;
         return (
-          <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+          <span key={i} className="inline-flex items-center gap-2">
             {c.to && !last ? (
-              <Link to={c.to} className="eyebrow" style={{ color: "var(--slate-light)", textDecoration: "none" }}>
+              <Link to={c.to} className="eyebrow text-slate-light no-underline">
                 {c.label}
               </Link>
             ) : (
-              <span className="eyebrow" style={{ color: last ? "var(--navy)" : "var(--slate-light)" }}>
-                {c.label}
-              </span>
+              <span className={`eyebrow ${last ? "text-navy" : "text-slate-light"}`}>{c.label}</span>
             )}
-            {!last && <span style={{ color: "var(--cream-dark)" }}>/</span>}
+            {!last && <span className="text-cream-dark">/</span>}
           </span>
         );
       })}

@@ -53,54 +53,33 @@ export function BootSplash({ onDone }: { onDone: () => void }) {
   const model = runs?.flatMap((r) => r.subStages).map((s) => s.telemetry?.model).find(Boolean);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        background: "var(--navy-deep)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-      }}
-    >
-      <div style={{ width: "100%", maxWidth: 520 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
-          <div
-            style={{
-              width: 34,
-              height: 34,
-              borderRadius: 17,
-              background: "rgba(229, 201, 123, 0.14)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
+    <div className="fixed inset-0 z-50 bg-navy-deep flex items-center justify-center p-6">
+      <div className="w-full max-w-[520px]">
+        <div className="flex items-center gap-3 mb-7">
+          <div className="w-[34px] h-[34px] rounded-[17px] bg-[rgba(229,201,123,0.14)] flex items-center justify-center">
             <ShieldCheck size={17} color="var(--gold-light)" />
           </div>
-          <span className="font-serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--cream-light)" }}>
+          <span className="font-serif text-title font-bold text-cream-light">
             Different Day
           </span>
         </div>
 
-        <div className="eyebrow" style={{ color: "var(--gold-light)" }}>
+        <div className="eyebrow text-gold-light">
           {isLive ? "Generating intelligence" : "Intelligence ready"}
         </div>
-        <h1 className="font-serif" style={{ fontSize: 26, fontWeight: 700, color: "var(--cream-light)", margin: "8px 0 0", lineHeight: 1.2 }}>
+        <h1 className="font-serif text-[26px] font-bold text-cream-light mt-2 leading-[1.2]">
           {current ? current.name : "Loading"}
         </h1>
 
-        <div style={{ marginTop: 24 }}>
+        <div className="mt-6">
           {runs === null && <Working label="Reading recorded runs" />}
 
           {runs !== null && isLive && (
-            <div style={{ display: "grid", gap: 8 }}>
+            <div className="grid gap-2">
               {active.map((r) => (
                 <LiveRow key={r.id} layerKey={r.layerKey} stage={currentStage(r.subStages)} />
               ))}
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>
+              <div className="text-xs text-white/55 mt-1">
                 {active.length} of {runs.length} layers still running. This view updates as they complete.
               </div>
             </div>
@@ -108,31 +87,20 @@ export function BootSplash({ onDone }: { onDone: () => void }) {
 
           {runs !== null && !isLive && (
             <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-                  gap: 1,
-                  background: "rgba(255,255,255,0.08)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 8,
-                  overflow: "hidden",
-                }}
-              >
+              <div className="grid gap-px [grid-template-columns:repeat(auto-fit,minmax(110px,1fr))] bg-white/[0.08] border border-white/[0.08] rounded-lg overflow-hidden">
                 <Stat label="Layers" value={String(runs.length)} />
                 <Stat label="Stages" value={String(totalStages)} />
                 <Stat label="Compute" value={formatDuration(totalMs)} />
                 {errored.length > 0 && <Stat label="Errored" value={String(errored.length)} tone="coral" />}
               </div>
               {model && (
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 12 }}>
+                <div className="text-xs text-white/55 mt-3">
                   Reasoned by {model}.
                 </div>
               )}
               <button
-                className="btn-primary"
+                className="btn-primary mt-6 gap-2"
                 onClick={onDone}
-                style={{ marginTop: 24, display: "inline-flex", alignItems: "center", gap: 8 }}
               >
                 Enter the brief <ArrowRight size={16} />
               </button>
@@ -142,15 +110,7 @@ export function BootSplash({ onDone }: { onDone: () => void }) {
 
         <button
           onClick={onDone}
-          style={{
-            marginTop: 20,
-            background: "none",
-            border: "none",
-            color: "rgba(255,255,255,0.5)",
-            fontSize: 12,
-            cursor: "pointer",
-            padding: 0,
-          }}
+          className="mt-5 bg-transparent border-none text-white/50 text-xs cursor-pointer p-0"
         >
           Skip
         </button>
@@ -167,45 +127,36 @@ function currentStage(stages: SubStage[]): SubStage | null {
 
 function LiveRow({ layerKey, stage }: { layerKey: string; stage: SubStage | null }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 12,
-        padding: "10px 14px",
-        background: "rgba(255,255,255,0.05)",
-        borderRadius: 6,
-      }}
-    >
-      <span className="font-mono" style={{ fontSize: 13, color: "var(--cream-light)" }}>
+    <div className="flex items-center justify-between gap-3 py-2.5 px-3.5 bg-white/5 rounded-md">
+      <span className="font-mono text-caption text-cream-light">
         {layerKey}
       </span>
-      <span style={{ fontSize: 12, color: "var(--gold-light)" }}>{stage ? stage.name : "finishing"}</span>
+      <span className="text-xs text-gold-light">{stage ? stage.name : "finishing"}</span>
     </div>
   );
 }
 
 function Working({ label }: { label: string }) {
   return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div className="skeleton" style={{ height: 14, width: "70%", opacity: 0.4 }} />
-      <div className="skeleton" style={{ height: 14, width: "45%", opacity: 0.4 }} />
-      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 4 }}>{label}</div>
+    <div className="grid gap-2">
+      <div className="skeleton opacity-40" style={{ height: 14, width: "70%" }} />
+      <div className="skeleton opacity-40" style={{ height: 14, width: "45%" }} />
+      <div className="text-xs text-white/55 mt-1">{label}</div>
     </div>
   );
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "coral" }) {
   return (
-    <div style={{ background: "var(--navy-deep)", padding: "14px 12px" }}>
+    <div className="bg-navy-deep py-3.5 px-3">
       <div
-        className="font-mono"
-        style={{ fontSize: 20, fontWeight: 500, color: tone === "coral" ? "var(--coral)" : "var(--cream-light)", lineHeight: 1 }}
+        className={`font-mono text-title font-medium leading-none ${
+          tone === "coral" ? "text-coral" : "text-cream-light"
+        }`}
       >
         {value}
       </div>
-      <div className="eyebrow" style={{ color: "rgba(255,255,255,0.5)", marginTop: 6 }}>
+      <div className="eyebrow text-white/50 mt-1.5">
         {label}
       </div>
     </div>

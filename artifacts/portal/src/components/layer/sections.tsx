@@ -98,9 +98,9 @@ export function DecisionActionSlot({
 // headline read down to provenance: take, metrics, causes, confounders,
 // challengers, actions, gaps, peers, supplements, feeds.
 
-function Card({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+function Card({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className="card" style={{ padding: 18, ...style }}>
+    <div className={`card p-[18px]${className ? " " + className : ""}`}>
       {children}
     </div>
   );
@@ -117,15 +117,14 @@ function host(url: string): string {
 function SourceLinks({ urls }: { urls: string[] }) {
   if (!urls || urls.length === 0) return null;
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+    <div className="flex flex-wrap gap-2 mt-2.5">
       {urls.map((u, i) => (
         <a
           key={i}
           href={u}
           target="_blank"
           rel="noreferrer noopener"
-          className="font-mono"
-          style={{ fontSize: 11, color: "var(--blue)", textDecoration: "none" }}
+          className="font-mono text-meta text-blue-base no-underline"
         >
           {host(u)}
         </a>
@@ -136,23 +135,23 @@ function SourceLinks({ urls }: { urls: string[] }) {
 
 function CardTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="font-serif" style={{ fontSize: 17, fontWeight: 700, color: "var(--navy)", margin: 0, lineHeight: 1.25 }}>
+    <h3 className="font-serif text-lead font-bold text-navy m-0 leading-[1.25]">
       {children}
     </h3>
   );
 }
 
 function Body({ children }: { children: React.ReactNode }) {
-  return <p style={{ fontSize: 14, color: "var(--slate)", lineHeight: 1.55, margin: "6px 0 0" }}>{children}</p>;
+  return <p className="text-[14px] text-slate-base mt-1.5">{children}</p>;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ marginTop: 8 }}>
-      <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10, marginRight: 8 }}>
+    <div className="mt-2">
+      <span className="eyebrow text-slate-light text-[10px] mr-2">
         {label}
       </span>
-      <span style={{ fontSize: 13, color: "var(--ink, var(--navy))" }}>{value}</span>
+      <span className="text-caption text-ink">{value}</span>
     </div>
   );
 }
@@ -163,25 +162,22 @@ function AnalystTake({ detail }: { detail: TenantLayerDetail }) {
   return (
     <section>
       <Eyebrow>Analyst take</Eyebrow>
-      <h2
-        className="font-serif"
-        style={{ fontSize: 22, fontWeight: 700, color: "var(--navy)", margin: "6px 0 12px", lineHeight: 1.25 }}
-      >
+      <h2 className="font-serif text-[22px] font-bold text-navy mt-1.5 mb-3 leading-[1.25]">
         {content.headline_finding}
       </h2>
-      <p style={{ fontSize: 15, color: "var(--slate)", lineHeight: 1.6, maxWidth: 760, whiteSpace: "pre-wrap" }}>
+      <p className="text-body text-slate-base leading-relaxed max-w-[760px] whitespace-pre-wrap">
         {content.narrative}
       </p>
       {(content.headline_impact || content.headline_lever) && (
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+        <div className="flex gap-3 flex-wrap mt-4">
           {content.headline_impact && (
-            <div className="card card-accent-coral" style={{ flex: "1 1 280px", padding: 14 }}>
+            <div className="card card-accent-coral flex-[1_1_280px] p-3.5">
               <Eyebrow>What it costs</Eyebrow>
               <Body>{content.headline_impact}</Body>
             </div>
           )}
           {content.headline_lever && (
-            <div className="card card-accent-teal" style={{ flex: "1 1 280px", padding: 14 }}>
+            <div className="card card-accent-teal flex-[1_1_280px] p-3.5">
               <Eyebrow>The lever</Eyebrow>
               <Body>{content.headline_lever}</Body>
             </div>
@@ -198,14 +194,7 @@ function Metrics({ detail }: { detail: TenantLayerDetail }) {
   return (
     <section>
       <Eyebrow>Metrics</Eyebrow>
-      <div
-        style={{
-          marginTop: 12,
-          display: "grid",
-          gap: 14,
-          gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-        }}
-      >
+      <div className="mt-3 grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
         {detail.content.metrics.map((m, i) => (
           <MetricTile key={i} label={m.label} value={m.value} sub={m.sub} tone={m.tone} basis={m.basis} confidence={m.confidence} />
         ))}
@@ -220,10 +209,10 @@ function Causes({ causes, challenge }: { causes: LayerCause[]; challenge?: Chall
   return (
     <section>
       <SectionHeading eyebrow="Why this is happening" title="Root causes" />
-      <div style={{ display: "grid", gap: 12 }}>
+      <div className="grid gap-3">
         {causes.map((c, i) => (
           <Card key={i}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <CardTitle>{c.title}</CardTitle>
               <ConfidencePill basis={c.basis} confidence={c.confidence} />
             </div>
@@ -247,12 +236,12 @@ function Confounders({ confounders }: { confounders: Confounder[] | null }) {
         eyebrow="What else could explain this"
         title="Confounders, tested and ranked"
       />
-      <div style={{ display: "grid", gap: 12 }}>
+      <div className="grid gap-3">
         {ranked.map((c, i) => (
           <Card key={i}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
-                <span className="font-mono" style={{ fontSize: 13, color: "var(--slate-light)" }}>
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div className="flex items-baseline gap-2.5 min-w-0">
+                <span className="font-mono text-caption text-slate-light">
                   {String(c.rank).padStart(2, "0")}
                 </span>
                 <CardTitle>{c.name}</CardTitle>
@@ -276,10 +265,10 @@ function Challengers({ hypotheses, challenge }: { hypotheses: LayerHypothesis[];
   return (
     <section>
       <SectionHeading eyebrow="The other reading" title="Challenger counters" />
-      <div style={{ display: "grid", gap: 12 }}>
+      <div className="grid gap-3">
         {hypotheses.map((h, i) => (
           <Card key={i}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <CardTitle>{h.statement}</CardTitle>
               <ConfidencePill basis={h.basis} confidence={h.confidence} />
             </div>
@@ -307,15 +296,15 @@ function Actions({
   return (
     <section>
       <SectionHeading eyebrow="What to do about it" title="Recommended actions" />
-      <div style={{ display: "grid", gap: 12 }}>
+      <div className="grid gap-3">
         {actions.map((a, i) => (
-          <Card key={i} style={{ borderLeft: "3px solid var(--teal)" }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <Card key={i} className="border-l-[3px] border-teal">
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
               <CardTitle>{a.title}</CardTitle>
               <ConfidencePill basis={a.basis} confidence={a.confidence} />
             </div>
             <Body>{a.detail}</Body>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 10 }}>
+            <div className="flex flex-wrap gap-4 mt-2.5">
               {a.impact && <Field label="Predicted recovery" value={a.impact} />}
               {a.timing && <Field label="Timing" value={a.timing} />}
               {a.owner && <Field label="Owner" value={a.owner} />}
@@ -344,13 +333,13 @@ function Gaps({ gaps }: { gaps: LayerGap[] }) {
   return (
     <section>
       <SectionHeading eyebrow="What would sharpen this" title="Intelligence gaps" />
-      <div style={{ display: "grid", gap: 12 }}>
+      <div className="grid gap-3">
         {ranked.map((g, i) => (
           <Card key={i}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2.5">
                 <Tag kind={GAP_TAG[g.kind] ?? "data"}>{g.kind}</Tag>
-                <span style={{ fontSize: 14, color: "var(--navy)", fontWeight: 600 }}>{g.description}</span>
+                <span className="text-[14px] text-navy font-semibold">{g.description}</span>
               </div>
               {Number.isFinite(g.confidence_lift_pp) && (
                 <Pill color="teal">+{g.confidence_lift_pp} pp confidence</Pill>
@@ -371,37 +360,26 @@ function Benchmark({ peer }: { peer: PeerBenchmark | null }) {
     <section>
       <SectionHeading eyebrow="Against the field" title={peer.dimension} />
       <Card>
-        <div style={{ display: "grid", gap: 8 }}>
+        <div className="grid gap-2">
           {peer.peers.map((p, i) => (
             <div
               key={i}
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                gap: 12,
-                padding: "6px 0",
-                borderBottom: i < peer.peers.length - 1 ? "1px solid var(--cream-dark)" : "none",
-              }}
+              className={`flex items-baseline justify-between gap-3 py-1.5 ${
+                i < peer.peers.length - 1 ? "border-b border-cream-dark" : ""
+              }`}
             >
-              <span
-                style={{
-                  fontSize: 14,
-                  color: p.is_self ? "var(--navy)" : "var(--slate)",
-                  fontWeight: p.is_self ? 700 : 500,
-                }}
-              >
+              <span className={`text-[14px] ${p.is_self ? "text-navy font-bold" : "text-slate-base font-medium"}`}>
                 {p.name}
                 {p.is_self && (
-                  <span className="eyebrow" style={{ color: "var(--gold-ink)", fontSize: 10, marginLeft: 8 }}>
+                  <span className="eyebrow text-gold-ink text-[10px] ml-2">
                     You
                   </span>
                 )}
               </span>
-              <span style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                {p.note && <span style={{ fontSize: 12, color: "var(--slate-light)" }}>{p.note}</span>}
+              <span className="flex items-baseline gap-2.5">
+                {p.note && <span className="text-xs text-slate-light">{p.note}</span>}
                 {p.value && (
-                  <span className="font-mono" style={{ fontSize: 15, color: p.is_self ? "var(--navy)" : "var(--slate)" }}>
+                  <span className={`font-mono text-body ${p.is_self ? "text-navy" : "text-slate-base"}`}>
                     {p.value}
                     {peer.unit ? ` ${peer.unit}` : ""}
                   </span>
@@ -431,9 +409,9 @@ function Supplements({ blocks }: { blocks: SupplementBlock[] }) {
   return (
     <section>
       <SectionHeading eyebrow="Worth knowing" title="Context and watchlist" />
-      <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
         {blocks.map((b, i) => (
-          <div key={i} className={`card card-accent-${SUPP_ACCENT[b.kind] ?? "navy"}`} style={{ padding: 16 }}>
+          <div key={i} className={`card card-accent-${SUPP_ACCENT[b.kind] ?? "navy"} p-4`}>
             <Eyebrow>{b.kind}</Eyebrow>
             <CardTitle>{b.title}</CardTitle>
             <Body>{b.body}</Body>
@@ -451,7 +429,7 @@ function Feeds({ feeds }: { feeds: string[] }) {
   return (
     <section>
       <SectionHeading eyebrow="What feeds this layer" title="Source feeds" />
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <div className="flex flex-wrap gap-2">
         {feeds.map((f, i) => (
           <Tag key={i} kind="data">
             {f}

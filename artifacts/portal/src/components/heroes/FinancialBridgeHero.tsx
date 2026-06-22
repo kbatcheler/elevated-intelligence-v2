@@ -24,7 +24,7 @@ export function FinancialBridgeHero({ entry, detail }: ArchetypeHeroProps) {
       <HeroRead>{panel.one_line_read || detail.content.headline_finding}</HeroRead>
 
       {steps.length > 1 && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", gap: 8, marginTop: 18 }}>
+        <div className="flex flex-wrap items-stretch gap-2 mt-[18px]">
           {steps.map((m, i) => (
             <React.Fragment key={i}>
               {i > 0 && <FlowArrow />}
@@ -35,10 +35,8 @@ export function FinancialBridgeHero({ entry, detail }: ArchetypeHeroProps) {
       )}
 
       {detail.content.headline_lever && (
-        <div style={{ marginTop: 14, fontSize: 13, color: "var(--slate)" }}>
-          <span className="eyebrow" style={{ color: "var(--teal-ink)", marginRight: 8 }}>
-            Lever
-          </span>
+        <div className="mt-3.5 text-caption text-slate-base">
+          <span className="eyebrow text-teal-ink mr-2">Lever</span>
           {detail.content.headline_lever}
         </div>
       )}

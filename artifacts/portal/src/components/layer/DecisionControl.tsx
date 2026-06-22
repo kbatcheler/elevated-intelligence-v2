@@ -49,10 +49,10 @@ export function DecisionControl({
 
   if (recorded) {
     return (
-      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <div className="mt-3 flex items-center gap-2.5 flex-wrap">
         <Pill color={recorded === "defer" ? "amber" : "coral"}>{recorded === "defer" ? "Deferred" : "Rejected"}</Pill>
-        <span style={{ fontSize: 12, color: "var(--slate-light)" }}>Recorded in the decision ledger.</span>
-        <Link to="/decisions" style={{ fontSize: 12, color: "var(--blue)", textDecoration: "none" }}>
+        <span className="text-xs text-slate-light">Recorded in the decision ledger.</span>
+        <Link to="/decisions" className="text-xs text-blue-base no-underline">
           View timeline
         </Link>
       </div>
@@ -60,34 +60,32 @@ export function DecisionControl({
   }
 
   return (
-    <div style={{ marginTop: 12, borderTop: "1px dashed var(--border)", paddingTop: 12, display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10 }}>
+    <div className="mt-3 border-t border-dashed border-border-base pt-3 grid gap-2.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="eyebrow text-slate-light text-[10px]">
           Record a decision
         </span>
         <button
           type="button"
-          className={kind === "defer" ? "btn" : "btn-ghost"}
+          className={`${kind === "defer" ? "btn" : "btn-ghost"} text-xs`}
           onClick={() => setKind(kind === "defer" ? null : "defer")}
           disabled={submitting}
-          style={{ fontSize: 12 }}
         >
           Defer
         </button>
         <button
           type="button"
-          className={kind === "reject" ? "btn" : "btn-ghost"}
+          className={`${kind === "reject" ? "btn" : "btn-ghost"} text-xs`}
           onClick={() => setKind(kind === "reject" ? null : "reject")}
           disabled={submitting}
-          style={{ fontSize: 12 }}
         >
           Reject
         </button>
       </div>
 
       {kind && (
-        <div style={{ display: "grid", gap: 8 }}>
-          <label className="eyebrow" style={{ color: "var(--slate-light)", fontSize: 10 }}>
+        <div className="grid gap-2">
+          <label className="eyebrow text-slate-light text-[10px]">
             Why is the board {kind === "defer" ? "deferring" : "rejecting"} this action?
           </label>
           <textarea
@@ -97,38 +95,26 @@ export function DecisionControl({
             rows={3}
             disabled={submitting}
             placeholder="The recommendation stays in the diagnosis; this records that it was deliberately not taken, by whom, and why."
-            style={{
-              width: "100%",
-              resize: "vertical",
-              fontSize: 13.5,
-              lineHeight: 1.5,
-              padding: "8px 10px",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              color: "var(--navy)",
-              background: "var(--cream)",
-              fontFamily: "inherit",
-            }}
+            className="w-full resize-y text-[13.5px] leading-normal py-2 px-2.5 rounded-lg border border-border-base text-navy bg-cream [font-family:inherit]"
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <button type="button" className="btn" onClick={onSubmit} disabled={!canSubmit} style={{ fontSize: 12 }}>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button type="button" className="btn text-xs" onClick={onSubmit} disabled={!canSubmit}>
               {submitting ? "Recording..." : `Record ${kind}`}
             </button>
             <button
               type="button"
-              className="btn-ghost"
+              className="btn-ghost text-xs"
               onClick={() => {
                 setKind(null);
                 setError(null);
               }}
               disabled={submitting}
-              style={{ fontSize: 12 }}
             >
               Cancel
             </button>
-            <span style={{ fontSize: 11, color: "var(--slate-light)" }}>{trimmed.length}/4000</span>
+            <span className="text-meta text-slate-light">{trimmed.length}/4000</span>
           </div>
-          {error && <span style={{ fontSize: 12.5, color: "var(--coral-ink)" }}>{error}</span>}
+          {error && <span className="text-[12.5px] text-coral-ink">{error}</span>}
         </div>
       )}
     </div>

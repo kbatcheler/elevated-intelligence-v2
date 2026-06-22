@@ -104,12 +104,12 @@ export function LayerPage({ layerKey }: { layerKey: string }) {
   ];
 
   return (
-    <PageWidth style={{ paddingTop: 24, paddingBottom: 48 }}>
+    <PageWidth space="page">
       <Breadcrumbs items={crumbs} />
 
-      <div style={{ marginTop: 18 }}>
+      <div className="mt-[18px]">
         {state.kind === "loading" && (
-          <div style={{ display: "grid", gap: 20 }}>
+          <div className="grid gap-5">
             <Skeleton height={120} />
             <SkeletonLines lines={4} />
           </div>
@@ -189,22 +189,11 @@ function LayerBody({
   };
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
+    <div className="grid gap-6">
       {detail.reducedMode && (
         <span
           title="Built with the express chain: the confound and challenge adversarial sub-stages were skipped for this layer. A full refresh rebuilds it with the complete chain."
-          style={{
-            justifySelf: "start",
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "4px 10px",
-            borderRadius: 999,
-            fontSize: 12,
-            fontWeight: 600,
-            color: "var(--navy)",
-            background: "var(--amber-faint)",
-            border: "1px solid var(--amber)",
-          }}
+          className="justify-self-start inline-flex items-center py-1 px-2.5 rounded-full text-xs font-semibold text-navy bg-amber-faint border border-amber-base"
         >
           Express build (reduced)
         </span>
@@ -239,12 +228,11 @@ function LayerBody({
 function ConfidenceCalibrationNote({ advisory }: { advisory: LayerConfidenceAdvisory }) {
   const established = advisory.label.established;
   const applied = advisory.applied;
-  const tone = !established ? "var(--slate-light)" : applied ? "var(--amber)" : "var(--teal)";
-  const background = !established
-    ? "var(--cream-dark)"
+  const variantClass = !established
+    ? "bg-cream-dark border-slate-light"
     : applied
-      ? "var(--amber-faint)"
-      : "var(--cream-dark)";
+      ? "bg-amber-faint border-amber-base"
+      : "bg-cream-dark border-teal";
 
   const body = !established
     ? "Confidence calibration is provisional for this layer (" +
@@ -269,19 +257,10 @@ function ConfidenceCalibrationNote({ advisory }: { advisory: LayerConfidenceAdvi
 
   return (
     <div
-      style={{
-        justifySelf: "stretch",
-        padding: "10px 14px",
-        borderRadius: 8,
-        fontSize: 13,
-        lineHeight: 1.5,
-        color: "var(--navy)",
-        background,
-        border: "1px solid " + tone,
-      }}
+      className={`justify-self-stretch py-2.5 px-3.5 rounded-lg text-caption leading-normal text-navy border ${variantClass}`}
     >
-      <span style={{ fontWeight: 600 }}>Confidence calibration</span>
-      <span style={{ marginLeft: 8, color: "var(--slate)" }}>{body}</span>
+      <span className="font-semibold">Confidence calibration</span>
+      <span className="ml-2 text-slate-base">{body}</span>
     </div>
   );
 }
@@ -313,33 +292,21 @@ function TenantEfficacyRollup({ tenantId }: { tenantId: string }) {
     };
   }, [tenantId, logout]);
 
-  const rollupStyle = {
-    justifySelf: "stretch" as const,
-    padding: "12px 14px",
-    borderRadius: 8,
-    fontSize: 13,
-    lineHeight: 1.5,
-    color: "var(--navy)",
-    background: "var(--cream-dark)",
-    border: "1px solid var(--slate-light)",
-    display: "flex",
-    alignItems: "baseline" as const,
-    gap: 12,
-    flexWrap: "wrap" as const,
-  };
+  const rollupClass =
+    "justify-self-stretch py-3 px-3.5 rounded-lg text-caption leading-normal text-navy bg-cream-dark border border-slate-light flex items-baseline gap-3 flex-wrap";
   if (state.status === "loading") {
     return (
-      <div style={rollupStyle}>
-        <span style={{ fontWeight: 600 }}>Company data efficacy</span>
-        <span style={{ color: "var(--slate)" }}>Loading...</span>
+      <div className={rollupClass}>
+        <span className="font-semibold">Company data efficacy</span>
+        <span className="text-slate-base">Loading...</span>
       </div>
     );
   }
   if (state.status === "error") {
     return (
-      <div style={rollupStyle}>
-        <span style={{ fontWeight: 600 }}>Company data efficacy</span>
-        <span style={{ color: "var(--slate)" }}>Efficacy unavailable right now</span>
+      <div className={rollupClass}>
+        <span className="font-semibold">Company data efficacy</span>
+        <span className="text-slate-base">Efficacy unavailable right now</span>
       </div>
     );
   }
@@ -348,15 +315,15 @@ function TenantEfficacyRollup({ tenantId }: { tenantId: string }) {
   const capped = state.data.modeCeiling < 100;
 
   return (
-    <div style={rollupStyle}>
-      <span style={{ fontWeight: 600 }}>Company data efficacy</span>
+    <div className={rollupClass}>
+      <span className="font-semibold">Company data efficacy</span>
       {rollup.score === null ? (
-        <span style={{ color: "var(--slate)" }}>- (no generated layer to score yet)</span>
+        <span className="text-slate-base">- (no generated layer to score yet)</span>
       ) : (
         <>
-          <span style={{ fontSize: 20, fontWeight: 700 }}>{rollup.score}</span>
-          <span style={{ color: "var(--slate)" }}>/ 100</span>
-          <span style={{ color: "var(--slate)" }}>
+          <span className="text-title font-bold">{rollup.score}</span>
+          <span className="text-slate-base">/ 100</span>
+          <span className="text-slate-base">
             mean across {rollup.n} generated layer{rollup.n === 1 ? "" : "s"}
           </span>
         </>
@@ -364,7 +331,7 @@ function TenantEfficacyRollup({ tenantId }: { tenantId: string }) {
       {capped && (
         <span
           title="Outside-in mode: the connector-grounded drivers (coverage, freshness) are structurally zero, so the index cannot reach 100. Connect data to raise the ceiling."
-          style={{ color: "var(--slate)" }}
+          className="text-slate-base"
         >
           ceiling {state.data.modeCeiling} (outside-in)
         </span>
@@ -384,58 +351,47 @@ function EfficacyNote({ index }: { index: EfficacyIndex }) {
   const capped = index.modeCeiling < 100;
 
   return (
-    <div
-      style={{
-        justifySelf: "stretch",
-        padding: "12px 14px",
-        borderRadius: 8,
-        fontSize: 13,
-        lineHeight: 1.5,
-        color: "var(--navy)",
-        background: "var(--cream-dark)",
-        border: "1px solid var(--slate-light)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-        <span style={{ fontWeight: 600 }}>Data efficacy</span>
-        <span style={{ fontSize: 20, fontWeight: 700 }}>{index.score}</span>
-        <span style={{ color: "var(--slate)" }}>/ 100</span>
+    <div className="justify-self-stretch py-3 px-3.5 rounded-lg text-caption leading-normal text-navy bg-cream-dark border border-slate-light">
+      <div className="flex items-baseline gap-2.5 flex-wrap">
+        <span className="font-semibold">Data efficacy</span>
+        <span className="text-title font-bold">{index.score}</span>
+        <span className="text-slate-base">/ 100</span>
         {capped && (
           <span
             title="Outside-in mode: the connector-grounded drivers (coverage, freshness) are structurally zero, so the index cannot reach 100. Connect data to raise the ceiling."
-            style={{ color: "var(--slate)" }}
+            className="text-slate-base"
           >
             ceiling {index.modeCeiling} ({index.dataMode === "outside_in" ? "outside-in" : "connected"})
           </span>
         )}
         {index.unknownWeight > 0 && (
-          <span style={{ color: "var(--slate)" }}>
+          <span className="text-slate-base">
             {Math.round(index.unknownWeight * 100)}% not yet measured
           </span>
         )}
       </div>
-      <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+      <div className="grid gap-1 mt-2">
         {index.drivers.map((d) => (
           <div
             key={d.key}
-            style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}
+            className="flex gap-2 items-baseline flex-wrap"
             title={d.reason}
           >
-            <span style={{ minWidth: 150, fontWeight: 600 }}>{d.label}</span>
-            <span style={{ minWidth: 48 }}>{formatRatioPct(d.value)}</span>
-            <span style={{ color: "var(--slate)" }}>
+            <span className="min-w-[150px] font-semibold">{d.label}</span>
+            <span className="min-w-12">{formatRatioPct(d.value)}</span>
+            <span className="text-slate-base">
               {d.status === "not_measured"
                 ? "not measured"
                 : "+" + d.contributionPoints + " pts (weight " + Math.round(d.weight * 100) + "%)"}
             </span>
-            <span style={{ color: "var(--slate)" }}>{d.reason}</span>
+            <span className="text-slate-base">{d.reason}</span>
           </div>
         ))}
       </div>
       {index.cheapestImprovement && (
-        <div style={{ marginTop: 8, color: "var(--navy)" }}>
-          <span style={{ fontWeight: 600 }}>Cheapest improvement: </span>
-          <span style={{ color: "var(--slate)" }}>
+        <div className="mt-2 text-navy">
+          <span className="font-semibold">Cheapest improvement: </span>
+          <span className="text-slate-base">
             {index.cheapestImprovement.hint} (about +{index.cheapestImprovement.liftPoints} pts)
           </span>
         </div>

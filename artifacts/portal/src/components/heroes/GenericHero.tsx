@@ -22,7 +22,7 @@ export function GenericHero({ entry, detail }: ArchetypeHeroProps) {
         ) : fallback ? (
           <HeroBigMetric label={fallback.label} value={fallback.value} sub={fallback.sub} tone={fallback.tone} />
         ) : (
-          <div style={{ fontSize: 14, color: "var(--slate)" }}>No headline metric is recorded for this layer yet.</div>
+          <div className="text-[14px] text-slate-base">No headline metric is recorded for this layer yet.</div>
         )}
         {panel && <HeroTrend panel={panel} />}
       </HeroTopRow>
