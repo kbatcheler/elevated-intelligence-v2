@@ -53,3 +53,4 @@
 ## Schema and tooling
 - [Push a new Drizzle table before integration](schema-push-before-integration.md) - a new schema table is not in dev Postgres until pushed; integration tests 500 until then.
 - [Code execution sandbox quirks](code-exec-sandbox.md) - non-obvious return shapes/limits of code_execution callbacks (executeSql, architect) and bash.
+- [GitHub push from Replit](github-push-replit.md) - "push rejected" is usually the missing OAuth `workflow` scope on .github/workflows/*, not divergence; plus stale .git locks and the agent git block.
