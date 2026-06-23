@@ -9,6 +9,7 @@
 ## Drift protocol
 - [V2 drift and build-report protocol](v2-drift-protocol.md) - how each V2 phase is gated, where reports live, the long-dash sweep every phase passes.
 - [Drift protocol lockstep](drift-protocol-lockstep.md) - the exact docs that move together each phase and rollup.md's internal structure.
+- [Interphase drift reconciliation](interphase-drift-reconciliation.md) - out-of-band task-queue merges silently desync the ledger; reconcile (not-a-new-phase) before resuming a lettered phase.
 
 ## Gates and verification
 - [Running tests and checks](test-execution.md) - run typecheck/build/test via the workflows; direct shell runs get killed.

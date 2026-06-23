@@ -38,6 +38,18 @@ PASS. AS adds one logged drift item: an automated cross-viewport AA and 375px sw
 is an operator follow-up (owner secrets are not in the agent shell and the screenshot tool has no viewport
 control), with AA and the mobile floor handled by construction and confirmed on the public login surface.
 
+A post-AS reconciliation (2026-06-23) followed on owner request before opening Phase AT; it minted no phase and
+advanced no gate, so Phase AS remains the last gated phase. Nine substantive commits had merged through the task
+queue after the Phase AS commit (range `7d2d53c..ac98ef4`) without a per-phase drift record, leaving this rollup,
+INDEX, and the V2 build report stale at "A through AS" and the recorded suite total (1179) behind the tree (1187).
+Gates re-run green on HEAD `ac98ef4` (typecheck and build exit 0, build at 1773 modules; full suite green at 1187
+tests, the +8 over AS being new api-server test infrastructure); the two-sided long-dash sweep is zero (source
+guard plus a fresh server-side row-cast over all 185 public text and jsonb columns); zero new npm dependencies.
+The post-AS product-code changes were verified safe (the notification-centre read no longer materialises default
+push rules but defaults still come from the scheduled evaluator and `GET /rules`; the `lib/db` connect-timeout
+bump is VITEST-gated with the production default unchanged). It adds two still-live drift items, recorded below.
+The full record is `docs/drift/audit-post-AS.md`.
+
 Earlier, updated after Phase AR (operational hardening, the fourth phase of the Robustness and Magic wave). AR
 changes no product behaviour; it makes the deployment posture explicit and self-consistent across code, infra,
 and the runbooks. Two of its three substrate pieces were already real from the post-AN remediation (the
@@ -539,6 +551,25 @@ consolidated into one bullet that remains in "Still live". The full record is `d
 
 ## Still live, worth attention
 
+- Grounder seat on a PREVIEW model (post-AS reconciliation, 2026-06-23). The cortex
+  `grounder` seat moved to `gemini-3.1-pro-preview`, a preview model on the live
+  grounding path, swapped outside the per-phase protocol and unverified against the
+  live Gemini API (the cortex suite makes no live model calls). A preview model can be
+  rate-limited, renamed, or withdrawn, and the seat-keyed list-price default in
+  `lib/cortex/src/pricing.ts` may not match its real price. Before any paid seed or
+  live demo, confirm the id resolves and the price, and consider pinning to a generally
+  available model id. See `docs/drift/audit-post-AS.md`.
+- Ambient `DATABASE_URL` is a destructive-operation target with no refuse-on-production
+  guard (post-AS reconciliation, 2026-06-23). The per-worker test isolation issues
+  `CREATE DATABASE ... TEMPLATE` through the psql binary in `globalSetup` (guarded only
+  by a `_test_w<N>` clone-name assertion), and the `.replit` `[postMerge]` hook runs
+  `scripts/post-merge.sh` which issues `pnpm --filter @workspace/db run push-force`
+  against the same ambient URL; neither path refuses a production target, so a workspace
+  pointed at a production database would create test databases or push schema there. The
+  workspace database is non-production in the normal Replit task-merge context. The open
+  follow-up to warn or refuse on a production target should cover both paths before any
+  environment where production credentials could be present. See
+  `docs/drift/audit-post-AS.md`.
 - SESSION_SECRET coupling (D). PIN code hashes and session signatures both derive
   from it, so rotating it invalidates all sessions and all outstanding PINs at
   once. Operational caveat, captured in `docs/deploy-readiness.md`.
