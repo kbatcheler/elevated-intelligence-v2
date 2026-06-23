@@ -1,42 +1,26 @@
 import { defineConfig } from "vitest/config";
+import { fileParallelismEnabled, maxWorkerCount } from "./src/test/testDb";
 
 // The api-server suite is overwhelmingly INTEGRATION tests that boot a throwaway
-// HTTP listener over the SHARED development Postgres. Vitest forks each test FILE
-// into its own process, and each process opens its own `@workspace/db` pool. The
-// default fork count tracks the CPU count (8 here), so a default run fans out ~8
-// forks that all hammer the one database at once - AND it commonly overlaps the
-// live `API Server` dev workflow, which holds its own pool connections.
+// HTTP listener over a real Postgres. Each test FILE is forked into its own
+// process, and each process opens its own `@workspace/db` pool.
 //
-// Under that contention two failure modes appear non-deterministically, ~6
-// different tests each run, which is exactly the flakiness this config fixes:
-//   1. A test times out at vitest's 5000ms default `testTimeout` because an
-//      otherwise-healthy query is starved of CPU/IO.
-//   2. A route returns 500 because a query inside the request handler times out
-//      acquiring a pool connection under the load. The provider-seat
-//      `GET /api/push/notifications` is the canonical victim: it upserts a
-//      default push rule across EVERY accessible tenant in one statement, and the
-//      shared dev DB accumulates tenants from every other suite, so that single
-//      write is the most contention-sensitive query in the suite.
+// Those tests run against DEDICATED, disposable databases, not the shared
+// development Postgres the live dev server uses. Isolation is PER WORKER, not just
+// per run: `src/test/globalSetup.ts` builds a pristine template (schema + canonical
+// layers) once and clones one database per vitest pool slot from it; the per-worker
+// `src/test/setupEnv.ts` pins each worker's DATABASE_URL to its own clone before the
+// db pool is constructed. A provider/owner seat sees every tenant in its database,
+// so with one shared database parallel files still contended over each other's
+// tenants (e.g. GET /api/push/notifications upserting across all of them); a database
+// per worker keeps that fan-out scoped to the files that ran sequentially in that
+// worker, so the suite is deterministic with file parallelism on.
 //
-// Fix: run the api-server files SEQUENTIALLY in one worker
-// (`fileParallelism: false`) so the integration files can no longer contend with
-// each other for the shared database. With only one suite touching the DB at a
-// time, the per-request queries complete well within their bounds, and the only
-// remaining overlap is the idle dev server (tolerated by the larger under-test
-// connection timeout in `@workspace/db`). The timeouts are also raised so a
-// slow-but-working query never trips the 5000ms wall; a genuinely hung test
-// still fails, just after a longer, contention-tolerant bound.
-//
-// Runtime stays reasonable: the files run back to back in a single warm process
-// instead of paying per-fork startup, and unit-only files are tiny. Both knobs
-// are env-overridable for a different machine or a quick parallel spot-check.
-// None of this changes product runtime behaviour; it only shapes the test runner.
-function fileParallelism(): boolean {
-  const raw = process.env.VITEST_FILE_PARALLELISM;
-  if (raw) return raw === "1" || raw.toLowerCase() === "true";
-  return false;
-}
-
+// maxForks is capped to the number of provisioned worker databases so every pool id
+// in use maps to a database that exists. Parallelism and timeouts stay
+// env-overridable for a slower machine or a single-fork spot-check
+// (VITEST_FILE_PARALLELISM, VITEST_MAX_FORKS, VITEST_TEST_TIMEOUT_MS). None of this
+// changes product runtime behaviour; it only shapes the test runner.
 function timeoutMs(): number {
   const raw = process.env.VITEST_TEST_TIMEOUT_MS;
   if (raw) {
@@ -50,13 +34,17 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
-    // Sweep orphaned test-only rows from the shared dev DB ONCE before the run,
-    // so a crashed prior run's namespaced rows cannot accumulate and slow the
-    // cross-tenant queries. Opt out with SKIP_TEST_DATA_PURGE=1.
-    globalSetup: ["./vitest.globalSetup.ts"],
-    fileParallelism: fileParallelism(),
+    globalSetup: ["src/test/globalSetup.ts"],
+    setupFiles: ["src/test/setupEnv.ts"],
+    fileParallelism: fileParallelismEnabled(),
     testTimeout: timeoutMs(),
     hookTimeout: timeoutMs(),
     pool: "forks",
+    poolOptions: {
+      forks: {
+        minForks: 1,
+        maxForks: maxWorkerCount(),
+      },
+    },
   },
 });
