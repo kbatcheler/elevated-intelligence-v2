@@ -88,10 +88,15 @@ function serializeRule(row: {
   };
 }
 
-// GET /notifications - the in-app center. Ensures a default rule per reachable
-// tenant first so a fresh seat is never empty for the wrong reason, then lists
-// the caller's most recent events fenced to reachable tenants, with the unread
-// count computed over the full set rather than the capped page.
+// GET /notifications - the in-app center. Lists the caller's most recent events
+// fenced to reachable tenants, with the unread count computed over the full set
+// rather than the capped page. This is a pure read: it never touches push_rules,
+// so it does NOT materialize default rules. Default rules are materialized by the
+// scheduled evaluator (platform-wide, where events are minted) and lazily by
+// GET /rules when the tuning surface is opened; nothing the notification center
+// shows depends on a rule row existing. Keeping rule materialization off this hot
+// read path means opening the center no longer rewrites a rule per tenant, so its
+// cost does not grow with the client base.
 pushRouter.get("/notifications", async (req, res, next) => {
   try {
     const user = req.user;
@@ -104,7 +109,6 @@ pushRouter.get("/notifications", async (req, res, next) => {
       res.json({ notifications: [], unreadCount: 0 });
       return;
     }
-    await ensureDefaultRules(accessible.map((tenantId) => ({ ownerUserId: user.id, tenantId })));
 
     const rows = await db
       .select({

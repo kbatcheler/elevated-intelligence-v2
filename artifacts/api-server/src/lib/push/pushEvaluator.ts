@@ -63,18 +63,51 @@ export interface PushEvaluationOutcome {
 }
 
 // Materialize default rules for the given (owner, tenant) pairs across every
-// implemented kind. ON CONFLICT DO NOTHING makes it safe to call repeatedly and
-// from several places (the scheduled pass for all users, a route for one user).
+// implemented kind. Safe to call repeatedly and from several places (the
+// scheduled pass for all users, a route for one user).
+//
+// Read-first by design: it loads which (owner, tenant, kind) rules already exist
+// and stages an insert only for the genuinely missing ones. An unconditional
+// ON CONFLICT DO NOTHING upsert of every (owner, tenant, kind) is correct, but
+// every attempted insert still takes a row lock, so for a provider seat that
+// reaches every tenant the write cost grew with the client base, the single most
+// contention-sensitive write in the suite. After a seat's defaults exist, a
+// repeat call now does one indexed read and zero writes.
 export async function ensureDefaultRules(
   pairs: readonly { ownerUserId: string; tenantId: string }[],
 ): Promise<void> {
   if (pairs.length === 0) return;
+
+  const ownerIds = [...new Set(pairs.map((p) => p.ownerUserId))];
+  const tenantIds = [...new Set(pairs.map((p) => p.tenantId))];
+  const existing = await db
+    .select({
+      ownerUserId: pushRulesTable.ownerUserId,
+      tenantId: pushRulesTable.tenantId,
+      type: pushRulesTable.type,
+    })
+    .from(pushRulesTable)
+    .where(
+      and(
+        inArray(pushRulesTable.ownerUserId, ownerIds),
+        inArray(pushRulesTable.tenantId, tenantIds),
+      ),
+    );
+  const ruleKey = (ownerUserId: string, tenantId: string, type: string): string =>
+    ownerUserId + "\u0000" + tenantId + "\u0000" + type;
+  const have = new Set(existing.map((r) => ruleKey(r.ownerUserId, r.tenantId, r.type)));
+
   const values: InsertPushRule[] = [];
   for (const p of pairs) {
     for (const type of RULE_TYPES) {
+      if (have.has(ruleKey(p.ownerUserId, p.tenantId, type))) continue;
       values.push({ ownerUserId: p.ownerUserId, tenantId: p.tenantId, type });
     }
   }
+  if (values.length === 0) return;
+
+  // ON CONFLICT DO NOTHING remains the final guard against a race: two callers
+  // can both observe the same rule missing and both stage it.
   const CHUNK = 200;
   for (let i = 0; i < values.length; i += CHUNK) {
     await db.insert(pushRulesTable).values(values.slice(i, i + CHUNK)).onConflictDoNothing();
