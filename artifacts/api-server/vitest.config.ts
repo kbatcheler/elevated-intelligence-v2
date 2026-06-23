@@ -50,6 +50,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Sweep orphaned test-only rows from the shared dev DB ONCE before the run,
+    // so a crashed prior run's namespaced rows cannot accumulate and slow the
+    // cross-tenant queries. Opt out with SKIP_TEST_DATA_PURGE=1.
+    globalSetup: ["./vitest.globalSetup.ts"],
     fileParallelism: fileParallelism(),
     testTimeout: timeoutMs(),
     hookTimeout: timeoutMs(),

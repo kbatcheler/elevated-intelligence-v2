@@ -12,7 +12,8 @@
     "seed:tenant": "tsx src/scripts/seedTenant.ts",
     "seed:demo": "tsx src/scripts/seedDemo.ts",
     "seed:connectors": "tsx src/scripts/seedConnectors.ts",
-    "anchor:sweep": "tsx src/scripts/anchorSweep.ts"
+    "anchor:sweep": "tsx src/scripts/anchorSweep.ts",
+    "purge:test-data": "tsx src/scripts/purgeTestData.ts"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",

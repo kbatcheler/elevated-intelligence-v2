@@ -16,6 +16,7 @@
 - [Verifying gates and the two-sided dash sweep](verifying-gates.md) - workflow logs are lossy; run gates to a file plus exit code.
 - [Stage gate workflow quirks](stage-gate-workflow-quirks.md) - log-flush ordering, guard scope gaps, the DB sweep via executeSql.
 - [api-server test DB contention](api-server-test-contention.md) - why the api-server suite runs files sequentially against the one shared dev Postgres; the push-500 / 5000ms-timeout flakes it cures.
+- [Orphaned test-data purge](test-data-purge.md) - marker-based, FK-ordered sweep of leftover integration-test rows from the shared dev DB; runs as a vitest globalSetup.
 - [Functional e2e auth strategy](functional-e2e-auth.md) - driving authenticated e2e tests when owner secrets are not in the agent shell.
 
 ## Long-dash sweep
