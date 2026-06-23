@@ -17,13 +17,11 @@ description: Non-obvious operational facts for running the Drift Control Protoco
   with `rg -nP "[\x{2014}\x{2013}]"` before declaring a phase green.
   **Why:** those paths are outside the guard's configured roots, so a stray em/en-dash there passes CI silently.
 
-- **Known flaky integration test.** `artifacts/api-server/src/routes/push.integration.test.ts`
-  ("marks one event read, then read-all clears the badge") can intermittently get a 500 instead of
-  200 on `GET /api/push/notifications` under the concurrent api-server vitest run. This is a transient
-  Postgres pool-timeout, not a real regression. If it fails alone while everything else is green,
-  re-run the `test` workflow once to confirm green.
-  **How to apply:** only treat it as real if it reproduces across re-runs or alongside other failures;
-  a single isolated 500 here is a flake, not a regression.
+- **api-server test contention (was the flaky push 500 / mass 5000ms timeouts).** See
+  [api-server test DB contention](api-server-test-contention.md). The api-server suite now runs
+  files SEQUENTIALLY (`fileParallelism: false` in `artifacts/api-server/vitest.config.ts`) because
+  parallel forks against the ONE shared dev Postgres contend and flake non-deterministically. Do not
+  re-enable parallelism to "speed it up" without re-isolating the DB; single-fork is not slower here.
 
 - **DB-wide long-dash sweep (the data side of the gate).** The source `emDashGuard` does NOT cover
   database content, so a stage-close must ALSO run a fresh DB-wide cast for em-dash (chr(8212)) and

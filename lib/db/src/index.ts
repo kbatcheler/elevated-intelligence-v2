@@ -34,11 +34,24 @@ function defaultPoolMax(): number {
   return intFromEnv("DATABASE_POOL_MAX", process.env.VITEST ? 5 : 20);
 }
 
+// Acquiring a client (which may mean opening a fresh server-side connection) is
+// bounded so a stuck connect fails loudly instead of hanging forever. Under the
+// test runner the shared dev DB is also held by the live API Server dev
+// workflow, so a brief acquisition stall under load should WAIT rather than
+// error a request into a 500; the bound is therefore more generous under VITEST.
+// An explicit DATABASE_POOL_CONNECT_TIMEOUT_MS still wins in both.
+function defaultConnectTimeoutMs(): number {
+  return intFromEnv(
+    "DATABASE_POOL_CONNECT_TIMEOUT_MS",
+    process.env.VITEST ? 20_000 : 10_000,
+  );
+}
+
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: defaultPoolMax(),
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 10_000,
+  connectionTimeoutMillis: defaultConnectTimeoutMs(),
   statement_timeout: 30_000,
 });
 

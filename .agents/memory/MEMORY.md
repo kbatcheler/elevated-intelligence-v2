@@ -14,7 +14,8 @@
 - [Running tests and checks](test-execution.md) - run typecheck/build/test via the workflows; direct shell runs get killed.
 - [Verification loop on this repo](verification-loop.md) - run and read the checks without killed processes or missing owner secrets.
 - [Verifying gates and the two-sided dash sweep](verifying-gates.md) - workflow logs are lossy; run gates to a file plus exit code.
-- [Stage gate workflow quirks](stage-gate-workflow-quirks.md) - log-flush ordering, guard scope gaps, a known flaky push test, the DB sweep via executeSql.
+- [Stage gate workflow quirks](stage-gate-workflow-quirks.md) - log-flush ordering, guard scope gaps, the DB sweep via executeSql.
+- [api-server test DB contention](api-server-test-contention.md) - why the api-server suite runs files sequentially against the one shared dev Postgres; the push-500 / 5000ms-timeout flakes it cures.
 - [Functional e2e auth strategy](functional-e2e-auth.md) - driving authenticated e2e tests when owner secrets are not in the agent shell.
 
 ## Long-dash sweep
