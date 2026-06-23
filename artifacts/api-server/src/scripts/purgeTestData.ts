@@ -39,6 +39,32 @@
 // FKs that are ON DELETE RESTRICT both point at `users`
 // (`invite_pins.created_by`, `access_grants.granted_by`), so the test-scoped rows
 // on those two tables are cleared before the test users themselves are deleted.
+//
+// The SET NULL telemetry/audit tables
+// -----------------------------------
+// Five tables reference tenants ON DELETE SET NULL rather than CASCADE, because
+// they are operational and audit LEDGERS deliberately built to outlive a REAL
+// tenant deletion (model_usage keeps global spend honest, alert_events and
+// retention_events are the SOC 2 audit trail, benchmark_consent_events is the
+// consent log, push_events is a defensive display continuity). On a tenant
+// delete their rows survive with tenant_id nulled, and once nulled a test row
+// carries no recoverable run-id/example.com marker, so it can no longer be
+// matched and would accumulate run over run.
+//
+// The fix is to delete those rows HERE, keyed by the test tenant ids, BEFORE the
+// tenant delete nulls them out. It is scoped strictly to the tenants we are
+// already removing as test, so it never touches real telemetry (which stays tied
+// to a live demo tenant and is therefore never nulled) and never touches a
+// legitimately global row (a global alert or a no-tenant-scope call, whose
+// tenant_id is already NULL and so is excluded by the `IN (test tenant ids)`
+// predicate). push_events would also cascade away via its rule, but is swept
+// here too for symmetry and defence in depth.
+//
+// Rows that were already orphaned (tenant_id already NULL) by a purge that ran
+// BEFORE this change are a finite, frozen backlog: they cannot be re-associated
+// with a tenant and are indistinguishable from legitimately global rows, so they
+// are deliberately NOT swept. The going-forward guarantee is that no NEW test
+// telemetry is left behind.
 
 import { sql } from "drizzle-orm";
 import { db, pool } from "@workspace/db";
@@ -61,10 +87,25 @@ const testUser = sql`(users.email ~* '@example\\.com$' OR users.email ~ ${RUN_ID
 // The real provider org has a plain name.
 const testOrg = sql`(orgs.name ~ ${RUN_ID_RE})`;
 
+// The telemetry/audit tables that reference tenants ON DELETE SET NULL. Their
+// test rows are swept by the test tenant ids before the tenant delete, so they
+// never survive nulled and accumulate. Names are hardcoded constants, never user
+// input, so interpolating them with sql.raw is safe.
+const SET_NULL_TELEMETRY_TABLES = [
+  "model_usage",
+  "alert_events",
+  "benchmark_consent_events",
+  "push_events",
+  "retention_events",
+] as const;
+
 export interface PurgeCounts {
   tenants: number;
   users: number;
   orgs: number;
+  // Rows removed from the SET NULL telemetry/audit tables because they were tied
+  // to a test tenant (summed across all five tables).
+  telemetry: number;
 }
 
 async function countTestRows(executor: typeof db): Promise<PurgeCounts> {
@@ -77,10 +118,19 @@ async function countTestRows(executor: typeof db): Promise<PurgeCounts> {
   const orgs = await executor.execute(
     sql`SELECT count(*)::int AS n FROM orgs WHERE ${testOrg}`,
   );
+  let telemetry = 0;
+  for (const table of SET_NULL_TELEMETRY_TABLES) {
+    const r = await executor.execute(
+      sql`SELECT count(*)::int AS n FROM ${sql.raw(table)}
+          WHERE tenant_id IN (SELECT id FROM tenants WHERE ${testTenant})`,
+    );
+    telemetry += Number((r.rows[0] as { n: number }).n);
+  }
   return {
     tenants: Number((tenants.rows[0] as { n: number }).n),
     users: Number((users.rows[0] as { n: number }).n),
     orgs: Number((orgs.rows[0] as { n: number }).n),
+    telemetry,
   };
 }
 
@@ -90,14 +140,28 @@ async function countTestRows(executor: typeof db): Promise<PurgeCounts> {
 // nothing orphaned removes zero rows.
 export async function purgeTestData(): Promise<PurgeCounts> {
   return db.transaction(async (tx) => {
-    // 1. Tenants first: ON DELETE CASCADE clears derived_signals,
+    // 1. Sweep the SET NULL telemetry/audit tables FIRST, while the test tenants
+    //    still exist, keyed by their ids. Done before the tenant delete because
+    //    that delete would null tenant_id and erase the only link back to a test
+    //    tenant, stranding these rows forever. Scoped to test tenant ids, so real
+    //    and legitimately global rows are untouched.
+    let telemetry = 0;
+    for (const table of SET_NULL_TELEMETRY_TABLES) {
+      const r = await tx.execute(
+        sql`DELETE FROM ${sql.raw(table)}
+            WHERE tenant_id IN (SELECT id FROM tenants WHERE ${testTenant})`,
+      );
+      telemetry += r.rowCount ?? 0;
+    }
+
+    // 2. Tenants: ON DELETE CASCADE clears derived_signals,
     //    provenance_ledger, tenant_layers, tenant_keys, org_tenants, access_grants
     //    (by tenant_id), push_rules and the rest of the tenant subtree.
     const tenants = await tx.execute(
       sql`DELETE FROM tenants WHERE ${testTenant} RETURNING id`,
     );
 
-    // 2. Clear the two ON DELETE RESTRICT references into users before deleting
+    // 3. Clear the two ON DELETE RESTRICT references into users before deleting
     //    test users. invite_pins is not tenant-scoped, so its test rows (created
     //    by a test user or scoped to a test org) must be removed explicitly.
     await tx.execute(
@@ -112,12 +176,12 @@ export async function purgeTestData(): Promise<PurgeCounts> {
           WHERE granted_by IN (SELECT id FROM users WHERE ${testUser})`,
     );
 
-    // 3. Test users (other user FKs are CASCADE or SET NULL).
+    // 4. Test users (other user FKs are CASCADE or SET NULL).
     const users = await tx.execute(
       sql`DELETE FROM users WHERE ${testUser} RETURNING id`,
     );
 
-    // 4. Test orgs (org_tenants already cascaded with the tenants above).
+    // 5. Test orgs (org_tenants already cascaded with the tenants above).
     const orgs = await tx.execute(
       sql`DELETE FROM orgs WHERE ${testOrg} RETURNING id`,
     );
@@ -126,6 +190,7 @@ export async function purgeTestData(): Promise<PurgeCounts> {
       tenants: tenants.rowCount ?? tenants.rows.length,
       users: users.rowCount ?? users.rows.length,
       orgs: orgs.rowCount ?? orgs.rows.length,
+      telemetry,
     };
   });
 }
@@ -137,7 +202,7 @@ async function main(): Promise<void> {
   console.log("");
   console.log("============== PURGE:TEST-DATA ==============");
   console.log(
-    `test-marked rows found: ${before.tenants} tenants, ${before.users} users, ${before.orgs} orgs`,
+    `test-marked rows found: ${before.tenants} tenants, ${before.users} users, ${before.orgs} orgs, ${before.telemetry} SET-NULL telemetry rows`,
   );
 
   if (dryRun) {
@@ -148,7 +213,7 @@ async function main(): Promise<void> {
 
   const removed = await purgeTestData();
   console.log(
-    `removed: ${removed.tenants} tenants, ${removed.users} users, ${removed.orgs} orgs (plus cascaded children)`,
+    `removed: ${removed.tenants} tenants, ${removed.users} users, ${removed.orgs} orgs, ${removed.telemetry} SET-NULL telemetry rows (plus cascaded children)`,
   );
 
   const after = await countTestRows(db);

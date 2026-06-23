@@ -30,7 +30,20 @@ The clean baseline is exactly 4 tenants, 1 user, 1 org.
 All tenant FKs are ON DELETE CASCADE, so deleting test tenants clears their whole subtree.
 The only ON DELETE RESTRICT FKs both point at `users` (`invite_pins.created_by`,
 `access_grants.granted_by`) — clear those test-scoped rows BEFORE deleting test users.
-Order in one transaction: tenants -> invite_pins/access_grants -> users -> orgs.
+A handful of telemetry/audit tables reference tenants ON DELETE **SET NULL** (they are
+ledgers meant to outlive a REAL tenant delete): model_usage, alert_events,
+benchmark_consent_events, push_events, retention_events. Sweep those FIRST, keyed by the
+test tenant ids (`tenant_id IN (SELECT id FROM tenants WHERE <testTenant>)`), because once
+the tenant delete nulls tenant_id the row loses its only test marker forever.
+Order in one transaction: SET-NULL telemetry -> tenants -> invite_pins/access_grants ->
+users -> orgs.
 
 **Why:** a source guard can't stop runtime row accumulation; the sweep must be marker-based
 and FK-ordered so it removes only test rows and never trips a RESTRICT.
+
+## The SET-NULL telemetry trap
+A NULL tenant_id is NOT itself a test marker: alert_events allows global alerts and
+model_usage allows no-tenant-scope calls, both legitimately NULL. So a blanket "delete
+NULL-tenant rows" sweep would eat real global rows. Match by the test tenant id BEFORE the
+delete instead. Rows already orphaned (nulled) by a purge that ran before this fix are a
+frozen, unmatchable backlog and are deliberately left alone.
