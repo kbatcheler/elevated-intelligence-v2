@@ -41,12 +41,12 @@ export function AccessConsole() {
 
   return (
     <div className="max-w-[1080px] mx-auto pt-12 px-8 pb-24">
-      <div className="mb-8 flex gap-4 border-b border-border-base">
+      <div className="mb-8 flex gap-4 border-b border-border-base overflow-x-auto">
         {(["pins", "users", "orgs", "ingestion", "layers"] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`py-3 px-4 bg-transparent border-none border-b-2 cursor-pointer capitalize text-[14px] font-sans ${
+            className={`py-3 px-4 bg-transparent border-none border-b-2 cursor-pointer capitalize text-[14px] font-sans whitespace-nowrap shrink-0 ${
               tab === t
                 ? "border-navy text-navy font-semibold"
                 : "border-transparent text-slate-light font-medium"

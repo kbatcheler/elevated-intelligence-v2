@@ -475,7 +475,7 @@ function UploadSection({ tenantId, logout }: { tenantId: string; logout: () => v
       </form>
 
       {report && (
-        <div className="mt-6 grid grid-cols-[1fr_1fr] gap-4">
+        <div className="ingestion-report-grid mt-6 grid grid-cols-[1fr_1fr] gap-4">
           <div className="p-5 bg-cream-light rounded">
             <div className="eyebrow text-teal-ink mb-3">
               Derived and stored ({report.signalsCount})

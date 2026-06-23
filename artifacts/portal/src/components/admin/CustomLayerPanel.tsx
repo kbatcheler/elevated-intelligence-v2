@@ -276,7 +276,7 @@ function CreateSection({
 
         <div>
           <label className="label-base">Metric Tiles (exactly four)</label>
-          <div className="grid grid-cols-[1fr_1fr_1fr_1fr] gap-3">
+          <div className="metric-tiles-grid grid grid-cols-[1fr_1fr_1fr_1fr] gap-3">
             {tiles.map((t, i) => (
               <input
                 key={i}

@@ -463,4 +463,13 @@ body {
   .nav-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
   .nav-switcher { min-width: 0; }
   .nav-select { max-width: 150px; min-width: 0; }
+  /* The operator side-by-side table grids (Spend's two breakdowns, Calibration's
+     three segment tables) and the multi-input admin grids carry more columns
+     than a 375px viewport can hold. A 1fr track has an auto minimum, so an input
+     or a wide table cell would otherwise force the whole page sideways. At this
+     breakpoint each collapses to a single stacked column. */
+  .spend-cols,
+  .calibration-cols,
+  .ingestion-report-grid { grid-template-columns: 1fr; }
+  .metric-tiles-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }

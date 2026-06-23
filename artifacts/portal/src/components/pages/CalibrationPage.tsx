@@ -251,6 +251,7 @@ function SegmentTable({
         <EmptyState title="Nothing resolved yet" />
       ) : (
         <div className="card p-0 overflow-hidden">
+          <div className="table-scroll">
           <table className="w-full border-collapse text-[14px]">
             <thead>
               <tr className="border-b border-border-base">
@@ -284,6 +285,7 @@ function SegmentTable({
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
@@ -307,6 +309,7 @@ function LedgerPanel({ rows }: { rows: CalibrationLedgerRow[] }) {
         <EmptyState title="No forecasts have resolved yet" />
       ) : (
         <div className="card p-0 overflow-hidden">
+          <div className="table-scroll">
           <table className="w-full border-collapse text-[14px]">
             <thead>
               <tr className="border-b border-border-base">
@@ -356,6 +359,7 @@ function LedgerPanel({ rows }: { rows: CalibrationLedgerRow[] }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
