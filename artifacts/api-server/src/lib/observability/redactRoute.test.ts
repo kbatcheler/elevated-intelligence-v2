@@ -17,6 +17,26 @@ describe("redactRoute", () => {
     expect(redactRoute("/api/public/diagnosis")).toBe("/api/public/diagnosis");
   });
 
+  it("redacts the assessment report share token to the route template", () => {
+    const token = "abc123_TOKEN-secretValue";
+    expect(redactRoute(`/api/public/assessment/report/${token}`)).toBe(
+      "/api/public/assessment/report/:token",
+    );
+  });
+
+  it("never leaves the assessment report token substring in the redacted route", () => {
+    const token = "ZmFrZS1hc3Nlc3MtdG9rZW4tdmFsdWU";
+    const out = redactRoute(`/api/public/assessment/report/${token}`);
+    expect(out.includes(token)).toBe(false);
+  });
+
+  it("leaves the assessment questions and submit paths (no token segment) unchanged", () => {
+    expect(redactRoute("/api/public/assessment/questions")).toBe(
+      "/api/public/assessment/questions",
+    );
+    expect(redactRoute("/api/public/assessment/submit")).toBe("/api/public/assessment/submit");
+  });
+
   it("leaves non-secret routes unchanged", () => {
     expect(redactRoute("/api/tenants/abc/share-tokens")).toBe("/api/tenants/abc/share-tokens");
     expect(redactRoute("/api/tenants/abc/share-tokens/t1/revoke")).toBe(

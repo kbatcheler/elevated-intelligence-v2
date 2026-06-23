@@ -95,3 +95,10 @@ export * from "./diagnosisShareTokens";
 // only credential hashes and ciphertext, never raw client data.
 export * from "./ingestionKeys";
 export * from "./webhookSources";
+// The Intelligence Gap Assessment (Phase AT): the top-of-funnel self assessment
+// submissions (scored answers, computed four-dimension scores, qualification, an
+// optional captured contact and an optional outside_in diagnosis snapshot) and
+// their forwardable share tokens. No tenant reference and no raw client data:
+// the optional diagnosis stores only a narrow profile projection, never HTML.
+export * from "./assessmentSubmissions";
+export * from "./assessmentShareTokens";

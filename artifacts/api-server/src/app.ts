@@ -21,6 +21,7 @@ import { layersRouter } from "./routes/layers";
 import { operationsRouter } from "./routes/operations";
 import { portfolioRouter } from "./routes/portfolio";
 import { publicRouter } from "./routes/public";
+import { assessmentRouter } from "./routes/assessment";
 import { uploadRouter } from "./routes/upload";
 import { webhookRouter } from "./routes/webhooks";
 import { pushRouter } from "./routes/push";
@@ -136,6 +137,13 @@ app.use("/mcp", mcpRouter);
 // serves an unauthenticated read, and it never exposes connector data,
 // provenance, the full causes/proof arrays, or any identity.
 app.use("/api/public", publicRouter);
+
+// The Intelligence Gap Assessment public funnel (Phase AT). Like the public
+// diagnosis it is unauthenticated and per-IP rate limited inside the router, so
+// it is mounted ahead of the session gate. It creates no tenant: the optional
+// outside_in diagnosis reuses the pure cortex primitives standalone, behind a
+// strict per-IP limit and the budget governor, after contact capture only.
+app.use("/api/public/assessment", assessmentRouter);
 
 // Everything else under /api requires a valid, non-disabled session. requireAuth
 // runs once here; the data routers follow. Per-tenant fencing is enforced inside

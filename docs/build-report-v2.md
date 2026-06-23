@@ -3214,3 +3214,107 @@ Phase AS passed its architect `evaluate_task` review (PASS). The hard constraint
 ASCII hyphen only in source and data, no fabricated figure, British UI copy with American data-contract
 identifiers). The drift index, the rollup, and this build report advance to "A through AS". Phase AS is gated
 but not a milestone; it CLOSES the Robustness and Magic wave (AO through AS).
+
+## Phase AT: the Intelligence Gap Assessment (the pre-auth top of funnel)
+
+Phase AT opens a NEW top-of-funnel surface in front of the product: a pre-auth self-assessment a cold
+prospect can take with no account, leading to a free on-screen result and a slick forwardable and printable
+report that names their intelligence gap, maps it to the canonical layers, teaches the one line, frames the
+cost honestly, and OPTIONALLY folds in a bounded outside_in profile-grade diagnosis of their own public
+footprint. AT is built as new files only plus four additive registrations (two schema barrel exports, one
+public-router mount in `app.ts` before the `requireAuth` fence, and two portal route branches in `App.tsx`
+before the `AuthProvider`); it touches no cortex, connector, pipeline, `index.css` design token, shell, or
+existing page.
+
+Two new tables carry it. `assessment_submissions` is one row per completed assessment: the scored `answers`,
+the deterministically computed `dimension_scores`, and the `qualification` answers as jsonb; an optional
+`company_url`; the optional diagnosis as an authoritative `diagnosis_status` enum (`not_requested` default,
+`pending`, `in_progress`, `ready`, `unavailable`, `failed`) plus a `diagnosis` jsonb of detail; and the
+captured contact columns, all nullable because the on-screen result is shown free. `assessment_share_tokens`
+mirrors the Phase AB diagnosis share token (opaque token shown once and never persisted, only its sha256 hash
+stored unique, resolved by hash match on an unexpired unrevoked row) with two deliberate differences because
+the funnel is anonymous: it references a submission ON DELETE CASCADE rather than a tenant, and it carries no
+`createdBy`.
+
+### The honest, model-free scoring core
+
+The scoring is pure deterministic compute with no model, no clock, and no database, so it is instant, free,
+cannot fabricate, and is fully unit tested. The bank is ten scored behavioural questions across the four
+provenance dimensions (three Visibility, two Speed, three Foresight, two Confidence), each tagged to one or
+more of the fourteen canonical layer keys, plus three qualification questions (sector, revenueBand, systems);
+the public projection of the bank withholds the option scores so the prospect answers honestly about
+behaviour rather than against a visible weighting. Each dimension is normalised 0 to 100 against its own
+maximum and banded (`blind` 0 to 33, `reactive` 34 to 66, `ahead` 67 to 100), and the gap layers are selected
+entirely from the prospect's own weak answers. The honesty contract lives here: a genuinely sharp operation
+that answers everything "ahead" scores well, yields an EMPTY gap selection, and the narrative FLIPS its
+message (the headline becomes "You are ahead, and that is the risk" and the cost is reframed as concentration
+and fragility rather than blindness). The cost framing is qualitative and derived only from the prospect's own
+weak dimensions and their stated revenue band used as a scale word; it never multiplies a band into a figure
+and explicitly says it will not invent one. The single teaching line ("Your software records what happened.
+Elevated Intelligence tells you what it means and what to do.") is a constant, never computed from state.
+
+### Approach B: the bounded diagnosis that never creates a tenant
+
+The optional diagnosis is the architect-approved Approach B. It NEVER creates a tenant. It reuses the pure
+cortex primitives directly (`fetchHomepageContext`, the existing SSRF-hardened fetch, then `runProfile`
+standalone), records any billed usage with `tenantId: null` so the cost is attributed to the funnel and not to
+any client, and persists only a narrow profile projection plus honest fetch and billing telemetry, never raw
+HTML. It is fired ONLY after contact capture (friction before spend) and ONLY once (the contact route flips
+`diagnosisStatus` to `pending` in the same write that captures the contact). It is bounded on three sides:
+`assertSeedWithinBudget({ tenantId: null })` checked before any spend, with a ceiling degrading to
+`unavailable` with no model call; a failed or empty homepage fetch degrading to `unavailable` with no model
+call, so the cost ceiling is at most one profile call; and the tightest per-IP rate limit on the only endpoint
+that can bill. Every model-generated field is `stripDashes`-cleaned before it is persisted. The status machine
+is the honest record: `pending` to `in_progress` to one of `ready`, `unavailable`, or `failed`.
+
+The route mounts four public per-IP rate-limited endpoints (`GET /questions` score-withheld, `POST /submit`
+the free result, `POST /submissions/:id/contact` capture plus mint plus best-effort email plus trigger-once,
+`GET /report/:token` the forwardable report). The email seam is "available, not connected" by default,
+mirroring the notifier transport selection, so an unconfigured environment returns `not_connected` and the
+link still works. The portal adds a framework-free `assessmentApi.ts`, an `AssessmentPage` (`/assess`) flow
+with the free result and contact capture, an `AssessmentReportPage` (`/a/:token`) with provenance pills and
+the four honest data states, and a scoped `@media print` stylesheet.
+
+### Verification
+
+- Typecheck and build green across the workspace (exit 0 on both; the portal build at 1778 modules).
+- The full suite is green at 1213 tests with zero failures: api-server 690 across 87 files (up from 664 across
+  83, the +26 being the new assessment coverage: scoring 11, shareTokens 5, email 4, and the funnel
+  integration test 6), portal 327, cortex 111, connectors 63, edge-agent 10, db 8, scripts 4. The funnel
+  integration test proves the questions return with the option scores withheld, that a strong answer set
+  scores high and flips the narrative while a blind set scores low and maps to layers, that a malformed
+  submission is a 400, that a captured contact mints a token whose report resolves, that an unknown token is a
+  404, and that the optional diagnosis bounds itself: pointed at a non-resolving host it degrades to
+  `unavailable` with NO model spend.
+- Long-dash sweep zero on both sides: the source guard is green over authored source including the Phase AT
+  Markdown, and a fresh database-wide row-cast over all 194 public text and jsonb columns across 46 tables
+  (now including the two new assessment tables) reports zero hits; the persisted model fields are
+  `stripDashes`-cleaned at the write boundary.
+- Zero new npm dependencies: pure-TypeScript scoring, reused cortex primitives over the existing seams, and a
+  plain-CSS print stylesheet.
+
+### Honest marking
+
+What is PROVEN: that the workspace typechecks and builds with the new funnel, that the full automated suite
+stays green including the deterministic scoring unit tests and the end-to-end funnel integration test, that
+the long-dash sweep is zero across source and data, that the scoring is honest (a strong operation passes and
+the narrative flips, proven by test, never an instrument that fails everyone), and that the optional diagnosis
+is genuinely bounded (the degrade-to-unavailable-with-no-spend path is exercised against a non-resolving
+host). The cost framing is qualitative and states plainly that it will not invent a figure, and no fabricated
+number is ever shown. What is the accepted boundary (logged drift): the diagnosis's SUCCESSFUL `ready` path (a
+real homepage fetch plus a real billed `runProfile` call) is not exercised by the automated suite, because a
+green run must not make a paid model call or reach the public internet; the integration test drives the
+no-spend degrade path instead, and the `ready` path reuses the `runProfile` primitive already proven under the
+live seeds of Phases C and F. Nothing is fabricated: every score, band, gap layer and cost line is computed
+from the prospect's own persisted answers or the canonical layer registry, the diagnosis is read honestly from
+its status, and a link that has not been opened shows null and zero rather than an invented access figure.
+
+### Close
+
+Phase AT passed its architect `evaluate_task` review (PASS). The hard constraints hold: zero new
+dependencies, ASCII hyphen only in source and data, no fabricated figure (the cost framing is qualitative and
+the diagnosis is read honestly from its status), British UI copy with American data-contract identifiers (the
+dimension keys, option keys, layer keys, and enum values are verbatim American), the on-screen result is free
+with only the forwardable download gated on contact, and the optional diagnosis never creates a tenant and is
+bounded by budget, rate limit, and graceful degradation. The drift report is `phase-AT.md`; the drift index,
+the rollup, and this build report advance to "A through AT". Phase AT is gated but not a milestone.

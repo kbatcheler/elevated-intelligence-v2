@@ -1,4 +1,4 @@
-# Drift rollup: Phases A through AS
+# Drift rollup: Phases A through AT
 
 A cross-phase view of every drift item logged so far, grouped by whether it is
 still live, one-time and resolved, or a recurring environmental fact. Read the
@@ -12,9 +12,32 @@ report). The Robustness and Magic wave (AO through AS) then reopened the build t
 surface; its first phase AO realises the priority connectors, its second phase AP audits and hardens the
 sovereign seat, its third phase AQ closes the outcome loop, its fourth phase AR hardens the operational
 deploy posture, and its fifth and closing phase AS tokenises the portal into one signature surface, so the
-rollup now spans Phases A through AS.
+rollup now spans Phases A through AS. Phase AT then opens a new pre-auth top of funnel, the Intelligence Gap
+Assessment, in front of the product, taking the rollup to Phases A through AT.
 
-Last updated after Phase AS (the signature surface, the fifth and closing phase of the Robustness and Magic
+Last updated after Phase AT (the Intelligence Gap Assessment, a new pre-auth top of funnel in front of the
+product). AT adds only new files plus four additive registrations (two schema barrel exports, one app mount
+before `requireAuth`, two portal route branches before the `AuthProvider`) and touches no cortex, connector,
+pipeline, design token, shell, or existing page. A cold prospect takes ten scored behavioural questions across
+the four provenance dimensions plus three qualification questions, sees a FREE on-screen result, and unlocks a
+forwardable and printable report only by leaving a contact. The scoring is pure model-free deterministic
+compute and is honest by design: a sharp operation passes and the narrative flips to "You are ahead, and that
+is the risk", and the cost framing is qualitative and refuses to invent a figure. The optional outside_in
+diagnosis is Approach B: it never creates a tenant, reuses `fetchHomepageContext` then `runProfile` standalone,
+records usage with `tenantId=null`, persists only a narrow profile projection (never raw HTML), fires once
+after contact, and is bounded by the budget governor, a strict per-IP rate limit, and graceful degradation to
+`unavailable` with no model call. Two new tables (`assessment_submissions`, `assessment_share_tokens`).
+Typecheck and build clean (portal build at 1778 modules); the full suite green at 1213 tests (api-server 690
+across 87 files, portal 327, cortex 111, connectors 63, edge-agent 10, db 8, scripts 4); the two-sided
+long-dash sweep zero (the source guard over authored source including the AT Markdown and a fresh database cast
+over all 194 public text and jsonb columns across 46 tables including the two new tables, the persisted model
+fields stripDashes-cleaned at the write boundary); zero new npm dependencies. The architect returned PASS. AT
+adds one logged drift item: the diagnosis's successful ready path is not exercised by the automated suite (a
+green run makes no paid model call and reaches no external network), so the integration test drives the
+no-spend degrade path and the ready path reuses the `runProfile` primitive already proven under the live seeds
+of Phases C and F.
+
+Earlier, updated after Phase AS (the signature surface, the fifth and closing phase of the Robustness and Magic
 wave). AS owns `artifacts/portal` in full and changes no server, route, contract, or shared type (the
 authoritative diff since the Phase AR commit is portal-only). It replaces every inline style object across 67
 portal files with the frozen token vocabulary and Tailwind utilities (a net reduction of about 376 lines), cuts

@@ -9,6 +9,10 @@ const SECRET_PATH_PATTERNS: Array<{ re: RegExp; replacement: string }> = [
   // The trailing segment is the bearer share token. Collapse it to the route
   // template so the route shape is still useful for grouping errors.
   { re: /^(\/api\/public\/diagnosis\/)[^/]+/, replacement: "$1:token" },
+  // The Intelligence Gap Assessment forwardable report token is the same kind of
+  // bearer credential carried in the URL (GET /api/public/assessment/report/:token),
+  // so it is scrubbed at the same chokepoint before any route reaches observability.
+  { re: /^(\/api\/public\/assessment\/report\/)[^/]+/, replacement: "$1:token" },
 ];
 
 export function redactRoute(path: string): string {

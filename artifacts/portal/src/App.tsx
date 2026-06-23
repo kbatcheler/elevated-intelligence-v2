@@ -4,6 +4,8 @@ import { RouterProvider, matchPath, useRouter } from "./lib/router";
 import { Gate } from "./components/Gate";
 import { Shell } from "./components/Shell";
 import { PublicDiagnosisPage } from "./components/pages/PublicDiagnosisPage";
+import { AssessmentPage } from "./components/pages/AssessmentPage";
+import { AssessmentReportPage } from "./components/pages/AssessmentReportPage";
 
 function Main() {
   const { user, loading } = useAuth();
@@ -35,6 +37,16 @@ function Root() {
   const publicMatch = matchPath("/d/:token", path);
   if (publicMatch) {
     return <PublicDiagnosisPage token={publicMatch.token} />;
+  }
+  // The Intelligence Gap Assessment funnel renders OUTSIDE the auth provider too:
+  // the flow and its forwardable report serve a cold prospect with no session, so
+  // they must never trigger an auth probe or the sign-in gate.
+  if (matchPath("/assess", path)) {
+    return <AssessmentPage />;
+  }
+  const reportMatch = matchPath("/a/:token", path);
+  if (reportMatch) {
+    return <AssessmentReportPage token={reportMatch.token} />;
   }
   return (
     <AuthProvider>

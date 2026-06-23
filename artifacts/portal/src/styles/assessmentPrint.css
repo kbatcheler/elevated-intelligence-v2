@@ -1,0 +1,30 @@
+/* Print styling for the forwardable Intelligence Gap Assessment report (Phase
+ * AT). Scoped under .assessment-report so it never touches the rest of the app,
+ * and imported only by the report page. On paper the page chrome and the print
+ * button fall away, the surfaces print their fills, and cards avoid breaking
+ * across a page so a forwarded PDF reads as a clean document. */
+
+@media print {
+  .assessment-report .no-print {
+    display: none !important;
+  }
+
+  .assessment-report.scroll-area {
+    overflow: visible !important;
+    height: auto !important;
+    background: #ffffff !important;
+  }
+
+  .assessment-report .card,
+  .assessment-report .surface,
+  .assessment-report section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .assessment-report,
+  .assessment-report * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
