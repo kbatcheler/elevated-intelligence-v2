@@ -262,7 +262,12 @@ function NavBell({ active }: { active: boolean }) {
 
   const badge = unread != null && unread > 0;
   return (
-    <Link to="/notifications" title="Notifications" className="relative inline-flex items-center px-1">
+    <Link
+      to="/notifications"
+      title="Notifications"
+      aria-label="Notifications"
+      className="relative inline-flex items-center justify-center h-8 w-8"
+    >
       <Bell size={18} color={active ? "var(--navy)" : "var(--slate)"} />
       {badge && (
         <span className="font-mono absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-lg bg-coral text-paper text-[10px] font-bold flex items-center justify-center leading-none">
