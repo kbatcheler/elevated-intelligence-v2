@@ -13,6 +13,24 @@ only the final tail line and drops the per-package detail you need to confirm a 
 workflow log, e.g. `pnpm run test > /tmp/test.out 2>&1; echo EXIT $?`, then read `/tmp/test.out`.
 Do NOT invoke `vitest` directly in the shell for this repo; go through the `pnpm run` scripts.
 
+## The api-server suite is NOT runnable from the agent shell
+The "gate to a file" recipe works for typecheck/build and the fast lib suites, but the api-server
+integration suite cannot be confirmed in-shell, for two reasons that compound:
+- Its vitest setup only provisions databases; it does NOT set `SESSION_SECRET`/`OWNER_*`, which the
+  auth/session/owner-bootstrap tests (and `portalOverflow.integration.test.ts`'s cookie planting)
+  require. The agent shell has no platform secrets. (Passing throwaway values works in principle,
+  since the tests only need them present and self-consistent within the run.)
+- Even so, a backgrounded `pnpm --filter @workspace/api-server test` is SIGKILLed mid-run by the
+  platform: the runner process vanishes with no exit sentinel and the log stays frozen at the
+  `push-force` setup line. This is the "direct shell runs get killed" wall; do not keep retrying it.
+
+Run that suite through the `test` WORKFLOW (it has the secrets and is not killed); the lossy log
+means you confirm the FIVE flushable suites (portal/cortex/db/scripts/connectors) plus a clean
+"finished" status. For a PORTAL-ONLY change, the only api-server test it can affect is the layout
+guard `portalOverflow.integration.test.ts`; confirm its exact assertion (`scrollWidth <= innerWidth`
+at 375px on the key authed surfaces) faithfully via the testing harness (`runTest` at width 375),
+which has secrets and is not killed, instead of trying to run the suite in-shell.
+
 # The two-sided long-dash sweep (em-dash U+2014 / en-dash U+2013)
 
 The hard constraint forbids long dashes in BOTH source AND database data, so a phase is not

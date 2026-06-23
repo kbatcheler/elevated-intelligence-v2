@@ -17,11 +17,12 @@ description: Non-obvious operational facts for running the Drift Control Protoco
   with `rg -nP "[\x{2014}\x{2013}]"` before declaring a phase green.
   **Why:** those paths are outside the guard's configured roots, so a stray em/en-dash there passes CI silently.
 
-- **api-server test contention (was the flaky push 500 / mass 5000ms timeouts).** See
-  [api-server test DB contention](api-server-test-contention.md). The api-server suite now runs
-  files SEQUENTIALLY (`fileParallelism: false` in `artifacts/api-server/vitest.config.ts`) because
-  parallel forks against the ONE shared dev Postgres contend and flake non-deterministically. Do not
-  re-enable parallelism to "speed it up" without re-isolating the DB; single-fork is not slower here.
+- **api-server test isolation (was the flaky push 500 / mass 5000ms timeouts).** See
+  [api-server test DB isolation](api-server-test-contention.md). The suite provisions a dedicated
+  database PER VITEST WORKER (a pristine template cloned per pool slot in `src/test/globalSetup.ts`,
+  `DATABASE_URL` repointed per worker in `src/test/setupEnv.ts`), so file parallelism is ON and
+  deterministic and it never touches the shared dev Postgres. Do not point it back at the dev DB to
+  "simplify" it: the provider-global tenant fan-out is why per-worker isolation exists.
 
 - **DB-wide long-dash sweep (the data side of the gate).** The source `emDashGuard` does NOT cover
   database content, so a stage-close must ALSO run a fresh DB-wide cast for em-dash (chr(8212)) and

@@ -115,9 +115,11 @@ export function TopNav() {
 
       {/* Bottom row: primary navigation, with the rest grouped under More */}
       <nav className="top-nav-bar">
-        {PRIMARY.map((it) => (
-          <NavTab key={it.to} item={it} active={isActive(path, it.to)} />
-        ))}
+        <div className="top-nav-tabs">
+          {PRIMARY.map((it) => (
+            <NavTab key={it.to} item={it} active={isActive(path, it.to)} />
+          ))}
+        </div>
         <SecondaryNav groups={groups} path={path} />
       </nav>
     </header>

@@ -244,8 +244,8 @@ function BoardEntry({ layer }: { layer: OverviewLayer }) {
 
       <div className="flex gap-5 mt-3.5 flex-wrap">
         {metricValue && (
-          <div className="shrink-0">
-            <div className={`font-mono text-[26px] font-medium leading-none ${TONE_TEXT[tone]}`}>
+          <div className="min-w-0 max-w-[260px]">
+            <div className={`font-mono text-[26px] font-medium leading-tight break-words ${TONE_TEXT[tone]}`}>
               {metricValue}
             </div>
             {metricLabel && (

@@ -359,6 +359,16 @@ body {
     padding: 0 24px;
     display: flex;
     gap: 4px;
+  }
+
+  /* Only the primary tab row scrolls sideways on a narrow screen. The More
+     button and its dropdown sit outside this scroll box, so the open menu is
+     never clipped by the bar's own overflow (overflow-x also clips overflow-y). */
+  .top-nav-tabs {
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+    flex: 1 1 auto;
     overflow-x: auto;
   }
 
