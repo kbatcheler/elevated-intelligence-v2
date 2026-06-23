@@ -28,7 +28,7 @@ export interface SeatConfig {
 export const SEATS: Record<SeatKey, SeatConfig> = {
   reasoner: { provider: "anthropic", model: "claude-sonnet-4-6" },
   evaluator: { provider: "anthropic", model: "claude-haiku-4-5" },
-  grounder: { provider: "gemini", model: "gemini-2.5-pro" },
+  grounder: { provider: "gemini", model: "gemini-3.1-pro-preview" },
 };
 
 // The nine per-layer sub-stages plus the tenant-scope profile stage. The order
