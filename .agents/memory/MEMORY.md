@@ -55,6 +55,7 @@
 - [Portal British copy vs American identifiers](portal-british-copy.md) - UI copy is British; enum values, field names, and catalog keys stay American verbatim.
 - [Portal small-screen table/grid overflow](portal-small-screen-tables.md) - the <=480px guard only covers `.table-base`; raw tables and 1fr table/input grids still blow out the page.
 - [Headless browser tests (zero deps)](headless-browser-cdp.md) - drive the platform chromium over CDP with Node built-ins to assert real layout/overflow; the 375px portal guard recipe.
+- [Portal figure slots tolerate verbose cortex values](portal-figure-values.md) - lead/hero "figure" can be a phrase not a number; bound its column (minmax(0,Nrem) not auto) and wrap.
 
 ## Schema and tooling
 - [Push a new Drizzle table before integration](schema-push-before-integration.md) - a new schema table is not in dev Postgres until pushed; integration tests 500 until then.

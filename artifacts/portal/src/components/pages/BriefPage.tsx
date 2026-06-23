@@ -169,6 +169,14 @@ function leadFigure(l: OverviewLayer): { value: string | null; label: string | n
   return { value: null, label: null, tone: "neutral" };
 }
 
+// The lead figure is normally a compact number, but the cortex sometimes
+// surfaces a whole phrase in the figure slot. A long value reads as a wrapping
+// supporting line rather than a giant display figure, so it never balloons its
+// column and starves the diagnosis beside it.
+function isLongFigure(value: string | null): boolean {
+  return Boolean(value && value.trim().length > 16);
+}
+
 // The brief's hero: the single leading layer read as a confident serif diagnosis,
 // with its leading figure beside it. The gold rule sweeps in beneath the figure,
 // keyed on the layer's generation time so it replays only when the layer is
@@ -176,9 +184,14 @@ function leadFigure(l: OverviewLayer): { value: string | null; label: string | n
 function BriefHero({ layer }: { layer: OverviewLayer }) {
   const fig = leadFigure(layer);
   const read = layer.hero?.oneLineRead || layer.headlineImpact;
+  const longFigure = isLongFigure(fig.value);
   return (
     <div className="surface surface-cream p-6 md:p-8">
-      <div className="grid gap-6 md:grid-cols-[1fr_auto] md:items-center">
+      <div
+        className={`grid gap-6 md:items-center ${
+          fig.value ? "md:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]" : ""
+        }`}
+      >
         <SerifDiagnosis
           eyebrow={layer.name}
           tone={TONE_DIAGNOSIS[fig.tone]}
@@ -196,9 +209,13 @@ function BriefHero({ layer }: { layer: OverviewLayer }) {
           {layer.headlineFinding || layer.diagnosticQuestion}
         </SerifDiagnosis>
         {fig.value && (
-          <div className="md:text-right">
-            <GoldUnderlineSweep sweepKey={layer.generatedAt ?? undefined}>
-              <span className={`font-mono text-display font-medium leading-none break-words ${TONE_INK[fig.tone]}`}>
+          <div className={`min-w-0 ${longFigure ? "" : "md:text-right"}`}>
+            <GoldUnderlineSweep sweepKey={layer.generatedAt ?? undefined} active={!longFigure}>
+              <span
+                className={`font-mono font-medium break-words ${TONE_INK[fig.tone]} ${
+                  longFigure ? "text-lead leading-snug" : "text-display leading-none"
+                }`}
+              >
                 {fig.value}
               </span>
             </GoldUnderlineSweep>
@@ -213,6 +230,7 @@ function BriefHero({ layer }: { layer: OverviewLayer }) {
 function LeadCard({ layer }: { layer: OverviewLayer }) {
   const fig = leadFigure(layer);
   const read = layer.hero?.oneLineRead || layer.headlineImpact;
+  const longFigure = isLongFigure(fig.value);
   return (
     <Link to={`/layers/${layer.key}`} className="no-underline min-w-0">
       <div className="card h-full flex flex-col gap-3">
@@ -222,7 +240,11 @@ function LeadCard({ layer }: { layer: OverviewLayer }) {
         </div>
         {fig.value && (
           <div>
-            <div className={`font-mono text-section font-medium leading-none break-words ${TONE_INK[fig.tone]}`}>
+            <div
+              className={`font-mono font-medium break-words ${TONE_INK[fig.tone]} ${
+                longFigure ? "text-body leading-snug" : "text-section leading-none"
+              }`}
+            >
               {fig.value}
             </div>
             {fig.label && <div className="eyebrow text-slate-light mt-1.5">{fig.label}</div>}
